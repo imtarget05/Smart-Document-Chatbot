@@ -3,7 +3,6 @@ package com.smartdocchat.service;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.DocumentRepository;
 import com.smartdocchat.util.DocumentParser;
-import com.smartdocchat.util.QdrantConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +23,6 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentParser documentParser;
     private final EmbeddingService embeddingService;
-    private final QdrantConfig qdrantConfig;
 
     private static final String UPLOAD_DIR = "uploads";
 

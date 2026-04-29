@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react';\nimport PropTypes from 'prop-types';
 
 function DocumentUpload({ onDocumentUploaded }) {
   const [uploading, setUploading] = useState(false);
@@ -64,3 +64,7 @@ function DocumentUpload({ onDocumentUploaded }) {
 }
 
 export default DocumentUpload;
+
+DocumentUpload.propTypes = {
+  onDocumentUploaded: PropTypes.func.isRequired,
+};

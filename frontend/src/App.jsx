@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import DocumentUpload from './components/DocumentUpload';
 import ChatWindow from './components/ChatWindow';

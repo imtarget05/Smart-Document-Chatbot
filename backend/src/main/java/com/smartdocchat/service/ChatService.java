@@ -2,7 +2,6 @@ package com.smartdocchat.service;
 
 import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.repository.ChatMessageRepository;
-import com.smartdocchat.util.OpenAIConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,7 +15,6 @@ import java.util.stream.Collectors;
 public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final EmbeddingService embeddingService;
-    private final OpenAIConfig openAIConfig;
 
     public ChatMessage processQuery(String sessionId, Long documentId, String userMessage) {
         // Step 1: Search for relevant chunks

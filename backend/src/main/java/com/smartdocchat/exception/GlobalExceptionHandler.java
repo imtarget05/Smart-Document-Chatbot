@@ -14,11 +14,13 @@ import java.util.Map;
 @Slf4j
 public class GlobalExceptionHandler {
 
+    private static final String ERROR_KEY = "error";
+
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, String>> handleMaxUploadSizeException(MaxUploadSizeExceededException e) {
         log.error("File upload size exceeded", e);
         Map<String, String> response = new HashMap<>();
-        response.put("error", "File size exceeds maximum limit of 50MB");
+        response.put(ERROR_KEY, "File size exceeds maximum limit of 50MB");
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
     }
 
@@ -26,7 +28,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException e) {
         log.error("Runtime exception occurred", e);
         Map<String, String> response = new HashMap<>();
-        response.put("error", e.getMessage());
+        response.put(ERROR_KEY, e.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 
@@ -34,7 +36,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleGenericException(Exception e) {
         log.error("Unexpected error occurred", e);
         Map<String, String> response = new HashMap<>();
-        response.put("error", "An unexpected error occurred");
+        response.put(ERROR_KEY, "An unexpected error occurred");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 }

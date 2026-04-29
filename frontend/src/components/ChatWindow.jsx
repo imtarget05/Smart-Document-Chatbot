@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { formatDistanceToNow } from 'date-fns';
+import PropTypes from 'prop-types';
 
 function ChatWindow({ sessionId, documentId }) {
   const [messages, setMessages] = useState([]);
@@ -79,8 +79,8 @@ function ChatWindow({ sessionId, documentId }) {
             </div>
           </div>
         ) : (
-          messages.map((msg, index) => (
-            <div key={index} className="chat-message">
+          messages.map((msg) => (
+            <div key={msg.id} className="chat-message">
               {/* User Message */}
               <div className="flex justify-end mb-4">
                 <div className="max-w-xs lg:max-w-md bg-blue-500 text-white p-3 rounded-lg rounded-br-none">
@@ -100,8 +100,8 @@ function ChatWindow({ sessionId, documentId }) {
                         📚 Sources
                       </summary>
                       <div className="mt-2 bg-gray-50 p-2 rounded text-gray-700 max-h-32 overflow-y-auto">
-                        {msg.sourceChunks.split('---').map((chunk, i) => (
-                          <p key={i} className="mb-1 pb-1 border-b border-gray-200 last:border-0">
+                        {msg.sourceChunks.split('---').map((chunk) => (
+                          <p key={`${msg.id}-${chunk.trim().substring(0, 20)}`} className="mb-1 pb-1 border-b border-gray-200 last:border-0">
                             {chunk.trim().substring(0, 100)}...
                           </p>
                         ))}
@@ -155,3 +155,8 @@ function ChatWindow({ sessionId, documentId }) {
 }
 
 export default ChatWindow;
+
+ChatWindow.propTypes = {
+  sessionId: PropTypes.string.isRequired,
+  documentId: PropTypes.number,
+};

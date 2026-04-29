@@ -1,19 +1,13 @@
 package com.smartdocchat.service;
 
-import com.smartdocchat.util.OpenAIConfig;
-import com.smartdocchat.util.QdrantConfig;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class EmbeddingService {
-    private final OpenAIConfig openAIConfig;
-    private final QdrantConfig qdrantConfig;
 
     // Note: In production, integrate with actual OpenAI and Qdrant APIs
     // This is a placeholder implementation
@@ -31,7 +25,7 @@ public class EmbeddingService {
         // Generate embedding for query using OpenAI API
         // Search similar chunks in Qdrant
         // Return top K relevant chunks
-        log.info("Searching for query in document {} (top {})", documentId, topK);
+        log.info("Searching for query '{}' in document {} (top {})", query, documentId, topK);
         return new ArrayList<>();
     }
 

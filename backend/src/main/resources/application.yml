@@ -27,6 +27,8 @@ spring:
     enabled: ${FLYWAY_ENABLED:false}
     baseline-on-migrate: true
     locations: classpath:db/migration
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 server:
   port: ${SERVER_PORT:8080}
@@ -80,5 +82,4 @@ logging:
     max-size: 10MB
     max-history: 30
 
-# Graceful shutdown
-spring.lifecycle.timeout-per-shutdown-phase: 30s
+# Graceful shutdown is configured under spring.lifecycle above
