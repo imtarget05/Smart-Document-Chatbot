@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Backend build artifacts
+backend/target/
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+
+# Docker
+docker-compose*.yml
+
+# Uploads
+uploads/
+
+# Logs
+*.log
+logs/
+
+# Temp
+tmp/
+temp/
+
+# CI/CD
+.github/

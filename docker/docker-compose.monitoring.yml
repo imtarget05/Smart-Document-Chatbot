@@ -1,0 +1,79 @@
+# ============================================
+# Smart Document Chatbot - Monitoring Stack
+# Prometheus + Grafana for metrics & dashboards
+#
+# Usage: docker compose -f docker/docker-compose.yml -f docker/docker-compose.monitoring.yml up -d
+# ============================================
+
+services:
+  # --- Prometheus (Metrics Collection) ---
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: sdc-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - app-network
+
+  # --- Grafana (Dashboards) ---
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: sdc-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+
+  # --- Loki (Log Aggregation) ---
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: sdc-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    networks:
+      - app-network
+
+  # --- Promtail (Log Collector) ---
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: sdc-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - app-network
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  loki_data:
+    driver: local

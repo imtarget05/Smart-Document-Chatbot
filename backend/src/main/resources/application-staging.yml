@@ -1,0 +1,22 @@
+# ============================================
+# Staging Profile Configuration
+# Activated with SPRING_PROFILES_ACTIVE=staging
+# ============================================
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  flyway:
+    enabled: true
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+logging:
+  level:
+    root: INFO
+    com.smartdocchat: DEBUG
+    org.springframework: INFO

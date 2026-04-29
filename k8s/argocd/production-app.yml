@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: smart-doc-chatbot-production
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: smart-doc-chatbot
+    environment: production
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: production-alerts
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: production-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: production-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: smart-doc-chatbot
+
+  source:
+    repoURL: https://github.com/OWNER/smart-doc-chatbot.git
+    targetRevision: main
+    path: k8s/overlays/production
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: smart-doc-chatbot-production
+
+  syncPolicy:
+    # MANUAL sync for production - requires explicit approval
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true
+      - Validate=true
+    retry:
+      limit: 2
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+  revisionHistoryLimit: 15

@@ -1,0 +1,82 @@
+# Ignore IDE and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Ignore project build files
+target/
+build/
+dist/
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Ignore dependency directories
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore environment files
+.env
+.env.local
+.env.*.local
+
+# Ignore database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Ignore uploaded files
+uploads/
+/uploads
+
+# Ignore IDE specific files
+*.iml
+.gradle/
+.classpath
+.project
+.settings/
+
+# Ignore cache
+.cache/
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore temporary files
+tmp/
+temp/
+
+# Docker volumes & data
+postgres_data/
+qdrant_data/
+grafana_data/
+prometheus_data/
+
+# Backups
+backups/
+*.sql.bak
+
+# Monitoring data
+docker/monitoring/grafana/data/
+
+# Production env files (keep .env.example as template)
+.env.production
+.env.staging

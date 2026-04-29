@@ -1,0 +1,328 @@
+# ============================================
+# Compliance, Rollback & Post-Deploy Verification
+# Runs after Argo CD sync or on schedule
+# ============================================
+
+name: Compliance & Verification
+
+on:
+  # Trigger after CD pipeline completes
+  workflow_run:
+    workflows: ["CD Pipeline"]
+    types: [completed]
+
+  # Scheduled compliance checks
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6:00 UTC
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - verify
+          - rollback-staging
+          - rollback-production
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  # ============================================================
+  # Post-Deployment Health Verification
+  # ============================================================
+
+  verify-staging:
+    name: "Verify Staging Deployment"
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'verify')
+    environment: staging
+    steps:
+      - name: Wait for Argo CD sync
+        run: sleep 120  # Allow time for Argo CD to detect and sync
+
+      - name: Health check - Backend
+        run: |
+          STAGING_URL="${{ vars.STAGING_URL }}"
+          if [[ -z "$STAGING_URL" ]]; then
+            echo "::warning::STAGING_URL not configured. Skipping health checks."
+            exit 0
+          fi
+
+          MAX_RETRIES=10
+          RETRY_INTERVAL=15
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/actuator/health" 2>/dev/null || echo "000")
+            if [[ "$STATUS" == "200" ]]; then
+              echo "Backend health check PASSED (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i/$MAX_RETRIES: HTTP $STATUS - retrying in ${RETRY_INTERVAL}s..."
+            sleep $RETRY_INTERVAL
+          done
+
+          echo "::error::Backend health check FAILED after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Health check - Frontend
+        run: |
+          STAGING_URL="${{ vars.STAGING_URL }}"
+          [[ -z "$STAGING_URL" ]] && exit 0
+
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/" 2>/dev/null || echo "000")
+          if [[ "$STATUS" == "200" ]]; then
+            echo "Frontend health check PASSED"
+          else
+            echo "::error::Frontend health check FAILED: HTTP $STATUS"
+            exit 1
+          fi
+
+      - name: Smoke test - API endpoints
+        run: |
+          STAGING_URL="${{ vars.STAGING_URL }}"
+          [[ -z "$STAGING_URL" ]] && exit 0
+
+          echo "=== Smoke Tests ==="
+          FAILURES=0
+
+          # Test document listing
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/documents" 2>/dev/null || echo "000")
+          echo "GET /api/documents: HTTP $STATUS"
+          [[ "$STATUS" != "200" ]] && ((FAILURES++))
+
+          # Test actuator info
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/actuator/info" 2>/dev/null || echo "000")
+          echo "GET /api/actuator/info: HTTP $STATUS"
+          [[ "$STATUS" != "200" ]] && ((FAILURES++))
+
+          # Test metrics endpoint
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/actuator/prometheus" 2>/dev/null || echo "000")
+          echo "GET /api/actuator/prometheus: HTTP $STATUS"
+          [[ "$STATUS" != "200" ]] && ((FAILURES++))
+
+          if [[ $FAILURES -gt 0 ]]; then
+            echo "::warning::$FAILURES smoke test(s) failed"
+          else
+            echo "All smoke tests PASSED"
+          fi
+
+  # ============================================================
+  # Compliance Scanning
+  # ============================================================
+
+  compliance-scan:
+    name: "Compliance & License Audit"
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'verify')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (full)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-compliance.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      - name: Upload compliance SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-compliance.sarif'
+          category: 'compliance'
+
+      - name: License compliance check (backend)
+        working-directory: backend
+        run: |
+          echo "=== Maven Dependency License Check ==="
+          mvn license:aggregate-third-party-report -B 2>/dev/null || echo "License plugin not configured - skipping"
+
+      - name: License compliance check (frontend)
+        working-directory: frontend
+        run: |
+          echo "=== NPM License Check ==="
+          npx license-checker --summary --failOn 'GPL-3.0;AGPL-3.0' 2>/dev/null || {
+            npm install --save-dev license-checker 2>/dev/null
+            npx license-checker --summary --failOn 'GPL-3.0;AGPL-3.0' 2>/dev/null || echo "License checker not available - skipping"
+          }
+
+      - name: Kubernetes manifest validation
+        run: |
+          echo "=== K8s Manifest Validation ==="
+
+          # Install kubeval/kubeconform if available
+          if command -v kubeconform &> /dev/null; then
+            find k8s/ -name '*.yml' -o -name '*.yaml' | xargs kubeconform -strict -summary
+          else
+            echo "kubeconform not installed - performing basic YAML validation"
+            for f in $(find k8s/ -name '*.yml' -o -name '*.yaml'); do
+              python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>/dev/null && echo "  VALID: $f" || echo "  INVALID: $f"
+            done
+          fi
+
+      - name: Security best practices audit
+        run: |
+          echo "=== Security Audit ==="
+          echo ""
+
+          # Check for secrets in code
+          echo "Checking for potential secrets in code..."
+          FOUND=0
+          for pattern in "password=" "api[_-]key=" "secret=" "token=sk-"; do
+            HITS=$(grep -rin "$pattern" --include="*.java" --include="*.js" --include="*.jsx" --include="*.yml" \
+              --exclude-dir=node_modules --exclude-dir=target --exclude="*.example" \
+              backend/ frontend/ 2>/dev/null | grep -v "CHANGE_ME" | grep -v "your-" | grep -v "\${" | wc -l)
+            if [[ $HITS -gt 0 ]]; then
+              echo "  WARNING: Found $HITS potential '$pattern' occurrences"
+              ((FOUND += HITS))
+            fi
+          done
+
+          if [[ $FOUND -eq 0 ]]; then
+            echo "  No hardcoded secrets detected"
+          fi
+
+          echo ""
+          echo "Checking Dockerfile security..."
+          for df in docker/Dockerfile.*; do
+            echo "  $df:"
+            grep -q "USER" "$df" && echo "    [OK] Non-root user configured" || echo "    [WARN] No USER directive found"
+            grep -q "HEALTHCHECK" "$df" && echo "    [OK] Health check configured" || echo "    [WARN] No HEALTHCHECK configured"
+          done
+
+  # ============================================================
+  # Rollback
+  # ============================================================
+
+  rollback-staging:
+    name: "Rollback Staging"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'rollback-staging'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 20
+
+      - name: Find previous image tag
+        id: prev
+        run: |
+          # Find the previous kustomization commit for staging
+          PREV_TAG=$(git log --oneline -10 k8s/overlays/staging/kustomization.yml | \
+            awk 'NR==2 {print $1}')
+
+          if [[ -z "$PREV_TAG" ]]; then
+            echo "::error::No previous staging deployment found in git history"
+            exit 1
+          fi
+
+          PREV_IMAGE=$(git show ${PREV_TAG}:k8s/overlays/staging/kustomization.yml | grep "newTag:" | head -1 | awk '{print $2}')
+          echo "Previous image tag: ${PREV_IMAGE}"
+          echo "tag=${PREV_IMAGE}" >> $GITHUB_OUTPUT
+
+      - name: Rollback staging manifests
+        run: |
+          TAG="${{ steps.prev.outputs.tag }}"
+          echo "Rolling back staging to: ${TAG}"
+
+          cd k8s/overlays/staging
+          sed -i "s|newTag: .*|newTag: ${TAG}|g" kustomization.yml
+
+      - name: Commit rollback
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add k8s/overlays/staging/kustomization.yml
+          git commit -m "revert(deploy): rollback staging to ${{ steps.prev.outputs.tag }}
+
+          Triggered by: ${{ github.actor }}
+          Reason: Manual rollback"
+
+          git push origin main
+
+      - name: Notify rollback
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": ":warning: Staging ROLLBACK to `${{ steps.prev.outputs.tag }}`\nTriggered by: `${{ github.actor }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+  rollback-production:
+    name: "Rollback Production"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'rollback-production'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 20
+
+      - name: Find previous image tag
+        id: prev
+        run: |
+          PREV_TAG=$(git log --oneline -10 k8s/overlays/production/kustomization.yml | \
+            awk 'NR==2 {print $1}')
+
+          if [[ -z "$PREV_TAG" ]]; then
+            echo "::error::No previous production deployment found"
+            exit 1
+          fi
+
+          PREV_IMAGE=$(git show ${PREV_TAG}:k8s/overlays/production/kustomization.yml | grep "newTag:" | head -1 | awk '{print $2}')
+          echo "Previous image tag: ${PREV_IMAGE}"
+          echo "tag=${PREV_IMAGE}" >> $GITHUB_OUTPUT
+
+      - name: Rollback production manifests
+        run: |
+          TAG="${{ steps.prev.outputs.tag }}"
+          echo "Rolling back production to: ${TAG}"
+
+          cd k8s/overlays/production
+          sed -i "s|newTag: .*|newTag: ${TAG}|g" kustomization.yml
+
+      - name: Commit rollback
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add k8s/overlays/production/kustomization.yml
+          git commit -m "revert(deploy): rollback production to ${{ steps.prev.outputs.tag }}
+
+          Triggered by: ${{ github.actor }}
+          Reason: Manual rollback"
+
+          git push origin main
+
+      - name: Notify rollback
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": ":rotating_light: Production ROLLBACK to `${{ steps.prev.outputs.tag }}`\nTriggered by: `${{ github.actor }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

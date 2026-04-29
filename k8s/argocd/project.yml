@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: smart-doc-chatbot
+  namespace: argocd
+spec:
+  description: "Smart Document Chatbot - GitOps managed project"
+
+  # Source repositories
+  sourceRepos:
+    - 'https://github.com/OWNER/smart-doc-chatbot.git'
+
+  # Allowed destinations
+  destinations:
+    - namespace: smart-doc-chatbot-staging
+      server: https://kubernetes.default.svc
+    - namespace: smart-doc-chatbot-production
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster-scoped resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+
+  # Namespace-scoped resources
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: 'apps'
+      kind: '*'
+    - group: 'networking.k8s.io'
+      kind: '*'
+    - group: 'autoscaling'
+      kind: '*'
+    - group: 'policy'
+      kind: '*'
+
+  # Roles
+  roles:
+    - name: developers
+      description: "Read-only access for developers"
+      policies:
+        - p, proj:smart-doc-chatbot:developers, applications, get, smart-doc-chatbot/*, allow
+        - p, proj:smart-doc-chatbot:developers, applications, sync, smart-doc-chatbot/*, deny
+    - name: devops
+      description: "Full access for DevOps team"
+      policies:
+        - p, proj:smart-doc-chatbot:devops, applications, *, smart-doc-chatbot/*, allow

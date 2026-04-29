@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: smart-doc-chatbot
+
+commonLabels:
+  app.kubernetes.io/part-of: smart-doc-chatbot
+  app.kubernetes.io/managed-by: argocd
+
+resources:
+  - namespace.yml
+  - service-account.yml
+  - backend-configmap.yml
+  - backend-secret.yml
+  - backend-deployment.yml
+  - backend-service.yml
+  - frontend-deployment.yml
+  - frontend-service.yml
+  - postgres-statefulset.yml
+  - qdrant-statefulset.yml
+  - pvc.yml
+  - ingress.yml
+  - hpa.yml
+  - network-policy.yml

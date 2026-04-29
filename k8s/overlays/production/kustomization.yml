@@ -1,0 +1,82 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: smart-doc-chatbot-production
+
+namePrefix: prod-
+
+commonLabels:
+  environment: production
+
+resources:
+  - ../../base
+  - pod-disruption-budget.yml
+
+patches:
+  # Production replicas
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  # Production resource limits
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 768Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1536Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2"
+  # Production ingress host
+  - target:
+      kind: Ingress
+      name: smart-doc-chatbot
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: smartdoc.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: smartdoc.example.com
+  # Production storage
+  - target:
+      kind: PersistentVolumeClaim
+      name: uploads-pvc
+    patch: |
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 20Gi
+
+configMapGenerator:
+  - name: backend-config
+    behavior: merge
+    literals:
+      - SPRING_PROFILES_ACTIVE=production
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - FLYWAY_ENABLED=true
+      - LOGGING_LEVEL_ROOT=WARN
+      - LOGGING_LEVEL_COM_SMARTDOCCHAT=INFO
+
+images:
+  - name: ghcr.io/OWNER/smart-doc-chatbot/backend
+    newTag: v1.0.0
+  - name: ghcr.io/OWNER/smart-doc-chatbot/frontend
+    newTag: v1.0.0

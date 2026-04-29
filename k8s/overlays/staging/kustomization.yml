@@ -1,0 +1,90 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: smart-doc-chatbot-staging
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+
+resources:
+  - ../../base
+
+patches:
+  # Reduce replicas for staging
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # Reduce resource limits for staging
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 768Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+  # Staging HPA
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: backend-hpa
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: frontend-hpa
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  # Staging ingress host
+  - target:
+      kind: Ingress
+      name: smart-doc-chatbot
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.smartdoc.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: staging.smartdoc.example.com
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: staging-smartdoc-tls
+
+configMapGenerator:
+  - name: backend-config
+    behavior: merge
+    literals:
+      - SPRING_PROFILES_ACTIVE=staging
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_COM_SMARTDOCCHAT=DEBUG
+
+images:
+  - name: ghcr.io/OWNER/smart-doc-chatbot/backend
+    newTag: staging-latest
+  - name: ghcr.io/OWNER/smart-doc-chatbot/frontend
+    newTag: staging-latest
