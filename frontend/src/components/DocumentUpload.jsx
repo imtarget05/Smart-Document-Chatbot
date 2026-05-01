@@ -1,4 +1,7 @@
-import React, { useState } from 'react';\nimport PropTypes from 'prop-types';
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
 
 function DocumentUpload({ onDocumentUploaded }) {
   const [uploading, setUploading] = useState(false);
@@ -24,7 +27,7 @@ function DocumentUpload({ onDocumentUploaded }) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8080/api/documents/upload', {
+      const response = await fetch(`${API_BASE_URL}/documents/upload`, {
         method: 'POST',
         body: formData,
       });

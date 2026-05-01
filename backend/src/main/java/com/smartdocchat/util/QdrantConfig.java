@@ -11,4 +11,5 @@ public class QdrantConfig {
     private String host;
     private int port;
     private String collectionName;
+    private String apiKey;
 }

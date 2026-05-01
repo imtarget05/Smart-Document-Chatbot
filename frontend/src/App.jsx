@@ -5,6 +5,8 @@ import ChatWindow from './components/ChatWindow';
 import DocumentList from './components/DocumentList';
 import { v4 as uuidv4 } from 'uuid';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+
 function App() {
   const [sessionId] = useState(() => {
     let id = localStorage.getItem('sessionId');
@@ -25,7 +27,7 @@ function App() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/documents');
+      const response = await fetch(`${API_BASE_URL}/documents`);
       const data = await response.json();
       setDocuments(data);
     } catch (error) {

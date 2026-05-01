@@ -1,5 +1,6 @@
 package com.smartdocchat.util;
 
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -28,7 +29,7 @@ public class DocumentParser {
 
     private String extractPdfText(File file) throws IOException {
         StringBuilder text = new StringBuilder();
-        try (PDDocument document = PDDocument.load(file)) {
+        try (PDDocument document = Loader.loadPDF(file)) {
             PDFTextStripper stripper = new PDFTextStripper();
             text.append(stripper.getText(document));
         }

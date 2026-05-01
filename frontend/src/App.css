@@ -1,0 +1,32 @@
+/* Smart Document Chatbot - App Styles */
+/* Most styling is handled by Tailwind CSS via index.css */
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+/* Document list item transition */
+.document-item {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Chat bubble max-width override for larger screens */
+@media (min-width: 1024px) {
+  .chat-bubble {
+    max-width: 60%;
+  }
+}

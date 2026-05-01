@@ -2,12 +2,14 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { formatDistanceToNow } from 'date-fns';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+
 function DocumentList({ documents, selectedDocument, onSelectDocument, onDocumentDeleted }) {
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    if (globalThis.confirm('Are you sure you want to delete this document?')) {
+    if (window.confirm('Are you sure you want to delete this document?')) {
       try {
-        await fetch(`http://localhost:8080/api/documents/${id}`, {
+        await fetch(`${API_BASE_URL}/documents/${id}`, {
           method: 'DELETE',
         });
         onDocumentDeleted(id);

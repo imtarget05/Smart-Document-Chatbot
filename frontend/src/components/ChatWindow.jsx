@@ -1,15 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+
 function ChatWindow({ sessionId, documentId }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  const fetchChatHistory = React.useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/chat/history/${sessionId}/${documentId}`
+      );
+      const data = await response.json();
+      setMessages(data);
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
+    }
+  }, [sessionId, documentId]);
+
   useEffect(() => {
     fetchChatHistory();
-  }, [sessionId, documentId]);
+  }, [fetchChatHistory]);
 
   useEffect(() => {
     scrollToBottom();
@@ -17,18 +31,6 @@ function ChatWindow({ sessionId, documentId }) {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const fetchChatHistory = async () => {
-    try {
-      const response = await fetch(
-        `http://localhost:8080/api/chat/history/${sessionId}/${documentId}`
-      );
-      const data = await response.json();
-      setMessages(data);
-    } catch (error) {
-      console.error('Error fetching chat history:', error);
-    }
   };
 
   const handleSendMessage = async () => {
@@ -39,7 +41,7 @@ function ChatWindow({ sessionId, documentId }) {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8080/api/chat/ask', {
+      const response = await fetch(`${API_BASE_URL}/chat/ask`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

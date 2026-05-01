@@ -1,5 +1,6 @@
 package com.smartdocchat;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,9 @@ public class SmartDocChatbotApplication {
     @EnableWebSocketMessageBroker
     public static class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+        @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}")
+        private String allowedOrigins;
+
         @Override
         public void configureMessageBroker(MessageBrokerRegistry config) {
             config.enableSimpleBroker("/topic", "/user");
@@ -29,7 +33,7 @@ public class SmartDocChatbotApplication {
         @Override
         public void registerStompEndpoints(StompEndpointRegistry registry) {
             registry.addEndpoint("/ws/chat")
-                    .setAllowedOrigins("http://localhost:3000", "http://localhost:8080")
+                    .setAllowedOrigins(allowedOrigins.split(","))
                     .withSockJS();
         }
     }
