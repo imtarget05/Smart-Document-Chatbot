@@ -173,14 +173,6 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build and generate coverage
-        working-directory: backend
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smart_doc_chatbot_test
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
-        run: mvn clean verify -B
-
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
@@ -188,21 +180,19 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@master
+      - name: Build, Test and Analyze with SonarCloud
+        working-directory: backend
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smart_doc_chatbot_test
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectBaseDir: backend
-          args: >
-            -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot
-            -Dsonar.projectName="Smart Document Chatbot"
-            -Dsonar.organization=imtarget05
-            -Dsonar.sources=src/main/java
-            -Dsonar.java.binaries=target/classes
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar 
+          -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot 
+          -Dsonar.organization=imtarget05 
+          -Dsonar.host.url=https://sonarcloud.io
 
   sonarcloud-frontend:
     name: "2b. SonarCloud - Frontend"
