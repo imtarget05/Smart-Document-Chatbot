@@ -97,6 +97,12 @@ services:
       LOGGING_LEVEL_COM_SMARTDOCCHAT: ${LOGGING_LEVEL_COM_SMARTDOCCHAT:-INFO}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,12 +143,49 @@ services:
           memory: 128M
           cpus: '0.25'
 
+  # --- Prometheus (Monitoring) ---
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: sdc-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - app-network
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # --- Grafana (Dashboard) ---
+  grafana:
+    image: grafana/grafana:10.0.3
+    container_name: sdc-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - app-network
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
     driver: local
   qdrant_data:
     driver: local
   uploads_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:
