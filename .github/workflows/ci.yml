@@ -192,7 +192,8 @@ jobs:
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar 
           -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot 
           -Dsonar.organization=imtarget05 
-          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.host.url=https://sonarcloud.io 
+          -Dsonar.token=${{ secrets.SONAR_TOKEN }}
 
   sonarcloud-frontend:
     name: "2b. SonarCloud - Frontend"
@@ -342,13 +343,6 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Trivy SARIF (backend)
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-backend.sarif'
-          category: 'trivy-backend'
-
       - name: Trivy table output (backend)
         if: always()
         uses: aquasecurity/trivy-action@master
@@ -385,13 +379,6 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Trivy SARIF (frontend)
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-frontend.sarif'
-          category: 'trivy-frontend'
-
       - name: Trivy table output (frontend)
         if: always()
         uses: aquasecurity/trivy-action@master
@@ -421,13 +408,6 @@ jobs:
           output: 'trivy-iac.sarif'
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
-
-      - name: Upload IaC SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-iac.sarif'
-          category: 'trivy-iac'
 
   # ============================================================
   # STAGE 5: Gate - All checks must pass
