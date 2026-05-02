@@ -48,7 +48,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for SonarQube
+          fetch-depth: 0
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
@@ -173,6 +173,14 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Build and generate coverage
+        working-directory: backend
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smart_doc_chatbot_test
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+        run: mvn clean verify -B
+
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
@@ -180,24 +188,22 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: Build and analyze with SonarCloud
-        working-directory: backend
+      - name: SonarCloud scan
+        uses: SonarSource/sonarcloud-github-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smart_doc_chatbot_test
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
-        run: |
-          mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar \
-            -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot \
-            -Dsonar.projectName="Smart Document Chatbot" \
-            -Dsonar.organization=imtarget05 \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.token="${{ secrets.SONAR_TOKEN }}" \
-            -Dsonar.java.coveragePlugin=jacoco \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -Dsonar.qualitygate.wait=true \
-            -B
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectBaseDir: backend
+          args: >
+            -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot
+            -Dsonar.projectName="Smart Document Chatbot"
+            -Dsonar.organization=imtarget05
+            -Dsonar.sources=src/main/java
+            -Dsonar.tests=src/test/java
+            -Dsonar.java.binaries=target/classes
+            -Dsonar.java.test.binaries=target/test-classes
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   sonarcloud-frontend:
     name: "2b. SonarCloud - Frontend"
@@ -229,10 +235,6 @@ jobs:
             -Dsonar.organization=imtarget05
             -Dsonar.sources=src
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.qualitygate.wait=true
-
-
-
 
   # ============================================================
   # STAGE 3: Build Docker Images
@@ -428,7 +430,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-iac.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'  # Advisory only for IaC
+          exit-code: '0'
 
       - name: Upload IaC SARIF
         if: always()
