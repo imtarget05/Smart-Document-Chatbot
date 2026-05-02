@@ -27,8 +27,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ${{ github.repository }}/backend
-  FRONTEND_IMAGE: ${{ github.repository }}/frontend
 
 permissions:
   contents: write
@@ -45,10 +43,20 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     outputs:
       image-tag: ${{ steps.tag.outputs.value }}
+      backend-image: ${{ steps.image-names.outputs.backend }}
+      frontend-image: ${{ steps.image-names.outputs.frontend }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Generate lowercase image names
+        id: image-names
+        run: |
+          BACKEND_IMAGE="${{ github.repository }}/backend"
+          FRONTEND_IMAGE="${{ github.repository }}/frontend"
+          echo "backend=$(echo $BACKEND_IMAGE | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "frontend=$(echo $FRONTEND_IMAGE | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Determine image tag
         id: tag
@@ -76,8 +84,8 @@ jobs:
           file: docker/Dockerfile.backend
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ steps.tag.outputs.value }}
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.backend }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.backend }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -88,8 +96,8 @@ jobs:
           file: docker/Dockerfile.frontend
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.value }}
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:latest
           build-args: |
             REACT_APP_API_URL=/api
             REACT_APP_WS_URL=/ws

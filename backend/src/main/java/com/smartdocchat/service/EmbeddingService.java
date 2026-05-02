@@ -1,6 +1,6 @@
 package com.smartdocchat.service;
 
-import com.smartdocchat.util.OpenAIConfig;
+import com.smartdocchat.util.GeminiConfig;
 import com.smartdocchat.util.QdrantConfig;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -16,13 +16,13 @@ import java.util.*;
 @Slf4j
 public class EmbeddingService {
 
-    private final OpenAIConfig openAIConfig;
+    private final GeminiConfig geminiConfig;
     private final QdrantConfig qdrantConfig;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private static final String OPENAI_EMBEDDING_URL = "https://api.openai.com/v1/embeddings";
-    private static final int EMBEDDING_DIMENSION = 1536; // text-embedding-3-small dimension
+    private static final String GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+    private static final int EMBEDDING_DIMENSION = 768; // text-embedding-004 dimension
 
     private String qdrantBaseUrl;
 
@@ -242,7 +242,7 @@ public class EmbeddingService {
         return headers;
     }
 
-    // ==================== OpenAI Embedding API ====================
+    // ==================== Gemini Embedding API ====================
 
     /**
      * Generate embedding for a single text.
@@ -253,49 +253,61 @@ public class EmbeddingService {
     }
 
     /**
-     * Generate embeddings for multiple texts via OpenAI API.
+     * Generate embeddings for multiple texts via Gemini API.
+     * Gemini embedContent API processes one text at a time, so we loop.
      */
     @SuppressWarnings("unchecked")
     private List<List<Float>> generateEmbeddings(List<String> texts) {
+        List<List<Float>> allEmbeddings = new ArrayList<>();
+
         try {
+            String url = GEMINI_API_BASE + geminiConfig.getEmbeddingModel()
+                    + ":embedContent?key=" + geminiConfig.getApiKey();
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(openAIConfig.getApiKey());
 
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("input", texts);
-            requestBody.put("model", openAIConfig.getEmbeddingModel());
+            for (String text : texts) {
+                Map<String, Object> textPart = new HashMap<>();
+                textPart.put("text", text);
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+                Map<String, Object> content = new HashMap<>();
+                content.put("parts", List.of(textPart));
 
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    OPENAI_EMBEDDING_URL,
-                    HttpMethod.POST,
-                    entity,
-                    Map.class
-            );
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("model", "models/" + geminiConfig.getEmbeddingModel());
+                requestBody.put("content", content);
+                requestBody.put("taskType", "RETRIEVAL_DOCUMENT");
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> data = (List<Map<String, Object>>) response.getBody().get("data");
-                List<List<Float>> embeddings = new ArrayList<>();
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-                for (Map<String, Object> item : data) {
-                    List<Number> embeddingNumbers = (List<Number>) item.get("embedding");
-                    List<Float> embeddingFloats = new ArrayList<>();
-                    for (Number n : embeddingNumbers) {
-                        embeddingFloats.add(n.floatValue());
+                ResponseEntity<Map> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.POST,
+                        entity,
+                        Map.class
+                );
+
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    Map<String, Object> embedding = (Map<String, Object>) response.getBody().get("embedding");
+                    if (embedding != null) {
+                        List<Number> values = (List<Number>) embedding.get("values");
+                        List<Float> floats = new ArrayList<>();
+                        for (Number n : values) {
+                            floats.add(n.floatValue());
+                        }
+                        allEmbeddings.add(floats);
                     }
-                    embeddings.add(embeddingFloats);
+                } else {
+                    log.error("Gemini embedding API returned non-success status: {}", response.getStatusCode());
+                    allEmbeddings.add(Collections.emptyList());
                 }
-
-                return embeddings;
             }
 
-            log.error("OpenAI embedding API returned non-success status: {}", response.getStatusCode());
-            return Collections.emptyList();
+            return allEmbeddings;
 
         } catch (Exception e) {
-            log.error("Error calling OpenAI embedding API: {}", e.getMessage(), e);
+            log.error("Error calling Gemini embedding API: {}", e.getMessage(), e);
             return Collections.emptyList();
         }
     }

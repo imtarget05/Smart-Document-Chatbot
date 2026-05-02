@@ -40,12 +40,12 @@ server:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}
 
-# OpenAI Configuration
-openai:
-  api-key: ${OPENAI_API_KEY:your-api-key-here}
-  model: ${OPENAI_MODEL:gpt-4o-mini}
-  embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
-  temperature: ${OPENAI_TEMPERATURE:0.7}
+# Gemini Configuration
+gemini:
+  api-key: ${GEMINI_API_KEY:your-api-key-here}
+  model: ${GEMINI_MODEL:gemini-2.0-flash}
+  embedding-model: ${GEMINI_EMBEDDING_MODEL:text-embedding-004}
+  temperature: ${GEMINI_TEMPERATURE:0.7}
 
 # Qdrant Configuration
 qdrant:

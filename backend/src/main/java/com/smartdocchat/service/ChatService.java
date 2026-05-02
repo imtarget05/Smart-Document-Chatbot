@@ -4,7 +4,7 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.ChatMessageRepository;
 import com.smartdocchat.repository.DocumentRepository;
-import com.smartdocchat.util.OpenAIConfig;
+import com.smartdocchat.util.GeminiConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -21,11 +21,11 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final DocumentRepository documentRepository;
     private final EmbeddingService embeddingService;
-    private final OpenAIConfig openAIConfig;
+    private final GeminiConfig geminiConfig;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private static final String OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+    private static final String GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
     public ChatMessage processQuery(String sessionId, Long documentId, String userMessage) {
         // Step 1: Find document and get vectorCollectionId
@@ -49,7 +49,7 @@ public class ChatService {
         // Step 3: Build prompt with context
         String prompt = buildPrompt(userMessage, relevantChunks);
 
-        // Step 4: Call LLM (OpenAI)
+        // Step 4: Call LLM (Gemini)
         String aiResponse = callLLM(prompt);
 
         // Step 5: Save to database
@@ -93,53 +93,64 @@ public class ChatService {
     @SuppressWarnings("unchecked")
     private String callLLM(String prompt) {
         try {
+            String url = GEMINI_API_BASE + geminiConfig.getModel() + ":generateContent?key=" + geminiConfig.getApiKey();
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(openAIConfig.getApiKey());
 
-            List<Map<String, String>> messages = new ArrayList<>();
-            messages.add(Map.of(
-                    "role", "system",
-                    "content", "You are a helpful document assistant. Answer questions accurately based on the provided context."
-            ));
-            messages.add(Map.of(
-                    "role", "user",
-                    "content", prompt
-            ));
+            // Build Gemini request body
+            Map<String, Object> textPart = new HashMap<>();
+            textPart.put("text", prompt);
+
+            Map<String, Object> systemPart = new HashMap<>();
+            systemPart.put("text", "You are a helpful document assistant. Answer questions accurately based on the provided context.");
+
+            Map<String, Object> systemContent = new HashMap<>();
+            systemContent.put("role", "user");
+            systemContent.put("parts", List.of(systemPart));
+
+            Map<String, Object> userContent = new HashMap<>();
+            userContent.put("role", "user");
+            userContent.put("parts", List.of(textPart));
+
+            Map<String, Object> generationConfig = new HashMap<>();
+            generationConfig.put("temperature", geminiConfig.getTemperature());
+            generationConfig.put("maxOutputTokens", 2048);
 
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", openAIConfig.getModel());
-            requestBody.put("messages", messages);
-            requestBody.put("temperature", openAIConfig.getTemperature());
-            requestBody.put("max_tokens", 2048);
+            requestBody.put("contents", List.of(userContent));
+            requestBody.put("generationConfig", generationConfig);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            log.info("Calling OpenAI chat API with model: {}", openAIConfig.getModel());
+            log.info("Calling Gemini API with model: {}", geminiConfig.getModel());
 
             ResponseEntity<Map> response = restTemplate.exchange(
-                    OPENAI_CHAT_URL,
+                    url,
                     HttpMethod.POST,
                     entity,
                     Map.class
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> firstChoice = choices.get(0);
-                    Map<String, String> message = (Map<String, String>) firstChoice.get("message");
-                    if (message != null) {
-                        return message.get("content");
+                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.getBody().get("candidates");
+                if (candidates != null && !candidates.isEmpty()) {
+                    Map<String, Object> firstCandidate = candidates.get(0);
+                    Map<String, Object> content = (Map<String, Object>) firstCandidate.get("content");
+                    if (content != null) {
+                        List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
+                        if (parts != null && !parts.isEmpty()) {
+                            return parts.get(0).get("text").toString();
+                        }
                     }
                 }
             }
 
-            log.error("OpenAI chat API returned unexpected response structure");
+            log.error("Gemini API returned unexpected response structure");
             return "Sorry, I could not generate a response. Please try again.";
 
         } catch (Exception e) {
-            log.error("Error calling OpenAI chat API: {}", e.getMessage(), e);
+            log.error("Error calling Gemini API: {}", e.getMessage(), e);
             return "Sorry, an error occurred while processing your question: " + e.getMessage();
         }
     }
