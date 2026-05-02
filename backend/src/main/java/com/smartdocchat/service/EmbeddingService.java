@@ -22,7 +22,7 @@ public class EmbeddingService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     private static final String GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
-    private static final int EMBEDDING_DIMENSION = 768; // text-embedding-004 dimension
+    private static final int EMBEDDING_DIMENSION = 3072; // gemini-embedding-001 dimension
 
     private String qdrantBaseUrl;
 

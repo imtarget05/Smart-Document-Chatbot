@@ -138,11 +138,11 @@ jobs:
           retention-days: 5
 
   # ============================================================
-  # STAGE 2: SonarQube Code Quality Analysis
+  # STAGE 2: SonarCloud Code Quality Analysis
   # ============================================================
 
-  sonarqube-backend:
-    name: "2a. SonarQube - Backend"
+  sonarcloud-backend:
+    name: "2a. SonarCloud - Backend"
     runs-on: ubuntu-latest
     needs: backend-build
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
@@ -173,34 +173,34 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Cache SonarQube packages
+      - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: Build and analyze with SonarQube
+      - name: Build and analyze with SonarCloud
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smart_doc_chatbot_test
           SPRING_DATASOURCE_USERNAME: postgres
           SPRING_DATASOURCE_PASSWORD: postgres
         run: |
           mvn clean verify sonar:sonar \
-            -Dsonar.projectKey=smart-doc-chatbot-backend \
-            -Dsonar.projectName="Smart Doc Chatbot - Backend" \
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot \
+            -Dsonar.projectName="Smart Document Chatbot" \
+            -Dsonar.organization=imtarget05 \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token="${{ secrets.SONAR_TOKEN }}" \
             -Dsonar.java.coveragePlugin=jacoco \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
             -Dsonar.qualitygate.wait=true \
             -B
 
-  sonarqube-frontend:
-    name: "2b. SonarQube - Frontend"
+  sonarcloud-frontend:
+    name: "2b. SonarCloud - Frontend"
     runs-on: ubuntu-latest
     needs: frontend-build
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
@@ -216,19 +216,23 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage
 
-      - name: SonarQube scan
-        uses: SonarSource/sonarqube-scan-action@v3
+      - name: SonarCloud scan
+        uses: SonarSource/sonarcloud-github-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectBaseDir: frontend
           args: >
-            -Dsonar.projectKey=smart-doc-chatbot-frontend
-            -Dsonar.projectName=Smart Doc Chatbot - Frontend
+            -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot-frontend
+            -Dsonar.projectName="Smart Document Chatbot - Frontend"
+            -Dsonar.organization=imtarget05
             -Dsonar.sources=src
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.qualitygate.wait=true
+
+
+
 
   # ============================================================
   # STAGE 3: Build Docker Images
@@ -370,10 +374,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: docker-build
     steps:
+      - name: Generate lowercase frontend image name
+        id: image-name
+        run: |
+          FRONTEND_IMAGE="${{ github.repository }}/frontend"
+          echo "frontend=$(echo $FRONTEND_IMAGE | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Run Trivy on frontend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ needs.docker-build.outputs.image-tag }}'
+          image-ref: '${{ env.REGISTRY }}/${{ steps.image-name.outputs.frontend }}:${{ needs.docker-build.outputs.image-tag }}'
           format: 'sarif'
           output: 'trivy-frontend.sarif'
           severity: 'CRITICAL,HIGH'
@@ -394,7 +404,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ needs.docker-build.outputs.image-tag }}'
+          image-ref: '${{ env.REGISTRY }}/${{ steps.image-name.outputs.frontend }}:${{ needs.docker-build.outputs.image-tag }}'
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
           ignore-unfixed: true

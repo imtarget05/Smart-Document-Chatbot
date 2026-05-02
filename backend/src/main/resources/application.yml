@@ -40,12 +40,16 @@ server:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}
 
-# Gemini Configuration
+# OpenRouter Configuration (Chat LLM)
+openrouter:
+  api-key: ${OPENROUTER_API_KEY:your-api-key-here}
+  model: ${OPENROUTER_MODEL:google/gemini-2.0-flash-exp:free}
+  temperature: ${OPENROUTER_TEMPERATURE:0.7}
+
+# Gemini Configuration (Embeddings only)
 gemini:
   api-key: ${GEMINI_API_KEY:your-api-key-here}
-  model: ${GEMINI_MODEL:gemini-2.0-flash}
-  embedding-model: ${GEMINI_EMBEDDING_MODEL:text-embedding-004}
-  temperature: ${GEMINI_TEMPERATURE:0.7}
+  embedding-model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-001}
 
 # Qdrant Configuration
 qdrant:

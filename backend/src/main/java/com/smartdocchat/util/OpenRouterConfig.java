@@ -5,9 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "gemini")
+@ConfigurationProperties(prefix = "openrouter")
 @Data
-public class GeminiConfig {
+public class OpenRouterConfig {
     private String apiKey;
-    private String embeddingModel;
+    private String model;
+    private double temperature;
 }

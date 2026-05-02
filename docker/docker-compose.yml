@@ -81,11 +81,13 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       QDRANT_API_KEY: ${QDRANT_API_KEY:-qdrant_key_123}
-      # Gemini
+      # OpenRouter (Chat LLM)
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-2.0-flash-exp:free}
+      OPENROUTER_TEMPERATURE: ${OPENROUTER_TEMPERATURE:-0.7}
+      # Gemini (Embeddings only)
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-text-embedding-004}
-      GEMINI_TEMPERATURE: ${GEMINI_TEMPERATURE:-0.7}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
       # JVM
       JAVA_OPTS: "${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}"
       # Spring profile
