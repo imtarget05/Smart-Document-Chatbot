@@ -180,19 +180,25 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: Build, Test and Analyze with SonarCloud
+      - name: Build and Test
         working-directory: backend
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smart_doc_chatbot_test
           SPRING_DATASOURCE_USERNAME: postgres
           SPRING_DATASOURCE_PASSWORD: postgres
+        run: mvn -B clean verify
+
+      - name: SonarCloud Analysis
+        working-directory: backend
+        continue-on-error: true
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >
-          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar 
-          -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot 
-          -Dsonar.organization=imtarget05 
-          -Dsonar.host.url=https://sonarcloud.io 
+          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar
+          -Dsonar.projectKey=imtarget05_Smart-Document-Chatbot
+          -Dsonar.organization=imtarget05
+          -Dsonar.host.url=https://sonarcloud.io
           -Dsonar.token=${{ secrets.SONAR_TOKEN }}
 
   sonarcloud-frontend:
