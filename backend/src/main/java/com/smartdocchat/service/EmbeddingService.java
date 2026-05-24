@@ -2,6 +2,9 @@ package com.smartdocchat.service;
 
 import com.smartdocchat.util.GeminiConfig;
 import com.smartdocchat.util.QdrantConfig;
+import com.smartdocchat.util.OpenRouterConfig;
+import com.smartdocchat.util.DocumentParser;
+import com.smartdocchat.dto.RetrievedChunk;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +21,11 @@ public class EmbeddingService {
 
     private final GeminiConfig geminiConfig;
     private final QdrantConfig qdrantConfig;
+    private final OpenRouterConfig openRouterConfig;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private static final String GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
-    private static final int EMBEDDING_DIMENSION = 3072; // gemini-embedding-001 dimension
+    private static final int EMBEDDING_DIMENSION = 768; // nomic-embed-text dimension
 
     private String qdrantBaseUrl;
 
@@ -97,10 +100,72 @@ public class EmbeddingService {
     }
 
     /**
-     * Search for relevant chunks using semantic similarity.
+     * Generate embeddings for hierarchical document chunks and store them in Qdrant.
      */
     @SuppressWarnings("unchecked")
-    public List<String> search(String query, String collectionId, int topK) {
+    public String embedAndStoreHierarchical(String documentName, List<DocumentParser.HierarchicalChunk> chunks) {
+        String collectionId = "doc_" + UUID.randomUUID().toString().replace("-", "");
+
+        try {
+            // Step 1: Create collection in Qdrant
+            createCollection(collectionId);
+            log.info("Created Qdrant collection for hierarchical storage: {}", collectionId);
+
+            // Step 2: Generate embeddings and upsert in batches
+            int batchSize = 20;
+            for (int i = 0; i < chunks.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, chunks.size());
+                List<DocumentParser.HierarchicalChunk> batchChunks = chunks.subList(i, end);
+
+                List<String> childTexts = new ArrayList<>();
+                for (DocumentParser.HierarchicalChunk hc : batchChunks) {
+                    childTexts.add(hc.getChildText());
+                }
+
+                List<List<Float>> embeddings = generateEmbeddings(childTexts);
+
+                if (embeddings.isEmpty() || embeddings.size() != batchChunks.size()) {
+                    log.warn("Embedding generation failed or returned mismatched count for hierarchical batch {}-{}", i, end - 1);
+                    continue;
+                }
+
+                // Build points for upsert
+                List<Map<String, Object>> points = new ArrayList<>();
+                for (int j = 0; j < batchChunks.size(); j++) {
+                    int idx = i + j;
+                    Map<String, Object> point = new HashMap<>();
+                    point.put("id", idx);
+                    point.put("vector", embeddings.get(j));
+
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("text", batchChunks.get(j).getChildText());
+                    payload.put("parent_text", batchChunks.get(j).getParentText());
+                    payload.put("chunk_index", idx);
+                    payload.put("document_name", documentName);
+                    point.put("payload", payload);
+
+                    points.add(point);
+                }
+
+                upsertPoints(collectionId, points);
+                log.debug("Upserted hierarchical batch {}-{} for collection {}", i, end - 1, collectionId);
+            }
+
+            log.info("Successfully stored {} hierarchical chunks for document '{}' in collection '{}'",
+                    chunks.size(), documentName, collectionId);
+
+        } catch (Exception e) {
+            log.error("Error storing hierarchical embeddings for document '{}': {}", documentName, e.getMessage(), e);
+        }
+
+        return collectionId;
+    }
+
+    /**
+     * Search for relevant chunks using semantic similarity and return RetrievedChunk with scores.
+     */
+    @SuppressWarnings("unchecked")
+    public List<RetrievedChunk> searchChunks(String query, String collectionId, int topK) {
         if (collectionId == null || collectionId.isBlank()) {
             log.warn("Cannot search: collectionId is empty");
             return Collections.emptyList();
@@ -132,14 +197,20 @@ public class EmbeddingService {
                     Map.class
             );
 
-            List<String> relevantChunks = new ArrayList<>();
+            List<RetrievedChunk> relevantChunks = new ArrayList<>();
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 List<Map<String, Object>> results = (List<Map<String, Object>>) response.getBody().get("result");
                 if (results != null) {
                     for (Map<String, Object> result : results) {
                         Map<String, Object> payload = (Map<String, Object>) result.get("payload");
+                        Number scoreNum = (Number) result.get("score");
+                        double score = scoreNum != null ? scoreNum.doubleValue() : 0.0;
                         if (payload != null && payload.get("text") != null) {
-                            relevantChunks.add(payload.get("text").toString());
+                            String text = payload.get("text").toString();
+                            String parentText = payload.containsKey("parent_text") && payload.get("parent_text") != null
+                                    ? payload.get("parent_text").toString()
+                                    : text;
+                            relevantChunks.add(new RetrievedChunk(text, parentText, score));
                         }
                     }
                 }
@@ -153,6 +224,18 @@ public class EmbeddingService {
             log.error("Error searching in collection '{}': {}", collectionId, e.getMessage(), e);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * Search for relevant chunks using semantic similarity (backward compatible).
+     */
+    public List<String> search(String query, String collectionId, int topK) {
+        List<RetrievedChunk> chunks = searchChunks(query, collectionId, topK);
+        List<String> texts = new ArrayList<>();
+        for (RetrievedChunk chunk : chunks) {
+            texts.add(chunk.getText());
+        }
+        return texts;
     }
 
     /**
@@ -242,7 +325,7 @@ public class EmbeddingService {
         return headers;
     }
 
-    // ==================== Gemini Embedding API ====================
+    // ==================== Local Ollama Embedding API ====================
 
     /**
      * Generate embedding for a single text.
@@ -253,31 +336,34 @@ public class EmbeddingService {
     }
 
     /**
-     * Generate embeddings for multiple texts via Gemini API.
-     * Gemini embedContent API processes one text at a time, so we loop.
+     * Generate embeddings for multiple texts via local Ollama API.
      */
     @SuppressWarnings("unchecked")
     private List<List<Float>> generateEmbeddings(List<String> texts) {
         List<List<Float>> allEmbeddings = new ArrayList<>();
 
         try {
-            String url = GEMINI_API_BASE + geminiConfig.getEmbeddingModel()
-                    + ":embedContent?key=" + geminiConfig.getApiKey();
+            // Determine Ollama embedding endpoint
+            String chatUrl = openRouterConfig.getChatUrl();
+            String ollamaBaseUrl = "http://ollama:11434"; // Default for docker container
+            if (chatUrl != null) {
+                if (chatUrl.contains("/v1/chat/completions")) {
+                    ollamaBaseUrl = chatUrl.replace("/v1/chat/completions", "");
+                } else if (chatUrl.contains("/v1")) {
+                    ollamaBaseUrl = chatUrl.substring(0, chatUrl.indexOf("/v1"));
+                }
+            }
+            
+            String url = ollamaBaseUrl + "/api/embeddings";
+            log.info("Generating embeddings using Ollama endpoint: {} with model: {}", url, geminiConfig.getEmbeddingModel());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             for (String text : texts) {
-                Map<String, Object> textPart = new HashMap<>();
-                textPart.put("text", text);
-
-                Map<String, Object> content = new HashMap<>();
-                content.put("parts", List.of(textPart));
-
                 Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("model", "models/" + geminiConfig.getEmbeddingModel());
-                requestBody.put("content", content);
-                requestBody.put("taskType", "RETRIEVAL_DOCUMENT");
+                requestBody.put("model", geminiConfig.getEmbeddingModel());
+                requestBody.put("prompt", text);
 
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
@@ -289,17 +375,19 @@ public class EmbeddingService {
                 );
 
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                    Map<String, Object> embedding = (Map<String, Object>) response.getBody().get("embedding");
-                    if (embedding != null) {
-                        List<Number> values = (List<Number>) embedding.get("values");
+                    List<Number> values = (List<Number>) response.getBody().get("embedding");
+                    if (values != null) {
                         List<Float> floats = new ArrayList<>();
                         for (Number n : values) {
                             floats.add(n.floatValue());
                         }
                         allEmbeddings.add(floats);
+                    } else {
+                        log.error("Ollama embedding response did not contain 'embedding' field");
+                        allEmbeddings.add(Collections.emptyList());
                     }
                 } else {
-                    log.error("Gemini embedding API returned non-success status: {}", response.getStatusCode());
+                    log.error("Ollama embedding API returned non-success status: {}", response.getStatusCode());
                     allEmbeddings.add(Collections.emptyList());
                 }
             }
@@ -307,7 +395,7 @@ public class EmbeddingService {
             return allEmbeddings;
 
         } catch (Exception e) {
-            log.error("Error calling Gemini embedding API: {}", e.getMessage(), e);
+            log.error("Error calling Ollama embedding API: {}", e.getMessage(), e);
             return Collections.emptyList();
         }
     }

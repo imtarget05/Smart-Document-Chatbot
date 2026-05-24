@@ -1,0 +1,72 @@
+# ============================================
+# Smart Document Chatbot - MLOps Extension
+# Usage: docker compose -f docker/docker-compose.yml -f docker/docker-compose.mlops.yml up -d --build
+# ============================================
+
+services:
+  # --- MLflow Tracking Server ---
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: sdc-mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:////app/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/app/artifacts
+    volumes:
+      - mlflow_data:/app
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////app/mlflow.db --default-artifact-root /app/artifacts
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+
+  # --- Apache Airflow (Sequential Executor) ---
+  airflow:
+    image: apache/airflow:2.8.3
+    container_name: sdc-airflow
+    restart: unless-stopped
+    ports:
+      - "8085:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      # Install required Python packages for document parsing and indexing automatically on start
+      - _PIP_ADDITIONAL_REQUIREMENTS=pypdf docx python-docx requests qdrant-client
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - uploads_data:/opt/airflow/uploads
+      - airflow_data:/opt/airflow
+    entrypoint: >
+      bash -c "
+      airflow db init &&
+      airflow users create --username admin --password admin --firstname Admin --lastname Admin --role Admin --email admin@example.com || true;
+      airflow webserver & airflow scheduler
+      "
+    depends_on:
+      - mlflow
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: '0.75'
+
+volumes:
+  airflow_data:
+    driver: local
+  mlflow_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

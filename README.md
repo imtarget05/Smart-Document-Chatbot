@@ -1,312 +1,218 @@
-# Smart Document Chatbot
+# 📚 Smart Document Chatbot - Enterprise Agentic CRAG Platform
+[![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![React](https://img.shields.io/badge/React-18.x-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TanStack Query](https://img.shields.io/badge/TanStack_Query-5.x-FF4154?logo=reactquery&logoColor=white)](https://tanstack.com/query)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.2.x-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![LangChain4j](https://img.shields.io/badge/LangChain4j-0.28-orange?logo=java&logoColor=white)](https://github.com/langchain4j/langchain4j)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-red?logo=qdrant&logoColor=white)](https://qdrant.tech/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Airflow](https://img.shields.io/badge/Apache_Airflow-ETL-017CEE?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
 
-Upload tài liệu (PDF, Word...) → Hỏi chatbot bằng tiếng Việt/Anh → AI trả lời dựa trên nội dung tài liệu
+Dự án mẫu mực kết hợp giữa **Kỹ nghệ Phần mềm truyền thống (Software Engineering)** chất lượng cao và **Kỹ nghệ Trí tuệ Nhân tạo hiện đại (AI Engineering)** theo xu thế công nghệ năm 2025. Hệ thống là một nền tảng **Agentic Corrective RAG (CRAG)** đa tài liệu (Multi-document) mạnh mẽ, hỗ trợ phân tích định dạng tệp thông minh, suy luận sâu và stream kết quả thời gian thực token-by-token.
 
-## 🎯 Tính năng
-
-### Core (bắt buộc)
-- ✅ Upload tài liệu PDF/Word
-- ✅ Chat hỏi đáp dựa trên tài liệu
-- ✅ Stream response realtime (typewriter effect)
-- ✅ Lưu lịch sử chat
-
-### Nâng cao (làm thêm)
-- 🔲 Multi-document (chọn tài liệu nào để hỏi)
-- 🔲 Hiển thị nguồn trích dẫn (trang mấy, đoạn nào)
-- 🔲 Authentication (JWT)
-- 🔲 Conversation memory (nhớ ngữ cảnh chat trước)
-
-## 🏗️ Kiến trúc hệ thống
-
-```
-┌─────────────────────────────────────────────────┐
-│                   Frontend                       │
-│         React + WebSocket (chat realtime)        │
-└───────────────────┬─────────────────────────────┘
-                    │ HTTP / WS
-┌───────────────────▼─────────────────────────────┐
-│              Spring Boot Backend                 │
-│  ┌──────────────┐    ┌───────────────────────┐  │
-│  │ Upload API   │    │  Chat API (WebSocket)  │  │
-│  └──────┬───────┘    └──────────┬────────────┘  │
-│         │                       │               │
-│  ┌──────▼───────┐    ┌──────────▼────────────┐  │
-│  │  Embedding   │    │     RAG Pipeline       │  │
-│  │  Service     │    │  Search → Prompt → LLM │  │
-│  └──────┬───────┘    └──────────┬────────────┘  │
-└─────────┼─────────────────────── ┼──────────────┘
-          │                        │
-┌─────────▼──────┐      ┌──────────▼─────────────┐
-│  Vector DB     │      │     OpenAI / Gemini     │
-│  (Qdrant)      │      │     API                 │
-└────────────────┘      └────────────────────────┘
-          │
-┌─────────▼──────┐
-│  PostgreSQL    │
-│  (metadata,    │
-│   chat history)│
-└────────────────┘
-```
-
-## 🛠️ Tech Stack
-
-| Layer | Công nghệ | Lý do chọn |
-|-------|-----------|-----------|
-| Backend | Spring Boot 3 | Quen thuộc, ecosystem lớn |
-| LLM Framework | LangChain4j | Java-native, dễ tích hợp |
-| LLM Provider | OpenAI GPT-4o-mini | Rẻ, đủ mạnh (~$0.01/query) |
-| Embedding | OpenAI text-embedding-3-small | Chất lượng cao |
-| Vector DB | Qdrant (Docker) | Free, dễ setup local |
-| Relational DB | PostgreSQL + pgvector | Lưu metadata + chat history |
-| Realtime | Spring WebSocket | Chat streaming |
-| File Parsing | Apache PDFBox + POI | Đọc PDF, Word |
-| Frontend | React + Tailwind CSS | UI chat đẹp |
-| Deploy | Docker Compose | Dễ demo |
-
-## 📋 Cấu trúc Project
-
-```
-Smart Document Chatbot/
-├── backend/
-│   ├── src/main/java/com/smartdocchat/
-│   │   ├── SmartDocChatbotApplication.java
-│   │   ├── controller/
-│   │   │   ├── DocumentController.java
-│   │   │   └── ChatController.java
-│   │   ├── service/
-│   │   │   ├── DocumentService.java
-│   │   │   ├── ChatService.java
-│   │   │   └── EmbeddingService.java
-│   │   ├── entity/
-│   │   │   ├── Document.java
-│   │   │   └── ChatMessage.java
-│   │   ├── repository/
-│   │   │   ├── DocumentRepository.java
-│   │   │   └── ChatMessageRepository.java
-│   │   ├── dto/
-│   │   │   ├── ChatRequest.java
-│   │   │   ├── ChatResponse.java
-│   │   │   ├── DocumentDTO.java
-│   │   │   └── UploadResponse.java
-│   │   └── util/
-│   │       ├── DocumentParser.java
-│   │       ├── OpenAIConfig.java
-│   │       └── QdrantConfig.java
-│   ├── src/main/resources/
-│   │   └── application.yml
-│   └── pom.xml
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── DocumentUpload.jsx
-│   │   │   ├── DocumentList.jsx
-│   │   │   └── ChatWindow.jsx
-│   │   ├── App.jsx
-│   │   ├── index.jsx
-│   │   └── index.css
-│   ├── public/
-│   │   └── index.html
-│   └── package.json
-├── docker/
-│   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend
-│   └── docker-compose.yml
-└── README.md
-```
-
-## 🚀 Cài đặt & Chạy
-
-### Yêu cầu
-- Docker & Docker Compose
-- Node.js 18+ (nếu chạy local frontend)
-- Java 17+ (nếu chạy local backend)
-- Maven 3.8+
-
-### Chạy với Docker Compose
-
-```bash
-# Clone repository
-cd Smart\ Document\ Chatbot
-
-# Set OpenAI API Key
-export OPENAI_API_KEY=your-api-key-here
-
-# Khởi động tất cả services
-docker-compose -f docker/docker-compose.yml up --build
-
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8080/api
-# Qdrant Dashboard: http://localhost:6333
-```
-
-### Chạy Local (Development)
-
-#### Backend
-```bash
-cd backend
-
-# Install dependencies
-mvn install
-
-# Run
-mvn spring-boot:run
-
-# Server runs on http://localhost:8080
-```
-
-#### Frontend
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Run
-npm start
-
-# App opens at http://localhost:3000
-```
-
-#### PostgreSQL
-```bash
-# Docker
-docker run -d \
-  --name postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=smart_doc_chatbot \
-  -p 5432:5432 \
-  postgres:15-alpine
-```
-
-#### Qdrant
-```bash
-# Docker
-docker run -d \
-  --name qdrant \
-  -p 6333:6333 \
-  qdrant/qdrant:latest
-```
-
-## 🔄 RAG Pipeline hoạt động như thế nào
-
-### UPLOAD PHASE
-```
-1. User upload PDF/Word/TXT
-   ↓
-2. Extract Text (PDFBox/POI)
-   ↓
-3. Split into Chunks (500 tokens)
-   ↓
-4. Generate Embeddings (OpenAI API)
-   ↓
-5. Store in Qdrant Vector DB
-   ↓
-6. Save Metadata to PostgreSQL
-```
-
-### QUERY PHASE
-```
-1. User asks question
-   ↓
-2. Generate Query Embedding (OpenAI API)
-   ↓
-3. Semantic Search in Qdrant (Top 3 chunks)
-   ↓
-4. Build RAG Prompt with Context
-   ↓
-5. Call OpenAI GPT-4o-mini
-   ↓
-6. Stream response to Frontend
-   ↓
-7. Save Chat History to DB
-```
-
-## 📡 API Endpoints
-
-### Documents
-- `POST /api/documents/upload` - Upload tài liệu
-- `GET /api/documents` - Danh sách tài liệu
-- `GET /api/documents/{id}` - Chi tiết tài liệu
-- `DELETE /api/documents/{id}` - Xóa tài liệu
-
-### Chat
-- `POST /api/chat/ask` - Hỏi câu hỏi
-- `GET /api/chat/history/{sessionId}` - Lịch sử chat
-- `GET /api/chat/history/{sessionId}/{documentId}` - Lịch sử chat theo tài liệu
-- `DELETE /api/chat/history/{sessionId}` - Xóa lịch sử chat
-- `WS /ws/chat` - WebSocket realtime chat
-
-## 🔑 Biến môi trường
-
-```env
-# Backend
-OPENAI_API_KEY=sk-...
-DATABASE_URL=jdbc:postgresql://localhost:5432/smart_doc_chatbot
-DATABASE_USER=postgres
-DATABASE_PASSWORD=postgres
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-SPRING_JPA_HIBERNATE_DDL_AUTO=update
-```
-
-## 📊 Database Schema
-
-### documents
-```sql
-- id (Long, PK)
-- file_name (String)
-- file_path (String)
-- file_type (String)
-- file_size (Long)
-- vector_collection_id (String)
-- chunk_count (Integer)
-- created_at (DateTime)
-- updated_at (DateTime)
-```
-
-### chat_messages
-```sql
-- id (Long, PK)
-- session_id (String)
-- document_id (Long, FK)
-- user_message (TEXT)
-- ai_response (TEXT)
-- source_chunks (TEXT)
-- created_at (DateTime)
-```
-
-## 🔐 Bảo mật
-
-- [TODO] JWT Authentication
-- [TODO] Rate limiting per user
-- [TODO] File upload validation
-- [TODO] SQL injection prevention (JPA ORM)
-- [TODO] XSS protection (React)
-
-## 🚧 Tiếp theo
-
-1. **Integration OpenAI API thực sự** trong EmbeddingService & ChatService
-2. **Qdrant Client** - Connect & store vectors
-3. **Stream responses** - WebSocket streaming
-4. **Authentication** - JWT + Spring Security
-5. **Conversation memory** - Multi-turn context
-6. **Citation tracking** - Hiển thị nguồn trích dẫn
-7. **Multi-language** - Support Tiếng Việt
-
-## 📝 Lưu ý
-
-- Cần OpenAI API key để chạy (có thể dùng trial account)
-- PostgreSQL & Qdrant sẽ auto-create database khi startup
-- File upload max 50MB
-- Session ID lưu ở localStorage (browser)
-
-## 📞 Support
-
-Nếu có lỗi, check:
-1. Logs: `docker logs <container_name>`
-2. Health check: http://localhost:8080/actuator/health
-3. Qdrant dashboard: http://localhost:6333
+> [!TIP]
+> **Dành cho nhà tuyển dụng (CV / Portfolio)**: Dự án này minh chứng cho khả năng thiết kế kiến trúc phân tán, tích hợp LLM chuyên sâu, cấu trúc RAG tự thích ứng (Self-reflective), di chuyển build-tool hiện đại sang Vite, quản lý state chuyên nghiệp bằng React Query, và tối ưu hóa trải nghiệm người dùng với Server-Sent Events (SSE).
 
 ---
 
-Happy coding! 🎉
+## 🎯 Tính năng Nổi bật (Core Features)
+
+*   **Real-time Streaming Response (Server-Sent Events - SSE)**: Chatbot phản hồi tức thời theo thời gian thực dưới dạng "gõ chữ đến đâu hiện đến đó" tương tự ChatGPT, kết nối qua `SseEmitter` của Spring Boot và luồng stream phi đồng bộ từ `OpenAiStreamingChatModel` của **LangChain4j**.
+*   **Vite + React + TypeScript 5 (Strict Mode)**: Hệ thống Frontend được tái cấu trúc từ CRA sang **Vite**, tăng tốc độ khởi động và HMR gấp 10-20 lần. Toàn bộ mã nguồn sử dụng **TypeScript** an toàn cao, biên dịch 100% không lỗi.
+*   **TanStack Query (React Query v5)**: Quản lý cache dữ liệu tài liệu và lịch sử chat tối ưu, tự động invalidation khi upload/delete thông qua `useQuery` và `useMutation`, loại bỏ hoàn toàn việc fetch dữ liệu thủ công qua `useEffect`.
+*   **Kiến trúc Agentic CRAG (Corrective RAG) Loop**:
+    *   *Confidence Evaluation*: Đánh giá điểm tin cậy ngữ cảnh trích xuất từ Qdrant (ngưỡng 0.45).
+    *   *Query Reformulation*: Khi độ tin cậy thấp, kích hoạt tác nhân (Agent) tự động phân rã và viết lại câu hỏi thành các biến thể tối ưu hơn thông qua mô hình DeepSeek.
+    *   *Parallel Retrieval & Reranking*: Truy vấn song song (Multi-threading) trên các vector collection và xếp hạng lại tài liệu.
+    *   *Web Search Fallback*: Tự động bổ sung ngữ cảnh trực tuyến bằng API Tavily khi tài liệu không đủ dữ liệu.
+    *   *Deep Reasoning Fallback*: Kích hoạt chế độ suy luận chuyên sâu nội bộ của mô hình khi nằm ngoài phạm vi tài liệu.
+*   **Multi-Document Synthesis**: Hỗ trợ lựa chọn linh hoạt giữa chế độ hỏi đáp trên một tài liệu đơn lẻ (Single File Mode) hoặc tổng hợp ngữ cảnh chéo trên nhiều tài liệu cùng lúc (Multi-File Chat Mode).
+*   **Trích dẫn Nguồn ngữ cảnh (Citations)**: Hiển thị minh bạch nguồn gốc thông tin trích xuất (metadata tệp, nội dung đoạn văn gốc) giúp kiểm chứng tính chính xác của phản hồi.
+*   **Visual Concept Mapping**: AI tự động trích xuất các khái niệm cốt lõi của tài liệu và dựng thành bản đồ tư duy (Concept Map) trực quan bằng SVG, cho phép người dùng click để hỏi chatbot sâu hơn về khái niệm đó.
+*   **Apache Airflow Ingestion ETL**: Pipeline dữ liệu tự động hóa quy trình phân tách trang, làm sạch nội dung, sinh embeddings và nạp index vào Qdrant một cách chuyên nghiệp.
+
+---
+
+## 🏗️ Kiến trúc Hệ thống (System Architecture)
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   Frontend Client                      │
+│      React 18 + Vite 5 + TypeScript + React Query      │
+└───────────┬────────────────────────────────┬───────────┘
+            │                                │
+            │ HTTP (SSE / Stream)            │ HTTP / JSON
+┌───────────▼────────────────────────────────▼───────────┐
+│                    Spring Boot API                     │
+│               Controller (SseEmitter)                  │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │                    ChatService                   │  │
+│  │     ┌──────────────┐            ┌─────────────┐  │  │
+│  │     │  Embeddings  ├─(Ollama)──►│   Qdrant    │  │  │
+│  │     └──────────────┘            └─────────────┘  │  │
+│  │                                 (Vector search)  │  │
+│  │     ┌──────────────┐                             │  │
+│  │     │  LangChain4j ├─(Streaming)─┐               │  │
+│  │     └──────────────┘             │               │  │
+│  │                                  │               │  │
+│  │     ┌──────────────┐             ▼               │  │
+│  │     │  Web Search  ├─(Tavily)──►[SSE Endpoint]   │  │
+│  │     └──────────────┘                             │  │
+│  └──────────────────┬───────────────────────────────┘  │
+└─────────────────────┼──────────────────────────────────┘
+                      │ JPA ORM
+             ┌────────▼────────┐
+             │ PostgreSQL DB   │
+             │ (Chat History / │
+             │  Doc Metadata)  │
+             └─────────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack & Quyết định Công nghệ
+
+| Layer | Công nghệ | Vai trò & Lý do chọn lựa |
+| :--- | :--- | :--- |
+| **Backend Core** | Spring Boot 3.2.x | Phát triển RESTful API hiệu năng cao, cơ chế Graceful Shutdown & Async processing chuyên nghiệp. |
+| **AI LLM Framework** | LangChain4j 0.28.0 | Java-native LLM integration framework hàng đầu, cung cấp các interface chuẩn hóa cho ChatModel và StreamingModel. |
+| **Embedding Engine** | Ollama / Gemini API | Sử dụng mô hình `nomic-embed-text` cục bộ hoặc API Gemini sinh vector đặc trưng 768 chiều chất lượng cao. |
+| **Vector DB** | Qdrant (REST API) | Cấu trúc dữ liệu Vector hiệu năng cao, tổ chức phân tách linh hoạt theo Collection ID riêng cho từng tài liệu. |
+| **Relational DB** | PostgreSQL 15 | Quản lý lưu trữ metadata tệp tin và toàn bộ lịch sử hội thoại chuẩn hóa ACID. |
+| **Data Pipelines** | Apache Airflow | Tự động hóa tiến trình ETL tách nhỏ tài liệu, làm sạch cấu trúc và lập chỉ mục không đồng bộ. |
+| **Frontend Platform** | Vite 5 + React 18 | Tối ưu hóa tối đa tốc độ biên dịch (Hot Module Replacement) thay thế cho Webpack/CRA lỗi thời. |
+| **State & Caching** | TanStack Query v5 | Quản lý đồng bộ trạng thái server-state, tự động hóa cơ chế cache-busting, retry, và loading skeleton. |
+| **Telemetry** | MLflow / Prometheus | Tracing chi tiết độ trễ, tokens tiêu hao, giám sát trực quan các bước suy luận của Agentic CRAG. |
+
+---
+
+## 📂 Cấu trúc Dự án (Project Structure)
+
+```
+Smart-Document-Chatbot/
+├── backend/
+│   ├── src/main/java/com/smartdocchat/
+│   │   ├── controller/               # REST Endpoints (Chat Controller hỗ trợ SSE)
+│   │   ├── service/                  # Core RAG, Agentic CRAG Loop & Embedding Services
+│   │   ├── entity/                   # ORM Entity (PostgreSQL mapping)
+│   │   ├── dto/                      # Data Transfer Objects (ChatRequest/Response)
+│   │   └── config/                   # CORS, Web MVC Configurations
+│   ├── src/main/resources/
+│   │   └── application.yml           # Cấu hình DB, LLM Model & Web Search
+│   └── pom.xml                       # Quản lý dependency Maven (LangChain4j, Qdrant Client)
+├── frontend/
+│   ├── src/
+│   │   ├── components/               # ChatWindow, ConceptMap, DocumentList, DocumentUpload
+│   │   ├── App.tsx                   # Main component tích hợp React Query
+│   │   ├── index.tsx                 # Điểm đầu vào chính, khởi tạo QueryClient
+│   │   └── vite-env.d.ts             # Định nghĩa kiểu cho các biến môi trường của Vite
+│   ├── index.html                    # HTML Template chính (được dịch chuyển lên thư mục gốc)
+│   ├── vite.config.ts                # Cấu hình Vite & Server CORS Proxy
+│   └── package.json                  # Script và package dependency (TypeScript, TanStack Query)
+├── airflow/
+│   └── dags/
+│       └── document_etl.py           # Pipeline ETL Apache Airflow ingestion
+└── docker/
+    └── docker-compose.yml            # Khởi động Qdrant, PostgreSQL, Airflow, MLflow
+```
+
+---
+
+## 🔄 Luồng Nghiệp vụ RAG Tự Phản Hồi (Self-reflective RAG In-depth)
+
+### Quy trình Xử lý Tài liệu (Ingestion Pipeline)
+1. **Upload**: Tải tài liệu định dạng `.pdf`, `.docx`, `.doc` hoặc `.txt`.
+2. **Parsing**: Apache PDFBox / POI phân tách cấu trúc văn bản.
+3. **Hierarchical Chunking**: Cắt nhỏ văn bản thành các phân đoạn nhỏ có gối đầu để bảo toàn ngữ cảnh ngữ nghĩa.
+4. **Vector Embeddings**: Gọi API sinh vector đặc trưng.
+5. **Index**: Lưu trữ các vectors vào collection riêng trong **Qdrant Vector DB**, đồng thời đồng bộ trạng thái hoàn thành và sinh executive summary của tài liệu qua PostgreSQL.
+
+### Quy trình Trả lời Streaming & Tác nhân (Query & Self-reflective CRAG Flow)
+```
+[User Question]
+       │
+       ▼
+[Initial Retrieval (Qdrant)] ──► Max Cosine Similarity Score >= 0.45?
+       │                                     │
+       ├──(YES: High Confidence)             ├──(NO: Low Confidence)
+       │                                     │
+       ▼                                     ▼
+[Build RAG Prompt with Context]     [Query Reformulation (DeepSeek)]
+       │                                     │
+       │                                     ▼
+       │                            [Parallel Re-retrieval]
+       │                                     │
+       │                                     ▼
+       │                            [Deduplication & Reranking] ──► Score >= 0.45?
+       │                                     │                           │
+       │                                     ├──(YES)                    ├──(NO)
+       │                                     │                           │
+       │                                     ▼                           ▼
+       │                            [Agentic Synthesis]         [Tavily Web Search Fallback]
+       │                                     │                           │
+       │                                     ▼                           ▼
+       ├─────────────────────────────────────┴───────────────────────────┤
+       ▼
+[LangChain4j Streaming LLM (OpenRouter / Ollama)]
+       │
+       ▼
+[Typewriter Response Streamed to UI via SSE (SseEmitter)]
+       │
+       ▼
+[Save Full Conversation History in PostgreSQL]
+```
+
+---
+
+## 🚀 Hướng dẫn Cài đặt & Khởi động nhanh (Local Setup)
+
+### Yêu cầu Hệ thống
+*   Docker & Docker Compose
+*   Java 17+ & Maven 3.8+
+*   Node.js 18+ & npm
+
+### Bước 1: Khởi động Hạ tầng Dev (PostgreSQL & Qdrant)
+Từ thư mục gốc dự án:
+```bash
+make dev-up
+```
+*Hạ tầng sẽ hoạt động tại: PostgreSQL (localhost:5432) và Qdrant Dashboard (localhost:6333).*
+
+### Bước 2: Khởi động Backend (Spring Boot)
+1. Cấu hình các khóa API của bạn trong file `.env` (OpenRouter, Tavily, etc.).
+2. Khởi chạy ứng dụng Spring Boot:
+```bash
+cd backend
+mvn spring-boot:run
+```
+*Backend API chạy tại: `http://localhost:8080/api`*
+
+### Bước 3: Khởi động Frontend (Vite + TS)
+1. Cài đặt các package cần thiết:
+```bash
+cd frontend
+npm install
+```
+2. Khởi động môi trường phát triển:
+```bash
+npm run dev
+```
+*Truy cập trực tiếp tại: `http://localhost:3000` (được cấu hình proxy tự động tới API backend).*
+
+---
+
+## 📡 Chi tiết API Endpoint
+
+### 📄 API Quản lý Tài liệu (Documents)
+*   `POST /api/documents/upload` - Tải lên tài liệu mới (Xử lý Multipart-file).
+*   `GET /api/documents` - Lấy danh sách toàn bộ tài liệu đã được lập chỉ mục kèm theo tóm tắt và câu hỏi gợi ý.
+*   `GET /api/documents/{id}` - Truy vấn trạng thái chi tiết của tệp tin.
+*   `DELETE /api/documents/{id}` - Xóa tài liệu khỏi hệ cơ sở dữ liệu và thu hồi chỉ mục Vector trên Qdrant.
+
+### 💬 API Hội thoại & Hỏi đáp (Chat & Streaming)
+*   `POST /api/chat/ask` - Endpoint hỏi đáp đồng bộ truyền thống.
+*   `POST /api/chat/ask-stream` - Endpoint hỏi đáp **Streaming dạng Text-Event-Stream** (Server-Sent Events).
+*   `GET /api/chat/history/{sessionId}` - Tải lịch sử hội thoại của toàn bộ phiên.
+*   `GET /api/chat/history/{sessionId}/{documentId}` - Lấy lịch sử hội thoại được phân tách theo tài liệu cụ thể.
+*   `DELETE /api/chat/history/{sessionId}` - Xóa lịch sử phiên chat.

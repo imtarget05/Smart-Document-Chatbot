@@ -42,6 +42,20 @@ public class Document {
     @Column(name = "chunk_count")
     private Integer chunkCount;
 
+    @Column(columnDefinition = "TEXT")
+    private String summary;
+
+    @Column(name = "suggested_questions", columnDefinition = "TEXT")
+    private String suggestedQuestions;
+
+    @Column(name = "concept_map", columnDefinition = "TEXT")
+    private String conceptMap;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private String status = "READY";
+
+
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();

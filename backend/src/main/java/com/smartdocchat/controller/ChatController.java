@@ -6,11 +6,14 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.service.ChatService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,12 +30,30 @@ public class ChatController {
             ChatMessage message = chatService.processQuery(
                     request.getSessionId(),
                     request.getDocumentId(),
+                    request.getDocumentIds(),
                     request.getMessage()
             );
             return ResponseEntity.ok(convertToResponse(message));
         } catch (Exception e) {
             log.error("Error processing chat request", e);
             return ResponseEntity.status(500).build();
+        }
+    }
+
+    @PostMapping(value = "/ask-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter askQuestionStream(@RequestBody ChatRequest request) {
+        try {
+            return chatService.processQueryStream(
+                    request.getSessionId(),
+                    request.getDocumentId(),
+                    request.getDocumentIds(),
+                    request.getMessage()
+            );
+        } catch (Exception e) {
+            log.error("Error starting chat stream", e);
+            SseEmitter errorEmitter = new SseEmitter();
+            errorEmitter.completeWithError(e);
+            return errorEmitter;
         }
     }
 
@@ -70,12 +91,23 @@ public class ChatController {
         ChatMessage message = chatService.processQuery(
                 request.getSessionId(),
                 request.getDocumentId(),
+                request.getDocumentIds(),
                 request.getMessage()
         );
         return convertToResponse(message);
     }
 
     private ChatResponse convertToResponse(ChatMessage message) {
+        List<Long> docIds = new ArrayList<>();
+        if (message.getDocumentIds() != null && !message.getDocumentIds().isBlank()) {
+            for (String s : message.getDocumentIds().split(",")) {
+                try {
+                    docIds.add(Long.parseLong(s.trim()));
+                } catch (NumberFormatException e) {
+                    // Ignore
+                }
+            }
+        }
         return ChatResponse.builder()
                 .id(message.getId())
                 .sessionId(message.getSessionId())
@@ -83,6 +115,7 @@ public class ChatController {
                 .aiResponse(message.getAiResponse())
                 .sourceChunks(message.getSourceChunks())
                 .documentId(message.getDocumentId())
+                .documentIds(docIds.isEmpty() ? null : docIds)
                 .build();
     }
 }

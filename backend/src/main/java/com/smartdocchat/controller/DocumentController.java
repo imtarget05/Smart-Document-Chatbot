@@ -83,6 +83,55 @@ public class DocumentController {
         }
     }
 
+    @PostMapping("/{id}/etl-complete")
+    public ResponseEntity<String> completeEtl(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> payload) {
+        try {
+            String vectorCollectionId = (String) payload.get("vector_collection_id");
+            int chunkCount = (Integer) payload.get("chunk_count");
+            String summary = (String) payload.get("summary");
+
+            String suggestedQuestions = null;
+            if (payload.get("suggested_questions") != null) {
+                suggestedQuestions = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(payload.get("suggested_questions"));
+            }
+
+            documentService.completeEtl(id, vectorCollectionId, chunkCount, summary, suggestedQuestions);
+            return ResponseEntity.ok("ETL state updated to READY");
+        } catch (Exception e) {
+            log.error("Error completing ETL for document {}", id, e);
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/etl-fail")
+    public ResponseEntity<String> failEtl(@PathVariable Long id) {
+        try {
+            documentService.failEtl(id);
+            return ResponseEntity.ok("ETL state updated to FAILED");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/mindmap")
+    public ResponseEntity<String> getDocumentMindMap(@PathVariable Long id) {
+        try {
+            String mindMap = documentService.getOrGenerateMindMap(id);
+            if (mindMap == null) {
+                return ResponseEntity.status(500).body("Error generating mind map");
+            }
+            return ResponseEntity.ok()
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(mindMap);
+        } catch (Exception e) {
+            log.error("Error fetching mind map for document {}", id, e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
     private DocumentDTO convertToDTO(Document document) {
         return DocumentDTO.builder()
                 .id(document.getId())
@@ -92,6 +141,10 @@ public class DocumentController {
                 .createdAt(document.getCreatedAt())
                 .updatedAt(document.getUpdatedAt())
                 .chunkCount(document.getChunkCount())
+                .summary(document.getSummary())
+                .suggestedQuestions(document.getSuggestedQuestions())
+                .conceptMap(document.getConceptMap())
+                .status(document.getStatus())
                 .build();
     }
 }

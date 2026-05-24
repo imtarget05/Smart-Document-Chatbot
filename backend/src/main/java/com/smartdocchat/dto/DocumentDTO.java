@@ -18,4 +18,8 @@ public class DocumentDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Integer chunkCount;
+    private String summary;
+    private String suggestedQuestions;
+    private String conceptMap;
+    private String status;
 }

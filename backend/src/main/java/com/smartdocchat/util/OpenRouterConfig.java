@@ -11,4 +11,5 @@ public class OpenRouterConfig {
     private String apiKey;
     private String model;
     private double temperature;
+    private String chatUrl = "https://openrouter.ai/api/v1/chat/completions";
 }

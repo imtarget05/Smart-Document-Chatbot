@@ -45,6 +45,7 @@ openrouter:
   api-key: ${OPENROUTER_API_KEY:your-api-key-here}
   model: ${OPENROUTER_MODEL:google/gemini-2.0-flash-exp:free}
   temperature: ${OPENROUTER_TEMPERATURE:0.7}
+  chat-url: ${OPENROUTER_CHAT_URL:https://openrouter.ai/api/v1/chat/completions}
 
 # Gemini Configuration (Embeddings only)
 gemini:
@@ -57,6 +58,11 @@ qdrant:
   port: ${QDRANT_PORT:6333}
   collection-name: ${QDRANT_COLLECTION:documents}
   api-key: ${QDRANT_API_KEY:}
+
+# Airflow ETL Configuration
+airflow:
+  enabled: ${AIRFLOW_ENABLED:false}
+  url: ${AIRFLOW_URL:http://airflow:8080/api/v1}
 
 # Actuator & Monitoring
 management:

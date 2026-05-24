@@ -77,4 +77,36 @@ public class DocumentParser {
         // Rough estimation: 1 token ≈ 4 characters
         return (text.length() + 3) / 4;
     }
+
+    public static class HierarchicalChunk {
+        private final String childText;
+        private final String parentText;
+
+        public HierarchicalChunk(String childText, String parentText) {
+            this.childText = childText;
+            this.parentText = parentText;
+        }
+
+        public String getChildText() {
+            return childText;
+        }
+
+        public String getParentText() {
+            return parentText;
+        }
+    }
+
+    public List<HierarchicalChunk> chunkTextHierarchical(String text, int parentSize, int childSize) {
+        List<HierarchicalChunk> hierarchicalChunks = new ArrayList<>();
+        List<String> parentChunks = chunkText(text, parentSize);
+
+        for (String parent : parentChunks) {
+            List<String> children = chunkText(parent, childSize);
+            for (String child : children) {
+                hierarchicalChunks.add(new HierarchicalChunk(child, parent));
+            }
+        }
+
+        return hierarchicalChunks;
+    }
 }

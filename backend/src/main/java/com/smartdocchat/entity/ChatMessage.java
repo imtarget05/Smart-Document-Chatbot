@@ -24,6 +24,9 @@ public class ChatMessage {
     @Column(name = "document_id")
     private Long documentId;
 
+    @Column(name = "document_ids", columnDefinition = "TEXT")
+    private String documentIds;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String userMessage;
 
