@@ -3,6 +3,7 @@ import './App.css';
 import DocumentUpload from './components/DocumentUpload';
 import ChatWindow from './components/ChatWindow';
 import DocumentList from './components/DocumentList';
+import ErrorBoundary from './components/ErrorBoundary';
 import { v4 as uuidv4 } from 'uuid';
 import { useQuery } from '@tanstack/react-query';
 
@@ -31,6 +32,17 @@ function App() {
     return id;
   });
 
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('username'));
+  const [role, setRole] = useState<string | null>(() => localStorage.getItem('role'));
+
+  // Auth form states
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
 
@@ -40,15 +52,74 @@ function App() {
 
   // Fetch documents using TanStack Query
   const { data: documents = [], refetch: fetchDocuments } = useQuery<Document[]>({
-    queryKey: ['documents'],
+    queryKey: ['documents', token],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/documents`);
+      if (!token) return [];
+      const response = await fetch(`${API_BASE_URL}/documents`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.status === 401) {
+        handleLogout();
+        throw new Error('Session expired');
+      }
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
       }
       return response.json();
     },
+    enabled: !!token,
   });
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authUsername.trim() || !authPassword.trim()) {
+      setAuthError('Please fill in all fields');
+      return;
+    }
+    setAuthError('');
+    setAuthLoading(true);
+
+    try {
+      const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: authUsername, password: authPassword }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Authentication failed');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('username', data.username);
+      localStorage.setItem('role', data.role);
+      
+      setToken(data.token);
+      setUsername(data.username);
+      setRole(data.role);
+
+      setAuthUsername('');
+      setAuthPassword('');
+    } catch (err: any) {
+      setAuthError(err.message || 'Something went wrong');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('role');
+    setToken(null);
+    setUsername(null);
+    setRole(null);
+  };
 
   const handleDocumentUploaded = () => {
     fetchDocuments();
@@ -90,6 +161,85 @@ function App() {
     }
   };
 
+  if (!token) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 p-6 font-sans">
+        <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl text-white">
+          <div className="text-center mb-8">
+            <span className="text-4xl">🔮</span>
+            <h2 className="text-2xl font-bold mt-3 bg-gradient-to-r from-indigo-200 to-white bg-clip-text text-transparent">Smart Doc Chatbot</h2>
+            <p className="text-xs text-indigo-200/60 mt-1.5 font-semibold">Enterprise Agentic CRAG Platform</p>
+          </div>
+
+          <div className="flex bg-white/5 p-1 rounded-2xl mb-6 border border-white/5">
+            <button
+              onClick={() => { setAuthMode('login'); setAuthError(''); }}
+              className={`flex-1 text-center py-2.5 text-xs font-bold rounded-xl transition-all duration-300 ${
+                authMode === 'login'
+                  ? 'bg-white text-indigo-950 shadow-md'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => { setAuthMode('register'); setAuthError(''); }}
+              className={`flex-1 text-center py-2.5 text-xs font-bold rounded-xl transition-all duration-300 ${
+                authMode === 'register'
+                  ? 'bg-white text-indigo-950 shadow-md'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 mb-1.5">Username</label>
+              <input
+                type="text"
+                value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)}
+                placeholder="Enter username"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm font-semibold text-white placeholder-white/30 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition duration-200"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 mb-1.5">Password</label>
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Enter password"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm font-semibold text-white placeholder-white/30 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition duration-200"
+                required
+              />
+            </div>
+
+            {authError && (
+              <p className="text-rose-400 text-xs font-bold bg-rose-500/10 border border-rose-500/20 px-3.5 py-2.5 rounded-xl">
+                ⚠️ {authError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full py-3.5 bg-white text-indigo-950 hover:bg-indigo-50 font-bold text-xs rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
+            >
+              {authLoading ? (
+                <span className="w-4 h-4 border-2 border-indigo-950 border-t-transparent rounded-full animate-spin"></span>
+              ) : authMode === 'login' ? 'Sign In' : 'Create Account'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
       {/* Sidebar */}
@@ -98,7 +248,12 @@ function App() {
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
             <span>📚</span> Smart Doc Chat
           </h1>
-          <p className="text-xs text-gray-400 mt-1">Session ID: {sessionId.slice(0, 8)}...</p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-gray-400">User: <span className="font-semibold text-gray-600">{username}</span></p>
+            <p className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
+              {role?.replace('ROLE_', '')}
+            </p>
+          </div>
         </div>
 
         <DocumentUpload onDocumentUploaded={handleDocumentUploaded} />
@@ -118,6 +273,17 @@ function App() {
             onToggleDocumentSelect={handleToggleDocumentSelect}
             onSelectAllDocuments={handleSelectAllDocuments}
           />
+        </div>
+
+        {/* Logout Section */}
+        <div className="p-4 border-t border-gray-200 bg-gray-50/50 flex items-center justify-between">
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Session active</p>
+          <button
+            onClick={handleLogout}
+            className="text-xs font-bold text-rose-500 hover:text-rose-700 transition"
+          >
+            Logout 🚪
+          </button>
         </div>
       </div>
 
@@ -148,52 +314,54 @@ function App() {
               </div>
             )}
             {chatMode === 'single' && !selectedDocument && (
-              <p className="text-gray-500 text-sm">Select a document in the sidebar to begin</p>
+              <p className="text-gray-500 text-sm font-semibold">Select a document in the sidebar to begin</p>
             )}
           </div>
         </div>
 
         {/* Chat Content */}
-        {chatMode === 'multi' ? (
-          selectedDocumentIds.length > 0 ? (
+        <ErrorBoundary>
+          {chatMode === 'multi' ? (
+            selectedDocumentIds.length > 0 ? (
+              <ChatWindow
+                sessionId={sessionId}
+                documentIds={selectedDocumentIds}
+                chatMode="multi"
+                documents={documents.filter(d => selectedDocumentIds.includes(d.id))}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50">
+                <div className="text-center p-8 max-w-sm">
+                  <div className="text-4xl mb-3">📁</div>
+                  <p className="text-base font-semibold text-gray-700 mb-1">No documents selected</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Toggle selection checkboxes next to documents in the sidebar to start a cross-file synthesized chat.
+                  </p>
+                </div>
+              </div>
+            )
+          ) : selectedDocument ? (
             <ChatWindow
               sessionId={sessionId}
-              documentIds={selectedDocumentIds}
-              chatMode="multi"
-              documents={documents.filter(d => selectedDocumentIds.includes(d.id))}
+              documentId={selectedDocument.id}
+              chatMode="single"
+              document={selectedDocument}
+              onUpdateDocument={(updatedDoc) => {
+                setSelectedDocument(updatedDoc);
+              }}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50">
               <div className="text-center p-8 max-w-sm">
-                <div className="text-4xl mb-3">📁</div>
-                <p className="text-base font-semibold text-gray-700 mb-1">No documents selected</p>
+                <div className="text-4xl mb-3">📄</div>
+                <p className="text-base font-semibold text-gray-700 mb-1">No document selected</p>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  Toggle selection checkboxes next to documents in the sidebar to start a cross-file synthesized chat.
+                  Upload a document (PDF, Word, TXT) or select an existing one from the sidebar to view insights and start chatting.
                 </p>
               </div>
             </div>
-          )
-        ) : selectedDocument ? (
-          <ChatWindow
-            sessionId={sessionId}
-            documentId={selectedDocument.id}
-            chatMode="single"
-            document={selectedDocument}
-            onUpdateDocument={(updatedDoc) => {
-              setSelectedDocument(updatedDoc);
-            }}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50">
-            <div className="text-center p-8 max-w-sm">
-              <div className="text-4xl mb-3">📄</div>
-              <p className="text-base font-semibold text-gray-700 mb-1">No document selected</p>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Upload a document (PDF, Word, TXT) or select an existing one from the sidebar to view insights and start chatting.
-              </p>
-            </div>
-          </div>
-        )}
+          )}
+        </ErrorBoundary>
       </div>
     </div>
   );

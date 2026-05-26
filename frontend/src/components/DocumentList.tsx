@@ -32,8 +32,12 @@ function DocumentList({
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/documents/${id}`, {
         method: 'DELETE',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
       if (!response.ok) {
         throw new Error('Failed to delete document');

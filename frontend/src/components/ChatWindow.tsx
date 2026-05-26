@@ -52,7 +52,12 @@ function ChatWindow({
     if (chatMode === 'single' && documentId) {
       url = `${API_BASE_URL}/chat/history/${sessionId}/${documentId}`;
     }
-    const response = await fetch(url);
+    const token = localStorage.getItem('token');
+    const response = await fetch(url, {
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch chat history');
     }
@@ -91,7 +96,12 @@ function ChatWindow({
     if (chatMode === 'single' && document && (!document.summary || !document.suggestedQuestions)) {
       const interval = setInterval(async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/documents/${documentId}`);
+          const token = localStorage.getItem('token');
+          const res = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          });
           if (res.ok) {
             const freshDoc = await res.json();
             if (freshDoc.summary && freshDoc.suggestedQuestions) {
@@ -157,10 +167,12 @@ function ChatWindow({
 
     try {
       // 3. Initiate SSE connection via POST
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/chat/ask-stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(payload),
       });
@@ -504,6 +516,7 @@ function ChatWindow({
                     ? "Ask a question synthesizing across selected documents..."
                     : "Ask a question about the document... (Shift+Enter for new line)"
                 }
+                aria-label="Ask a question about the loaded documents"
                 className="flex-1 p-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium bg-gray-50/30"
                 rows={2}
                 disabled={loading}
@@ -511,6 +524,7 @@ function ChatWindow({
               <button
                 onClick={() => handleSendMessage()}
                 disabled={loading || !input.trim()}
+                aria-label="Send message"
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white px-5 rounded-xl transition duration-200 font-bold text-xs shadow-md shadow-indigo-100 hover:shadow-indigo-200 flex items-center justify-center flex-shrink-0"
               >
                 Send

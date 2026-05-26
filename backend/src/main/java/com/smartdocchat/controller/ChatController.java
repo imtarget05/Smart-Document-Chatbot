@@ -4,6 +4,7 @@ import com.smartdocchat.dto.ChatRequest;
 import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.service.ChatService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -25,7 +26,7 @@ public class ChatController {
     private final ChatService chatService;
 
     @PostMapping("/ask")
-    public ResponseEntity<ChatResponse> askQuestion(@RequestBody ChatRequest request) {
+    public ResponseEntity<ChatResponse> askQuestion(@Valid @RequestBody ChatRequest request) {
         try {
             ChatMessage message = chatService.processQuery(
                     request.getSessionId(),
@@ -41,7 +42,7 @@ public class ChatController {
     }
 
     @PostMapping(value = "/ask-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter askQuestionStream(@RequestBody ChatRequest request) {
+    public SseEmitter askQuestionStream(@Valid @RequestBody ChatRequest request) {
         try {
             return chatService.processQueryStream(
                     request.getSessionId(),

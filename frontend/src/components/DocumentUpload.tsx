@@ -14,11 +14,15 @@ function DocumentUpload({ onDocumentUploaded }: DocumentUploadProps) {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
+      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('file', file);
 
       const response = await fetch(`${API_BASE_URL}/documents/upload`, {
         method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: formData,
       });
 

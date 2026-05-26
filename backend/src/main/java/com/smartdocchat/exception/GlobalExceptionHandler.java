@@ -3,6 +3,8 @@ package com.smartdocchat.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -22,6 +24,26 @@ public class GlobalExceptionHandler {
         Map<String, String> response = new HashMap<>();
         response.put(ERROR_KEY, "File size exceeds maximum limit of 50MB");
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>> handleValidationException(MethodArgumentNotValidException e) {
+        log.warn("Validation failed for request: {}", e.getMessage());
+        Map<String, String> errors = new HashMap<>();
+        e.getBindingResult().getAllErrors().forEach(error -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            errors.put(fieldName, errorMessage);
+        });
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDeniedException(org.springframework.security.access.AccessDeniedException e) {
+        log.warn("Access denied: {}", e.getMessage());
+        Map<String, String> response = new HashMap<>();
+        response.put(ERROR_KEY, "Access denied. You do not have sufficient permissions.");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
     @ExceptionHandler(RuntimeException.class)

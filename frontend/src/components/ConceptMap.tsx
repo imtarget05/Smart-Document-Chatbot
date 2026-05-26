@@ -43,7 +43,12 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
     queryKey: ['mindmap', documentId],
     queryFn: async () => {
       setSelectedNode(null);
-      const response = await fetch(`${API_BASE_URL}/documents/${documentId}/mindmap`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/documents/${documentId}/mindmap`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load mind map data');
       }
