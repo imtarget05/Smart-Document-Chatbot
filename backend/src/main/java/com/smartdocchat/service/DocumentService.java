@@ -3,7 +3,7 @@ package com.smartdocchat.service;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.DocumentRepository;
 import com.smartdocchat.util.DocumentParser;
-import com.smartdocchat.util.OpenRouterConfig;
+import com.smartdocchat.util.OllamaConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,7 +25,8 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentParser documentParser;
     private final EmbeddingService embeddingService;
-    private final OpenRouterConfig openRouterConfig;
+    private final OllamaConfig ollamaConfig;
+    private final RestTemplate restTemplate;
 
     @org.springframework.beans.factory.annotation.Value("${airflow.enabled:false}")
     private boolean airflowEnabled;
@@ -33,18 +34,28 @@ public class DocumentService {
     @org.springframework.beans.factory.annotation.Value("${airflow.url:http://airflow:8080/api/v1}")
     private String airflowApiUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @org.springframework.beans.factory.annotation.Value("${airflow.username:admin}")
+    private String airflowUsername;
+
+    @org.springframework.beans.factory.annotation.Value("${airflow.password:admin}")
+    private String airflowPassword;
+
+    @org.springframework.beans.factory.annotation.Value("${service.internal-token}")
+    private String internalServiceToken;
+
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     private static final String UPLOAD_DIR = "uploads";
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "txt");
 
-    public Document uploadDocument(MultipartFile file) throws IOException {
+    public Document uploadDocument(MultipartFile file, String ownerUsername) throws IOException {
         // Create upload directory if not exists
         Files.createDirectories(Paths.get(UPLOAD_DIR));
 
         // Get file extension
-        String originalFileName = file.getOriginalFilename();
+        String originalFileName = sanitizeFileName(file.getOriginalFilename());
         String fileExtension = getFileExtension(originalFileName);
+        validateUpload(file, fileExtension);
         String fileName = UUID.randomUUID() + "." + fileExtension;
         Path filePath = Paths.get(UPLOAD_DIR, fileName);
 
@@ -58,6 +69,7 @@ public class DocumentService {
             Document document = Document.builder()
                     .fileName(originalFileName)
                     .filePath(filePath.toString())
+                    .ownerUsername(ownerUsername)
                     .fileType(fileExtension)
                     .fileSize(file.getSize())
                     .status("PROCESSING")
@@ -86,6 +98,7 @@ public class DocumentService {
         Document document = Document.builder()
                 .fileName(originalFileName)
                 .filePath(filePath.toString())
+                .ownerUsername(ownerUsername)
                 .fileType(fileExtension)
                 .fileSize(file.getSize())
                 .vectorCollectionId(collectionId)
@@ -107,7 +120,8 @@ public class DocumentService {
         try {
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.setBasicAuth("admin", "admin"); // Airflow default admin auth
+            headers.setBasicAuth(airflowUsername, airflowPassword);
+            headers.set("X-Internal-Token", internalServiceToken);
 
             Map<String, Object> conf = new HashMap<>();
             conf.put("document_id", doc.getId());
@@ -197,7 +211,6 @@ public class DocumentService {
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(openRouterConfig.getApiKey());
 
             List<Map<String, String>> messages = new ArrayList<>();
             messages.add(Map.of(
@@ -210,47 +223,43 @@ public class DocumentService {
             ));
 
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", openRouterConfig.getModel());
+            requestBody.put("model", ollamaConfig.getChatModel());
             requestBody.put("messages", messages);
-            requestBody.put("temperature", 0.3); // Low temperature for high precision JSON
-            requestBody.put("max_tokens", 1000);
+            requestBody.put("options", Map.of("temperature", 0.3, "num_predict", 1000));
+            requestBody.put("stream", false);
 
             org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(requestBody, headers);
 
             org.springframework.http.ResponseEntity<Map> response = restTemplate.exchange(
-                    openRouterConfig.getChatUrl(),
+                    ollamaConfig.getChatUrl(),
                     org.springframework.http.HttpMethod.POST,
                     entity,
                     Map.class
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> firstChoice = choices.get(0);
-                    Map<String, String> message = (Map<String, String>) firstChoice.get("message");
-                    if (message != null) {
-                        String jsonString = message.get("content");
-                        // Clean markdown formatting if present
-                        if (jsonString.contains("```")) {
-                            jsonString = jsonString.replaceAll("```json|```", "").trim();
-                        }
+                Map<String, String> message = (Map<String, String>) response.getBody().get("message");
+                if (message != null) {
+                    String jsonString = message.get("content");
+                    // Clean markdown formatting if present
+                    if (jsonString.contains("```")) {
+                        jsonString = jsonString.replaceAll("```json|```", "").trim();
+                    }
 
-                        com.fasterxml.jackson.databind.JsonNode rootNode = objectMapper.readTree(jsonString);
-                        String summary = rootNode.path("summary").asText();
-                        com.fasterxml.jackson.databind.JsonNode questionsNode = rootNode.path("suggestedQuestions");
-                        String questionsJson = objectMapper.writeValueAsString(questionsNode);
+                    com.fasterxml.jackson.databind.JsonNode rootNode = objectMapper.readTree(jsonString);
+                    String summary = rootNode.path("summary").asText();
+                    com.fasterxml.jackson.databind.JsonNode questionsNode = rootNode.path("suggestedQuestions");
+                    String questionsJson = objectMapper.writeValueAsString(questionsNode);
 
-                        // Update document in database
-                        Optional<Document> docOpt = documentRepository.findById(docId);
-                        if (docOpt.isPresent()) {
-                            Document doc = docOpt.get();
-                            doc.setSummary(summary);
-                            doc.setSuggestedQuestions(questionsJson);
-                            documentRepository.save(doc);
-                            log.info("Successfully saved async insights (summary & suggested questions) for document ID: {}", docId);
-                            return;
-                        }
+                    // Update document in database
+                    Optional<Document> docOpt = documentRepository.findById(docId);
+                    if (docOpt.isPresent()) {
+                        Document doc = docOpt.get();
+                        doc.setSummary(summary);
+                        doc.setSuggestedQuestions(questionsJson);
+                        documentRepository.save(doc);
+                        log.info("Successfully saved async insights (summary & suggested questions) for document ID: {}", docId);
+                        return;
                     }
                 }
             }
@@ -261,8 +270,8 @@ public class DocumentService {
     }
 
     @SuppressWarnings("unchecked")
-    public String getOrGenerateMindMap(Long id) {
-        Document document = getDocumentById(id);
+    public String getOrGenerateMindMap(Long id, String ownerUsername) {
+        Document document = getDocumentById(id, ownerUsername);
         if (document.getConceptMap() != null && !document.getConceptMap().isBlank()) {
             log.info("Returning cached mind map for document ID: {}", id);
             return document.getConceptMap();
@@ -293,7 +302,6 @@ public class DocumentService {
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(openRouterConfig.getApiKey());
 
             List<Map<String, String>> messages = new ArrayList<>();
             messages.add(Map.of(
@@ -306,41 +314,37 @@ public class DocumentService {
             ));
 
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", openRouterConfig.getModel());
+            requestBody.put("model", ollamaConfig.getChatModel());
             requestBody.put("messages", messages);
-            requestBody.put("temperature", 0.3);
-            requestBody.put("max_tokens", 1500);
+            requestBody.put("options", Map.of("temperature", 0.3, "num_predict", 1500));
+            requestBody.put("stream", false);
 
             org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(requestBody, headers);
 
             org.springframework.http.ResponseEntity<Map> response = restTemplate.exchange(
-                    openRouterConfig.getChatUrl(),
+                    ollamaConfig.getChatUrl(),
                     org.springframework.http.HttpMethod.POST,
                     entity,
                     Map.class
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> firstChoice = choices.get(0);
-                    Map<String, String> message = (Map<String, String>) firstChoice.get("message");
-                    if (message != null) {
-                        String jsonString = message.get("content");
-                        if (jsonString.contains("```")) {
-                            jsonString = jsonString.replaceAll("```json|```", "").trim();
-                        }
-
-                        // Validate JSON parsing
-                        objectMapper.readTree(jsonString);
-
-                        // Save to cache
-                        document.setConceptMap(jsonString);
-                        documentRepository.save(document);
-
-                        log.info("Successfully generated and cached mind map for document ID: {}", id);
-                        return jsonString;
+                Map<String, String> message = (Map<String, String>) response.getBody().get("message");
+                if (message != null) {
+                    String jsonString = message.get("content");
+                    if (jsonString.contains("```")) {
+                        jsonString = jsonString.replaceAll("```json|```", "").trim();
                     }
+
+                    // Validate JSON parsing
+                    objectMapper.readTree(jsonString);
+
+                    // Save to cache
+                    document.setConceptMap(jsonString);
+                    documentRepository.save(document);
+
+                    log.info("Successfully generated and cached mind map for document ID: {}", id);
+                    return jsonString;
                 }
             }
         } catch (Exception e) {
@@ -349,18 +353,18 @@ public class DocumentService {
         return null;
     }
 
-    public List<Document> getAllDocuments() {
-        return documentRepository.findByOrderByCreatedAtDesc();
+    public List<Document> getAllDocuments(String ownerUsername) {
+        return documentRepository.findByOwnerUsernameOrderByCreatedAtDesc(ownerUsername);
     }
 
-    public Document getDocumentById(Long id) {
-        return documentRepository.findById(id).orElseThrow(
+    public Document getDocumentById(Long id, String ownerUsername) {
+        return documentRepository.findByIdAndOwnerUsername(id, ownerUsername).orElseThrow(
                 () -> new RuntimeException("Document not found with id: " + id)
         );
     }
 
-    public void deleteDocument(Long id) {
-        Document document = getDocumentById(id);
+    public void deleteDocument(Long id, String ownerUsername) {
+        Document document = getDocumentById(id, ownerUsername);
         // Delete from vector DB (implement based on Qdrant API)
         embeddingService.deleteCollection(document.getVectorCollectionId());
         // Delete file
@@ -378,5 +382,28 @@ public class DocumentService {
             return fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
         }
         return "txt";
+    }
+
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null || fileName.isBlank()) {
+            return "document.txt";
+        }
+        return Paths.get(fileName).getFileName().toString().replaceAll("[\\r\\n]", "_");
+    }
+
+    private void validateUpload(MultipartFile file, String extension) {
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new IllegalArgumentException("Unsupported document type. Allowed types: PDF, DOCX, TXT");
+        }
+        String contentType = Optional.ofNullable(file.getContentType()).orElse("");
+        if (!contentType.isBlank() && !contentType.equals("application/octet-stream")) {
+            Map<String, Set<String>> expected = Map.of(
+                    "pdf", Set.of("application/pdf"),
+                    "docx", Set.of("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                    "txt", Set.of("text/plain"));
+            if (!expected.get(extension).contains(contentType)) {
+                throw new IllegalArgumentException("File content type does not match its extension");
+            }
+        }
     }
 }

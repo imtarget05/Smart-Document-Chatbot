@@ -103,15 +103,11 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci || npm install
-
-      - name: Lint
-        working-directory: frontend
-        run: npx eslint src/ --ext .js,.jsx --max-warnings 0 || true
+        run: npm ci
 
       - name: Test
         working-directory: frontend
-        run: npm test -- --watchAll=false --passWithNoTests --coverage
+        run: npm run test:coverage
         env:
           CI: true
 
@@ -119,14 +115,21 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          REACT_APP_API_URL: /api
-          REACT_APP_WS_URL: /ws
+          VITE_API_URL: /api
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        working-directory: frontend
+        run: npm run test:e2e
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: frontend/build/
+          path: frontend/dist/
           retention-days: 5
 
       - name: Upload coverage
@@ -316,8 +319,7 @@ jobs:
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
           build-args: |
-            REACT_APP_API_URL=/api
-            REACT_APP_WS_URL=/ws
+            VITE_API_URL=/api
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

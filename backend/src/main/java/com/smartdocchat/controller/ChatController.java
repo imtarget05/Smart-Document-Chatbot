@@ -16,6 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.security.Principal;
 import java.util.stream.Collectors;
 
 @RestController
@@ -26,9 +27,10 @@ public class ChatController {
     private final ChatService chatService;
 
     @PostMapping("/ask")
-    public ResponseEntity<ChatResponse> askQuestion(@Valid @RequestBody ChatRequest request) {
+    public ResponseEntity<ChatResponse> askQuestion(@Valid @RequestBody ChatRequest request, Principal principal) {
         try {
             ChatMessage message = chatService.processQuery(
+                    principal.getName(),
                     request.getSessionId(),
                     request.getDocumentId(),
                     request.getDocumentIds(),
@@ -42,9 +44,10 @@ public class ChatController {
     }
 
     @PostMapping(value = "/ask-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter askQuestionStream(@Valid @RequestBody ChatRequest request) {
+    public SseEmitter askQuestionStream(@Valid @RequestBody ChatRequest request, Principal principal) {
         try {
             return chatService.processQueryStream(
+                    principal.getName(),
                     request.getSessionId(),
                     request.getDocumentId(),
                     request.getDocumentIds(),
@@ -59,8 +62,8 @@ public class ChatController {
     }
 
     @GetMapping("/history/{sessionId}")
-    public ResponseEntity<List<ChatResponse>> getChatHistory(@PathVariable String sessionId) {
-        List<ChatMessage> messages = chatService.getChatHistory(sessionId);
+    public ResponseEntity<List<ChatResponse>> getChatHistory(@PathVariable String sessionId, Principal principal) {
+        List<ChatMessage> messages = chatService.getChatHistory(principal.getName(), sessionId);
         List<ChatResponse> responses = messages.stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
@@ -70,8 +73,9 @@ public class ChatController {
     @GetMapping("/history/{sessionId}/{documentId}")
     public ResponseEntity<List<ChatResponse>> getChatHistory(
             @PathVariable String sessionId,
-            @PathVariable Long documentId) {
-        List<ChatMessage> messages = chatService.getChatHistory(sessionId, documentId);
+            @PathVariable Long documentId,
+            Principal principal) {
+        List<ChatMessage> messages = chatService.getChatHistory(principal.getName(), sessionId, documentId);
         List<ChatResponse> responses = messages.stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
@@ -79,17 +83,18 @@ public class ChatController {
     }
 
     @DeleteMapping("/history/{sessionId}")
-    public ResponseEntity<String> clearChatHistory(@PathVariable String sessionId) {
-        chatService.clearChatHistory(sessionId);
+    public ResponseEntity<String> clearChatHistory(@PathVariable String sessionId, Principal principal) {
+        chatService.clearChatHistory(principal.getName(), sessionId);
         return ResponseEntity.ok("Chat history cleared");
     }
 
     // WebSocket endpoint for real-time chat
     @MessageMapping("/chat/send")
     @SendTo("/topic/messages")
-    public ChatResponse handleChatMessage(ChatRequest request) {
+    public ChatResponse handleChatMessage(ChatRequest request, Principal principal) {
         log.info("Processing message from session: {}", request.getSessionId());
         ChatMessage message = chatService.processQuery(
+                principal.getName(),
                 request.getSessionId(),
                 request.getDocumentId(),
                 request.getDocumentIds(),

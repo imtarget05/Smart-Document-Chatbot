@@ -13,7 +13,10 @@ QDRANT_URL = "http://qdrant:6333"
 # Default API URLs for LLM inside Docker
 # Overridden by environment variables or configuration config
 OLLAMA_URL = os.getenv("AIRFLOW_OLLAMA_URL", "http://ollama:11434")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "deepseek-r1:1.5b")
+OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+INTERNAL_SERVICE_TOKEN = os.environ["INTERNAL_SERVICE_TOKEN"]
+CALLBACK_HEADERS = {"X-Internal-Token": INTERNAL_SERVICE_TOKEN}
 
 default_args = {
     'owner': 'airflow',
@@ -117,7 +120,7 @@ Document Text:
     # Call Ollama local DeepSeek completion endpoint
     url = f"{OLLAMA_URL}/api/chat"
     payload = {
-        "model": "deepseek-r1:1.5b",
+        "model": OLLAMA_CHAT_MODEL,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant. Output ONLY valid JSON."},
             {"role": "user", "content": prompt}
@@ -195,7 +198,7 @@ def embed_and_index_fn(**kwargs):
     for idx, chunk in enumerate(chunks):
         ollama_embed_url = f"{OLLAMA_URL}/api/embeddings"
         ollama_payload = {
-            "model": "nomic-embed-text",
+            "model": OLLAMA_EMBEDDING_MODEL,
             "prompt": chunk
         }
         
@@ -250,7 +253,7 @@ def notify_backend_success_fn(**kwargs):
     }
     
     print(f"Calling success webhook at: {callback_url}")
-    r = requests.post(callback_url, json=payload, timeout=10)
+    r = requests.post(callback_url, json=payload, headers=CALLBACK_HEADERS, timeout=10)
     r.raise_for_status()
     
     # Clean up temp files
@@ -269,7 +272,7 @@ def notify_backend_fail_fn(context):
     callback_url = f"{BACKEND_URL}/{document_id}/etl-fail"
     print(f"DAG failed! Calling failure webhook at: {callback_url}")
     try:
-        requests.post(callback_url, timeout=10)
+        requests.post(callback_url, headers=CALLBACK_HEADERS, timeout=10)
     except Exception as e:
         print(f"Critical: Failed to notify backend of ETL failure: {e}")
 

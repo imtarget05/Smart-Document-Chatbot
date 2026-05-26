@@ -50,7 +50,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException e) {
         log.error("Runtime exception occurred", e);
         Map<String, String> response = new HashMap<>();
-        response.put(ERROR_KEY, e.getMessage());
+        response.put(ERROR_KEY, "The request could not be processed");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 

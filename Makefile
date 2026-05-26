@@ -17,11 +17,12 @@ help: ## Show available commands
 # Development
 # ========================
 
-dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant)
+dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant + Ollama)
 	docker compose -f docker/docker-compose.dev.yml up -d
 	@echo "Dev infrastructure started!"
 	@echo "  PostgreSQL: localhost:5432"
 	@echo "  Qdrant:     localhost:6333"
+	@echo "  Ollama:     localhost:11434 (pulling DeepSeek and embeddings model)"
 
 dev-down: ## Stop dev infrastructure
 	docker compose -f docker/docker-compose.dev.yml down
@@ -34,7 +35,7 @@ dev-backend: ## Run backend locally (requires dev-up)
 	cd backend && mvn spring-boot:run
 
 dev-frontend: ## Run frontend locally
-	cd frontend && npm start
+	cd frontend && npm run dev
 
 # ========================
 # Production Build & Deploy
@@ -100,7 +101,7 @@ test-backend: ## Run backend tests
 	cd backend && mvn test -B
 
 test-frontend: ## Run frontend tests
-	cd frontend && npm test -- --watchAll=false --passWithNoTests
+	cd frontend && npm run test:coverage
 
 # ========================
 # Linting
@@ -112,7 +113,7 @@ lint-backend: ## Lint backend code
 	cd backend && mvn checkstyle:check || true
 
 lint-frontend: ## Lint frontend code
-	cd frontend && npx eslint src/ --ext .js,.jsx --max-warnings 0 || true
+	cd frontend && npm run build
 
 # ========================
 # Database

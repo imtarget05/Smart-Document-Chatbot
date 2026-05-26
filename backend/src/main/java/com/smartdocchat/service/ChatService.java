@@ -4,13 +4,11 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.ChatMessageRepository;
 import com.smartdocchat.repository.DocumentRepository;
-import com.smartdocchat.util.OpenRouterConfig;
+import com.smartdocchat.util.OllamaConfig;
 import com.smartdocchat.dto.RetrievedChunk;
 import com.smartdocchat.dto.ChatResponse;
-import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
-import dev.langchain4j.model.StreamingResponseHandler;
-import dev.langchain4j.model.output.Response;
-import dev.langchain4j.data.message.AiMessage;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -19,9 +17,13 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -30,18 +32,23 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final DocumentRepository documentRepository;
     private final EmbeddingService embeddingService;
-    private final OpenRouterConfig openRouterConfig;
+    private final OllamaConfig ollamaConfig;
+    private final RestTemplate restTemplate;
+    private final RagMetrics ragMetrics;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${tavily.api.key:}")
     private String tavilyApiKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Value("${llm.max-attempts:3}")
+    private int llmMaxAttempts;
 
-    public ChatMessage processQuery(String sessionId, Long documentId, String userMessage) {
-        return processQuery(sessionId, documentId, null, userMessage);
-    }
+    @Value("${llm.retry-backoff-ms:250}")
+    private long llmRetryBackoffMs;
 
-    public ChatMessage processQuery(String sessionId, Long documentId, List<Long> documentIds, String userMessage) {
+    public ChatMessage processQuery(String ownerUsername, String sessionId, Long documentId, List<Long> documentIds,
+                                    String userMessage) {
+        ragMetrics.request("sync");
         List<Long> finalDocIds = new ArrayList<>();
         if (documentIds != null && !documentIds.isEmpty()) {
             finalDocIds.addAll(documentIds);
@@ -55,7 +62,7 @@ public class ChatService {
 
         // 1. Initial Retrieval
         for (Long docId : finalDocIds) {
-            Optional<Document> docOpt = documentRepository.findById(docId);
+            Optional<Document> docOpt = documentRepository.findByIdAndOwnerUsername(docId, ownerUsername);
             if (docOpt.isPresent()) {
                 Document doc = docOpt.get();
                 String vectorCollectionId = doc.getVectorCollectionId();
@@ -75,6 +82,7 @@ public class ChatService {
         String aiResponse = "";
         String sourceChunks = "";
         double finalMaxScore = initialMaxScore;
+        ragMetrics.confidence(initialMaxScore);
 
         if (initialMaxScore >= 0.45) {
             // Standard RAG flow: High Confidence
@@ -91,6 +99,7 @@ public class ChatService {
             long latencyMs = System.currentTimeMillis() - startTime;
             logToMLflow(userMessage, aiResponse, latencyMs);
         } else {
+            ragMetrics.fallback("corrective_retrieval");
             // Agentic CRAG Loop: Low Confidence (< 0.45)
             log.info("RAG confidence is low ({} < 0.45). Activating Agentic Loop...", initialMaxScore);
 
@@ -107,7 +116,7 @@ public class ChatService {
 
             for (String q : allQueries) {
                 for (Long docId : finalDocIds) {
-                    Optional<Document> docOpt = documentRepository.findById(docId);
+                    Optional<Document> docOpt = documentRepository.findByIdAndOwnerUsername(docId, ownerUsername);
                     if (docOpt.isPresent()) {
                         Document doc = docOpt.get();
                         String vectorCollectionId = doc.getVectorCollectionId();
@@ -166,11 +175,13 @@ public class ChatService {
                 List<String> webContexts = searchWeb(userMessage);
 
                 if (!webContexts.isEmpty()) {
+                    ragMetrics.fallback("web_search");
                     sourceChunks = String.join("\n---\n", webContexts);
                     String prompt = buildPrompt(userMessage, webContexts);
                     String llmAnswer = callLLM(prompt);
                     aiResponse = "🌐 [Độ tin cậy tài liệu thấp. Đang bổ sung ngữ cảnh trực tuyến từ Web Search...]\n\n" + llmAnswer;
                 } else {
+                    ragMetrics.fallback("general_knowledge");
                     String fallbackPrompt = "The user is asking a question that is NOT covered by the loaded documents (retrieval confidence is too low, max score: "
                             + agenticMaxScore + "). Please use your deep reasoning, internal knowledge, and general knowledge to answer the question as comprehensively and accurately as possible.\n\n"
                             + "User Question: " + userMessage;
@@ -196,6 +207,7 @@ public class ChatService {
         // Save to database
         ChatMessage chatMessage = ChatMessage.builder()
                 .sessionId(sessionId)
+                .ownerUsername(ownerUsername)
                 .documentId(documentId != null ? documentId : (finalDocIds.isEmpty() ? null : finalDocIds.get(0)))
                 .documentIds(docIdsStr)
                 .userMessage(userMessage)
@@ -255,7 +267,7 @@ public class ChatService {
 
                 List<Map<String, String>> tags = new ArrayList<>();
                 tags.add(Map.of("key", "user_query", "value", userMessage.substring(0, Math.min(userMessage.length(), 250))));
-                tags.add(Map.of("key", "llm_model", "value", openRouterConfig.getModel()));
+                tags.add(Map.of("key", "llm_model", "value", ollamaConfig.getChatModel()));
                 runBody.put("tags", tags);
 
                 org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(runBody, headers);
@@ -275,8 +287,8 @@ public class ChatService {
                             String runId = (String) info.get("run_id");
 
                             // Step 2: Log parameters (model_name, temperature)
-                            logParameter(mlflowUrl, runId, "model_name", openRouterConfig.getModel());
-                            logParameter(mlflowUrl, runId, "temperature", String.valueOf(openRouterConfig.getTemperature()));
+                            logParameter(mlflowUrl, runId, "model_name", ollamaConfig.getChatModel());
+                            logParameter(mlflowUrl, runId, "temperature", String.valueOf(ollamaConfig.getTemperature()));
                             logParameter(mlflowUrl, runId, "prompt_length", String.valueOf(userMessage.length()));
 
                             // Step 3: Log metrics (latency_ms, response_length)
@@ -330,12 +342,13 @@ public class ChatService {
         }
     }
 
-    public List<ChatMessage> getChatHistory(String sessionId) {
-        return chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+    public List<ChatMessage> getChatHistory(String ownerUsername, String sessionId) {
+        return chatMessageRepository.findByOwnerUsernameAndSessionIdOrderByCreatedAtAsc(ownerUsername, sessionId);
     }
 
-    public List<ChatMessage> getChatHistory(String sessionId, Long documentId) {
-        return chatMessageRepository.findBySessionIdAndDocumentIdOrderByCreatedAtAsc(sessionId, documentId);
+    public List<ChatMessage> getChatHistory(String ownerUsername, String sessionId, Long documentId) {
+        return chatMessageRepository.findByOwnerUsernameAndSessionIdAndDocumentIdOrderByCreatedAtAsc(
+                ownerUsername, sessionId, documentId);
     }
 
     private String buildPrompt(String userQuestion, List<String> relevantChunks) {
@@ -358,58 +371,72 @@ public class ChatService {
 
     @SuppressWarnings("unchecked")
     private String callLLM(String prompt) {
+        String result = null;
+        for (int attempt = 1; attempt <= llmMaxAttempts; attempt++) {
+            result = callLLMOnce(prompt);
+            if (!result.startsWith("Sorry, the language model is temporarily unavailable.")
+                    && !result.startsWith("Sorry, I could not generate a response.")) {
+                return result;
+            }
+            if (attempt < llmMaxAttempts) {
+                try {
+                    Thread.sleep(llmRetryBackoffMs * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return result;
+                }
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String callLLMOnce(String prompt) {
+        long startTime = System.currentTimeMillis();
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            if (openRouterConfig.getApiKey() != null && !openRouterConfig.getApiKey().equals("local_no_key_required")) {
-                headers.setBearerAuth(openRouterConfig.getApiKey());
-            }
 
-            List<Map<String, String>> messages = new ArrayList<>();
-            messages.add(Map.of(
-                    "role", "system",
-                    "content", "You are a helpful document assistant. Answer questions accurately based on the provided context."
-            ));
-            messages.add(Map.of(
-                    "role", "user",
-                    "content", prompt
-            ));
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(buildChatRequest(prompt, false), headers);
 
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", openRouterConfig.getModel());
-            requestBody.put("messages", messages);
-            requestBody.put("temperature", openRouterConfig.getTemperature());
-            requestBody.put("max_tokens", 2048);
-
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-
-            log.info("Calling LLM API with model: {}", openRouterConfig.getModel());
+            log.info("Calling local Ollama model: {}", ollamaConfig.getChatModel());
 
             ResponseEntity<Map> response = restTemplate.exchange(
-                    openRouterConfig.getChatUrl(),
+                    ollamaConfig.getChatUrl(),
                     HttpMethod.POST,
                     entity,
                     Map.class
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> firstChoice = choices.get(0);
-                    Map<String, String> message = (Map<String, String>) firstChoice.get("message");
-                    if (message != null) {
-                        return message.get("content");
-                    }
+                Map<String, String> message = (Map<String, String>) response.getBody().get("message");
+                if (message != null && message.get("content") != null) {
+                    ragMetrics.llmLatency(System.currentTimeMillis() - startTime, "success");
+                    return message.get("content");
                 }
             }
 
             log.error("LLM API returned unexpected response structure");
+            ragMetrics.llmLatency(System.currentTimeMillis() - startTime, "invalid_response");
             return "Sorry, I could not generate a response. Please try again.";
 
         } catch (Exception e) {
             log.error("Error calling LLM API: {}", e.getMessage(), e);
-            return "Sorry, an error occurred while processing your question: " + e.getMessage();
+            ragMetrics.llmLatency(System.currentTimeMillis() - startTime, "failure");
+            return "Sorry, the language model is temporarily unavailable. Please try again.";
         }
+    }
+
+    private Map<String, Object> buildChatRequest(String prompt, boolean stream) {
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", ollamaConfig.getChatModel());
+        requestBody.put("messages", List.of(
+                Map.of("role", "system",
+                        "content", "You are a helpful document assistant. Answer questions accurately based on the provided context."),
+                Map.of("role", "user", "content", prompt)));
+        requestBody.put("options", Map.of("temperature", ollamaConfig.getTemperature(), "num_predict", 2048));
+        requestBody.put("stream", stream);
+        return requestBody;
     }
 
     @SuppressWarnings("unchecked")
@@ -460,18 +487,27 @@ public class ChatService {
         }
     }
 
-    private OpenAiStreamingChatModel getStreamingModel() {
-        String baseUrl = openRouterConfig.getChatUrl().replace("/chat/completions", "");
-        if (!baseUrl.endsWith("/")) {
-            baseUrl += "/";
-        }
-        return OpenAiStreamingChatModel.builder()
-                .apiKey(openRouterConfig.getApiKey())
-                .baseUrl(baseUrl)
-                .modelName(openRouterConfig.getModel())
-                .temperature(openRouterConfig.getTemperature())
-                .timeout(java.time.Duration.ofSeconds(60))
-                .build();
+    private void streamLLM(String prompt, Consumer<String> onToken) {
+        restTemplate.execute(ollamaConfig.getChatUrl(), HttpMethod.POST, request -> {
+            request.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            objectMapper.writeValue(request.getBody(), buildChatRequest(prompt, true));
+        }, response -> {
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new IllegalStateException("Ollama stream request failed: " + response.getStatusCode());
+            }
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    JsonNode message = objectMapper.readTree(line).path("message");
+                    String token = message.path("content").asText("");
+                    if (!token.isEmpty()) {
+                        onToken.accept(token);
+                    }
+                }
+            }
+            return null;
+        });
     }
 
     private ChatResponse convertToResponse(ChatMessage message) {
@@ -496,8 +532,10 @@ public class ChatService {
                 .build();
     }
 
-    public SseEmitter processQueryStream(String sessionId, Long documentId, List<Long> documentIds, String userMessage) {
+    public SseEmitter processQueryStream(String ownerUsername, String sessionId, Long documentId,
+                                         List<Long> documentIds, String userMessage) {
         SseEmitter emitter = new SseEmitter(180000L);
+        ragMetrics.request("stream");
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -514,7 +552,7 @@ public class ChatService {
 
                 // 1. Initial Retrieval
                 for (Long docId : finalDocIds) {
-                    Optional<Document> docOpt = documentRepository.findById(docId);
+                    Optional<Document> docOpt = documentRepository.findByIdAndOwnerUsername(docId, ownerUsername);
                     if (docOpt.isPresent()) {
                         Document doc = docOpt.get();
                         String vectorCollectionId = doc.getVectorCollectionId();
@@ -535,6 +573,7 @@ public class ChatService {
                 double finalMaxScore = initialMaxScore;
                 String prompt;
                 String prefix = "";
+                ragMetrics.confidence(initialMaxScore);
 
                 if (initialMaxScore >= 0.45) {
                     // Standard RAG flow: High Confidence
@@ -546,6 +585,7 @@ public class ChatService {
                     sourceChunks = String.join("\n---\n", contextList);
                     prompt = buildPrompt(userMessage, contextList);
                 } else {
+                    ragMetrics.fallback("corrective_retrieval");
                     // Agentic CRAG Loop: Low Confidence (< 0.45)
                     log.info("RAG confidence is low ({} < 0.45). Activating Agentic Loop...", initialMaxScore);
 
@@ -562,7 +602,7 @@ public class ChatService {
 
                     for (String q : allQueries) {
                         for (Long docId : finalDocIds) {
-                            Optional<Document> docOpt = documentRepository.findById(docId);
+                            Optional<Document> docOpt = documentRepository.findByIdAndOwnerUsername(docId, ownerUsername);
                             if (docOpt.isPresent()) {
                                 Document doc = docOpt.get();
                                 String vectorCollectionId = doc.getVectorCollectionId();
@@ -618,10 +658,12 @@ public class ChatService {
                         List<String> webContexts = searchWeb(userMessage);
 
                         if (!webContexts.isEmpty()) {
+                            ragMetrics.fallback("web_search");
                             sourceChunks = String.join("\n---\n", webContexts);
                             prompt = buildPrompt(userMessage, webContexts);
                             prefix = "🌐 [Độ tin cậy tài liệu thấp. Đang bổ sung ngữ cảnh trực tuyến từ Web Search...]\n\n";
                         } else {
+                            ragMetrics.fallback("general_knowledge");
                             prompt = "The user is asking a question that is NOT covered by the loaded documents (retrieval confidence is too low, max score: "
                                     + agenticMaxScore + "). Please use your deep reasoning, internal knowledge, and general knowledge to answer the question as comprehensively and accurately as possible.\n\n"
                                     + "User Question: " + userMessage;
@@ -655,66 +697,41 @@ public class ChatService {
                 }
 
                 StringBuilder aiResponseBuilder = new StringBuilder(prefix);
-                OpenAiStreamingChatModel streamingModel = getStreamingModel();
-
                 final String finalSourceChunks = sourceChunks;
-                final String finalPrefix = prefix;
                 final String finalDocIdsStr = docIdsStr;
                 final long startTime = System.currentTimeMillis();
 
-                streamingModel.generate(prompt, new StreamingResponseHandler<AiMessage>() {
-                    @Override
-                    public void onNext(String token) {
-                        try {
-                            aiResponseBuilder.append(token);
-                            emitter.send(SseEmitter.event().name("chunk").data(token));
-                        } catch (IOException e) {
-                            log.debug("SSE client disconnected during streaming token: {}", e.getMessage());
-                        }
-                    }
-
-                    @Override
-                    public void onComplete(Response<AiMessage> response) {
-                        try {
-                            String fullResponse = aiResponseBuilder.toString();
-                            long latencyMs = System.currentTimeMillis() - startTime;
-                            logToMLflow(userMessage, fullResponse, latencyMs);
-
-                            // Save message to database
-                            ChatMessage chatMessage = ChatMessage.builder()
-                                    .sessionId(sessionId)
-                                    .documentId(documentId != null ? documentId : (finalDocIds.isEmpty() ? null : finalDocIds.get(0)))
-                                    .documentIds(finalDocIdsStr)
-                                    .userMessage(userMessage)
-                                    .aiResponse(fullResponse)
-                                    .sourceChunks(finalSourceChunks.isEmpty() ? null : finalSourceChunks)
-                                    .build();
-                            ChatMessage saved = chatMessageRepository.save(chatMessage);
-
-                            // Convert saved to DTO format and send complete event
-                            ChatResponse responseDto = convertToResponse(saved);
-                            emitter.send(SseEmitter.event().name("complete").data(responseDto));
-                            emitter.complete();
-                        } catch (Exception e) {
-                            log.error("Error completing streaming session", e);
-                            emitter.completeWithError(e);
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable error) {
-                        log.error("Error in LangChain4j streaming model: {}", error.getMessage());
-                        try {
-                            emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
-                            emitter.completeWithError(error);
-                        } catch (Exception e) {
-                            // Ignored
-                        }
+                streamLLM(prompt, token -> {
+                    aiResponseBuilder.append(token);
+                    try {
+                        emitter.send(SseEmitter.event().name("chunk").data(token));
+                    } catch (IOException e) {
+                        throw new IllegalStateException("SSE client disconnected during stream", e);
                     }
                 });
 
+                String fullResponse = aiResponseBuilder.toString();
+                long latencyMs = System.currentTimeMillis() - startTime;
+                logToMLflow(userMessage, fullResponse, latencyMs);
+
+                ChatMessage chatMessage = ChatMessage.builder()
+                        .sessionId(sessionId)
+                        .ownerUsername(ownerUsername)
+                        .documentId(documentId != null ? documentId : (finalDocIds.isEmpty() ? null : finalDocIds.get(0)))
+                        .documentIds(finalDocIdsStr)
+                        .userMessage(userMessage)
+                        .aiResponse(fullResponse)
+                        .sourceChunks(finalSourceChunks.isEmpty() ? null : finalSourceChunks)
+                        .build();
+                ChatMessage saved = chatMessageRepository.save(chatMessage);
+
+                ChatResponse responseDto = convertToResponse(saved);
+                emitter.send(SseEmitter.event().name("complete").data(responseDto));
+                emitter.complete();
+
             } catch (Exception e) {
-                log.error("Error in processQueryStream async task: {}", e.getMessage(), e);
+                log.error("Error in local Ollama streaming task: {}", e.getMessage(), e);
+                ragMetrics.streamError();
                 try {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
                     emitter.completeWithError(e);
@@ -727,8 +744,8 @@ public class ChatService {
         return emitter;
     }
 
-    public void clearChatHistory(String sessionId) {
-        List<ChatMessage> messages = getChatHistory(sessionId);
+    public void clearChatHistory(String ownerUsername, String sessionId) {
+        List<ChatMessage> messages = getChatHistory(ownerUsername, sessionId);
         chatMessageRepository.deleteAll(messages);
     }
 }

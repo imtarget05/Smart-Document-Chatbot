@@ -18,6 +18,7 @@ resources:
   - frontend-service.yml
   - postgres-statefulset.yml
   - qdrant-statefulset.yml
+  - ollama-deployment.yml
   - pvc.yml
   - ingress.yml
   - hpa.yml

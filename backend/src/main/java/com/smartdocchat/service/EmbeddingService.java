@@ -1,8 +1,7 @@
 package com.smartdocchat.service;
 
-import com.smartdocchat.util.GeminiConfig;
+import com.smartdocchat.util.OllamaConfig;
 import com.smartdocchat.util.QdrantConfig;
-import com.smartdocchat.util.OpenRouterConfig;
 import com.smartdocchat.util.DocumentParser;
 import com.smartdocchat.dto.RetrievedChunk;
 import jakarta.annotation.PostConstruct;
@@ -19,11 +18,9 @@ import java.util.*;
 @Slf4j
 public class EmbeddingService {
 
-    private final GeminiConfig geminiConfig;
+    private final OllamaConfig ollamaConfig;
     private final QdrantConfig qdrantConfig;
-    private final OpenRouterConfig openRouterConfig;
-
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     private static final int EMBEDDING_DIMENSION = 768; // nomic-embed-text dimension
 
@@ -343,26 +340,15 @@ public class EmbeddingService {
         List<List<Float>> allEmbeddings = new ArrayList<>();
 
         try {
-            // Determine Ollama embedding endpoint
-            String chatUrl = openRouterConfig.getChatUrl();
-            String ollamaBaseUrl = "http://ollama:11434"; // Default for docker container
-            if (chatUrl != null) {
-                if (chatUrl.contains("/v1/chat/completions")) {
-                    ollamaBaseUrl = chatUrl.replace("/v1/chat/completions", "");
-                } else if (chatUrl.contains("/v1")) {
-                    ollamaBaseUrl = chatUrl.substring(0, chatUrl.indexOf("/v1"));
-                }
-            }
-            
-            String url = ollamaBaseUrl + "/api/embeddings";
-            log.info("Generating embeddings using Ollama endpoint: {} with model: {}", url, geminiConfig.getEmbeddingModel());
+            String url = ollamaConfig.getEmbeddingUrl();
+            log.info("Generating embeddings using Ollama endpoint: {} with model: {}", url, ollamaConfig.getEmbeddingModel());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             for (String text : texts) {
                 Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("model", geminiConfig.getEmbeddingModel());
+                requestBody.put("model", ollamaConfig.getEmbeddingModel());
                 requestBody.put("prompt", text);
 
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);

@@ -1,6 +1,7 @@
 package com.smartdocchat.controller;
 
 import com.smartdocchat.dto.DocumentDTO;
+import com.smartdocchat.dto.EtlCompleteRequest;
 import com.smartdocchat.dto.UploadResponse;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.service.DocumentService;
@@ -10,8 +11,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.Valid;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,7 +26,7 @@ public class DocumentController {
     private final DocumentService documentService;
 
     @PostMapping("/upload")
-    public ResponseEntity<UploadResponse> uploadDocument(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<UploadResponse> uploadDocument(@RequestParam("file") MultipartFile file, Principal principal) {
         try {
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body(
@@ -34,7 +37,7 @@ public class DocumentController {
                 );
             }
 
-            Document document = documentService.uploadDocument(file);
+            Document document = documentService.uploadDocument(file, principal.getName());
             return ResponseEntity.ok(
                     UploadResponse.builder()
                             .success(true)
@@ -43,20 +46,22 @@ public class DocumentController {
                             .fileName(document.getFileName())
                             .build()
             );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(UploadResponse.builder().success(false).message(e.getMessage()).build());
         } catch (IOException e) {
             log.error("Error uploading document", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                     UploadResponse.builder()
                             .success(false)
-                            .message("Error uploading document: " + e.getMessage())
+                                .message("Unable to process the uploaded document")
                             .build()
             );
         }
     }
 
     @GetMapping
-    public ResponseEntity<List<DocumentDTO>> getAllDocuments() {
-        List<Document> documents = documentService.getAllDocuments();
+    public ResponseEntity<List<DocumentDTO>> getAllDocuments(Principal principal) {
+        List<Document> documents = documentService.getAllDocuments(principal.getName());
         List<DocumentDTO> dtos = documents.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
@@ -64,9 +69,9 @@ public class DocumentController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<DocumentDTO> getDocumentById(@PathVariable Long id) {
+    public ResponseEntity<DocumentDTO> getDocumentById(@PathVariable Long id, Principal principal) {
         try {
-            Document document = documentService.getDocumentById(id);
+            Document document = documentService.getDocumentById(id, principal.getName());
             return ResponseEntity.ok(convertToDTO(document));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
@@ -74,9 +79,9 @@ public class DocumentController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteDocument(@PathVariable Long id) {
+    public ResponseEntity<String> deleteDocument(@PathVariable Long id, Principal principal) {
         try {
-            documentService.deleteDocument(id);
+            documentService.deleteDocument(id, principal.getName());
             return ResponseEntity.ok("Document deleted successfully");
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
@@ -86,19 +91,16 @@ public class DocumentController {
     @PostMapping("/{id}/etl-complete")
     public ResponseEntity<String> completeEtl(
             @PathVariable Long id,
-            @RequestBody java.util.Map<String, Object> payload) {
+            @Valid @RequestBody EtlCompleteRequest payload) {
         try {
-            String vectorCollectionId = (String) payload.get("vector_collection_id");
-            int chunkCount = (Integer) payload.get("chunk_count");
-            String summary = (String) payload.get("summary");
-
             String suggestedQuestions = null;
-            if (payload.get("suggested_questions") != null) {
+            if (payload.getSuggestedQuestions() != null) {
                 suggestedQuestions = new com.fasterxml.jackson.databind.ObjectMapper()
-                        .writeValueAsString(payload.get("suggested_questions"));
+                        .writeValueAsString(payload.getSuggestedQuestions());
             }
 
-            documentService.completeEtl(id, vectorCollectionId, chunkCount, summary, suggestedQuestions);
+            documentService.completeEtl(id, payload.getVectorCollectionId(), payload.getChunkCount(),
+                    payload.getSummary(), suggestedQuestions);
             return ResponseEntity.ok("ETL state updated to READY");
         } catch (Exception e) {
             log.error("Error completing ETL for document {}", id, e);
@@ -117,9 +119,9 @@ public class DocumentController {
     }
 
     @GetMapping("/{id}/mindmap")
-    public ResponseEntity<String> getDocumentMindMap(@PathVariable Long id) {
+    public ResponseEntity<String> getDocumentMindMap(@PathVariable Long id, Principal principal) {
         try {
-            String mindMap = documentService.getOrGenerateMindMap(id);
+            String mindMap = documentService.getOrGenerateMindMap(id, principal.getName());
             if (mindMap == null) {
                 return ResponseEntity.status(500).body("Error generating mind map");
             }

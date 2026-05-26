@@ -37,6 +37,10 @@ services:
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:-local-development-service-token-change-me}
+      - AIRFLOW_OLLAMA_URL=${AIRFLOW_OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_CHAT_MODEL=${OLLAMA_CHAT_MODEL:-deepseek-r1:1.5b}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       # Install required Python packages for document parsing and indexing automatically on start
       - _PIP_ADDITIONAL_REQUIREMENTS=pypdf docx python-docx requests qdrant-client
     volumes:

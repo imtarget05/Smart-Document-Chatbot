@@ -11,6 +11,8 @@ interface State {
 }
 
 class ErrorBoundary extends Component<Props, State> {
+  public declare props: Readonly<Props>;
+
   public state: State = {
     hasError: false,
     error: null
@@ -58,7 +60,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.children;
+    return this.props.children;
   }
 }
 

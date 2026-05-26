@@ -1,6 +1,6 @@
 # ============================================
 # Smart Document Chatbot - Development Docker Compose
-# Only starts infrastructure services (DB, Qdrant)
+# Only starts infrastructure services (DB, Qdrant, local Ollama models)
 # Backend & Frontend run locally for hot-reload
 #
 # Usage: docker compose -f docker/docker-compose.dev.yml up -d
@@ -42,6 +42,21 @@ services:
       timeout: 5s
       retries: 5
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sdc-ollama-dev
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_dev_data:/root/.ollama
+
+  ollama-model-puller:
+    image: curlimages/curl:latest
+    container_name: sdc-ollama-puller-dev
+    depends_on:
+      - ollama
+    entrypoint: [ "sh", "-c", "until curl -s http://ollama:11434/api/tags >/dev/null; do sleep 2; done; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://ollama:11434/api/pull; curl -d '{\"name\": \"nomic-embed-text\"}' http://ollama:11434/api/pull" ]
+
   # --- pgAdmin (Database Management UI) ---
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -61,4 +76,6 @@ volumes:
   postgres_dev_data:
     driver: local
   qdrant_dev_data:
+    driver: local
+  ollama_dev_data:
     driver: local

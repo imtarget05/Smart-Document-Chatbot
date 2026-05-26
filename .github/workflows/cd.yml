@@ -99,8 +99,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:${{ steps.tag.outputs.value }}
             ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:latest
           build-args: |
-            REACT_APP_API_URL=/api
-            REACT_APP_WS_URL=/ws
+            VITE_API_URL=/api
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

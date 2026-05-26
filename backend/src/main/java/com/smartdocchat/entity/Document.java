@@ -24,6 +24,9 @@ public class Document {
     @Column(nullable = false)
     private String filePath;
 
+    @Column(name = "owner_username", nullable = false)
+    private String ownerUsername;
+
     @Column(nullable = false)
     private String fileType;
 

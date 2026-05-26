@@ -21,6 +21,9 @@ public class ChatMessage {
     @Column(name = "session_id", nullable = false)
     private String sessionId;
 
+    @Column(name = "owner_username", nullable = false)
+    private String ownerUsername;
+
     @Column(name = "document_id")
     private Long documentId;
 

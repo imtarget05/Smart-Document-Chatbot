@@ -7,6 +7,7 @@ import com.smartdocchat.service.ChatService;
 import com.smartdocchat.util.JwtTokenProvider;
 import com.smartdocchat.config.JwtAuthenticationFilter;
 import com.smartdocchat.config.RateLimitingFilter;
+import com.smartdocchat.config.InternalServiceAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,9 @@ public class ChatControllerTest {
     @MockBean
     private RateLimitingFilter rateLimitingFilter;
 
+    @MockBean
+    private InternalServiceAuthenticationFilter internalServiceAuthenticationFilter;
+
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -62,7 +66,7 @@ public class ChatControllerTest {
                 .aiResponse("Hi there")
                 .build();
 
-        Mockito.when(chatService.processQuery(anyString(), anyLong(), any(), anyString()))
+        Mockito.when(chatService.processQuery(eq("testuser"), anyString(), anyLong(), any(), anyString()))
                 .thenReturn(message);
 
         mockMvc.perform(post("/chat/ask")

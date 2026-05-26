@@ -43,6 +43,13 @@ spec:
       ports:
         - port: 6333
         - port: 6334
+    # Allow local model inference through Ollama
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ollama
+      ports:
+        - port: 11434
     # Allow DNS
     - to: []
       ports:
@@ -50,7 +57,7 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow HTTPS outbound (OpenAI API)
+    # Allow optional Tavily web-search fallback
     - to: []
       ports:
         - port: 443

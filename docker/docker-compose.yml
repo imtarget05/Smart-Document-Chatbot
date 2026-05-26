@@ -103,18 +103,19 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       QDRANT_API_KEY: ${QDRANT_API_KEY:-qdrant_key_123}
-      # OpenRouter (Chat LLM -> Pointed to local Ollama container)
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-local_no_key_required}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek-r1:1.5b}
-      OPENROUTER_TEMPERATURE: ${OPENROUTER_TEMPERATURE:-0.3}
-      OPENROUTER_CHAT_URL: ${OPENROUTER_CHAT_URL:-http://ollama:11434/v1/chat/completions}
-      # Gemini (Embeddings only -> local nomic-embed-text)
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-local_no_key_required}
-      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-nomic-embed-text}
+      # Local Ollama models; no AI provider API key is used.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-deepseek-r1:1.5b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.3}
       # JVM
       JAVA_OPTS: "${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}"
       # Spring profile
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
+      JWT_SECRET: ${JWT_SECRET:-VGhpcy1pcy1hLWxvY2FsLWRldmVsb3BtZW50LWp3dC1zZWNyZXQtMzItYnl0ZXMh}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-development-service-token-change-me}
+      AIRFLOW_USERNAME: ${AIRFLOW_USERNAME:-admin}
+      AIRFLOW_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
       # Logging
       LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
       LOGGING_LEVEL_COM_SMARTDOCCHAT: ${LOGGING_LEVEL_COM_SMARTDOCCHAT:-DEBUG}
@@ -131,6 +132,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      ollama:
+        condition: service_started
     volumes:
       - uploads_data:/app/uploads
     networks:
@@ -147,8 +150,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.frontend
       args:
-        REACT_APP_API_URL: ${REACT_APP_API_URL:-/api}
-        REACT_APP_WS_URL: ${REACT_APP_WS_URL:-/ws}
+        VITE_API_URL: ${VITE_API_URL:-/api}
     container_name: sdc-frontend
     restart: unless-stopped
     env_file:

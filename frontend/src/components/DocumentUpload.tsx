@@ -56,12 +56,11 @@ function DocumentUpload({ onDocumentUploaded }: DocumentUploadProps) {
     // Validate file type
     const allowedTypes = [
       'application/pdf',
-      'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain'
     ];
     if (!allowedTypes.includes(file.type)) {
-      setError('Only PDF, Word, and TXT files are supported');
+      setError('Only PDF, DOCX, and TXT files are supported');
       return;
     }
 
@@ -71,14 +70,14 @@ function DocumentUpload({ onDocumentUploaded }: DocumentUploadProps) {
 
   return (
     <div className="p-4 border-b border-gray-200">
-      <label className="block">
+      <label className="block" aria-label="Upload document">
         <input
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
           disabled={uploadMutation.isPending}
           className="hidden"
-          accept=".pdf,.docx,.doc,.txt"
+          accept=".pdf,.docx,.txt"
         />
         <span className={`block w-full text-center py-2 px-4 rounded-lg cursor-pointer transition font-medium text-white shadow-md ${
           uploadMutation.isPending

@@ -17,6 +17,6 @@ public class AuthRequest {
     private String username;
 
     @NotBlank(message = "Password must not be blank")
-    @Size(min = 6, max = 100, message = "Password must be at least 6 characters long")
+    @Size(min = 12, max = 100, message = "Password must be between 12 and 100 characters")
     private String password;
 }

@@ -25,6 +25,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitingFilter rateLimitingFilter;
+    private final InternalServiceAuthenticationFilter internalServiceAuthenticationFilter;
 
     @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}")
     private String allowedOrigins;
@@ -44,16 +45,17 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/swagger-ui.html"
                 ).permitAll()
-                // Public Actuator metrics & health probes
-                .requestMatchers("/actuator/**").permitAll()
-                // WebSocket endpoint (for handshake and standard WS)
-                .requestMatchers("/ws/**").permitAll()
+                // Only non-sensitive health endpoints are public.
+                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").hasRole("SERVICE")
+                .requestMatchers("/documents/*/etl-complete", "/documents/*/etl-fail").hasRole("SERVICE")
                 // All other backend APIs require authentication
                 .anyRequest().authenticated()
             );
 
+        http.addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        http.addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class);
+        http.addFilterBefore(rateLimitingFilter, internalServiceAuthenticationFilter.class);
 
         return http.build();
     }
@@ -66,10 +68,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
+        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Cache-Control"));
-        configuration.setExposedHeaders(Arrays.asList("Authorization"));
+        configuration.setExposedHeaders(Arrays.asList("Authorization", "X-Request-Id"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

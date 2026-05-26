@@ -36,7 +36,9 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         
         // Rate-limit chat and document modification operations to prevent excessive resource utilization
-        if (path.contains("/chat/ask") || path.contains("/chat/ask-stream") || path.contains("/documents/upload")) {
+        if (path.contains("/chat/ask") || path.contains("/chat/ask-stream")
+                || path.contains("/documents/upload") || path.contains("/auth/login")
+                || path.contains("/auth/register")) {
             String ip = request.getRemoteAddr();
             Bucket bucket = cache.computeIfAbsent(ip, k -> createNewBucket());
 

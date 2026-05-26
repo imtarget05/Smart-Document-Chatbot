@@ -24,7 +24,8 @@ spec:
         app: backend
         app.kubernetes.io/name: backend
       annotations:
-        prometheus.io/scrape: "true"
+        # Configure a ServiceMonitor with INTERNAL_SERVICE_TOKEN before enabling scraping.
+        prometheus.io/scrape: "false"
         prometheus.io/port: "8080"
         prometheus.io/path: "/api/actuator/prometheus"
     spec:

@@ -94,20 +94,20 @@ jobs:
           echo "=== Smoke Tests ==="
           FAILURES=0
 
-          # Test document listing
+          # Protected document listing must reject an unauthenticated request
           STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/documents" 2>/dev/null || echo "000")
           echo "GET /api/documents: HTTP $STATUS"
-          [[ "$STATUS" != "200" ]] && ((FAILURES++))
+          [[ "$STATUS" != "401" && "$STATUS" != "403" ]] && ((FAILURES++))
 
           # Test actuator info
           STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/actuator/info" 2>/dev/null || echo "000")
           echo "GET /api/actuator/info: HTTP $STATUS"
           [[ "$STATUS" != "200" ]] && ((FAILURES++))
 
-          # Test metrics endpoint
+          # Sensitive metrics must reject an unauthenticated request
           STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/actuator/prometheus" 2>/dev/null || echo "000")
-          echo "GET /api/actuator/prometheus: HTTP $STATUS"
-          [[ "$STATUS" != "200" ]] && ((FAILURES++))
+          echo "GET /api/actuator/prometheus without service token: HTTP $STATUS"
+          [[ "$STATUS" != "401" && "$STATUS" != "403" ]] && ((FAILURES++))
 
           if [[ $FAILURES -gt 0 ]]; then
             echo "::warning::$FAILURES smoke test(s) failed"

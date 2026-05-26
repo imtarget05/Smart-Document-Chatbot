@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -13,11 +14,19 @@ import java.util.Map;
 @Component
 public class JwtTokenProvider {
 
-    // Generates a secure, random signing key for HMAC-SHA256 at application startup
-    private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    private final Key key;
+    private final long jwtExpirationMs;
 
-    @Value("${jwt.expiration-ms:86400000}") // Default is 24 hours
-    private long jwtExpirationMs;
+    public JwtTokenProvider(
+            @Value("${jwt.secret}") String encodedSecret,
+            @Value("${jwt.expiration-ms:86400000}") long jwtExpirationMs) {
+        byte[] secret = Base64.getDecoder().decode(encodedSecret);
+        if (secret.length < 32) {
+            throw new IllegalArgumentException("JWT secret must contain at least 256 bits");
+        }
+        this.key = Keys.hmacShaKeyFor(secret);
+        this.jwtExpirationMs = jwtExpirationMs;
+    }
 
     public String generateToken(String username, String role) {
         Date now = new Date();

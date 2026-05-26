@@ -293,7 +293,7 @@ function ChatWindow({
           </div>
           <h3 className="text-lg font-bold text-gray-800">Apache Airflow ETL in progress</h3>
           <p className="text-xs text-gray-500 mt-1 max-w-sm text-center leading-relaxed font-semibold">
-            The data pipeline is actively parsing pages, generating semantic vector embeddings via Gemini, and indexing metadata into Qdrant.
+            The data pipeline is actively parsing pages, generating semantic vector embeddings with local Ollama, and indexing metadata into Qdrant.
           </p>
           <div className="mt-6 flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-gray-150 shadow-sm text-xs font-bold text-gray-600">
             <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-ping"></span>

@@ -4,7 +4,7 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.ChatMessageRepository;
 import com.smartdocchat.repository.DocumentRepository;
-import com.smartdocchat.util.OpenRouterConfig;
+import com.smartdocchat.util.OllamaConfig;
 import com.smartdocchat.dto.RetrievedChunk;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,10 +40,13 @@ public class ChatServiceTest {
     private EmbeddingService embeddingService;
 
     @Mock
-    private OpenRouterConfig openRouterConfig;
+    private OllamaConfig ollamaConfig;
 
     @Mock
     private RestTemplate restTemplate;
+
+    @Mock
+    private RagMetrics ragMetrics;
 
     @InjectMocks
     private ChatService chatService;
@@ -51,7 +54,8 @@ public class ChatServiceTest {
     @BeforeEach
     public void setUp() {
         ReflectionTestUtils.setField(chatService, "tavilyApiKey", "test-tavily-key");
-        ReflectionTestUtils.setField(chatService, "restTemplate", restTemplate);
+        ReflectionTestUtils.setField(chatService, "llmMaxAttempts", 1);
+        ReflectionTestUtils.setField(chatService, "llmRetryBackoffMs", 0L);
     }
 
     @Test
@@ -64,6 +68,7 @@ public class ChatServiceTest {
         Document doc = Document.builder()
                 .id(docId)
                 .fileName("it_security.pdf")
+                .ownerUsername("alice")
                 .vectorCollectionId("vector-it-security")
                 .status("READY")
                 .build();
@@ -76,20 +81,18 @@ public class ChatServiceTest {
 
         List<RetrievedChunk> chunks = List.of(chunk);
 
-        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdAndOwnerUsername(docId, "alice")).thenReturn(Optional.of(doc));
         when(embeddingService.searchChunks(userMsg, "vector-it-security", 3)).thenReturn(chunks);
         
-        when(openRouterConfig.getApiKey()).thenReturn("openrouter-test-key");
-        when(openRouterConfig.getModel()).thenReturn("google/gemini-flash");
-        when(openRouterConfig.getChatUrl()).thenReturn("https://openrouter.ai/api/v1/chat/completions");
-        when(openRouterConfig.getTemperature()).thenReturn(0.7);
+        when(ollamaConfig.getChatModel()).thenReturn("deepseek-r1:1.5b");
+        when(ollamaConfig.getChatUrl()).thenReturn("http://ollama:11434/api/chat");
+        when(ollamaConfig.getTemperature()).thenReturn(0.3);
 
-        Map<String, Object> choice = Map.of("message", Map.of("content", "To reset your password, navigate to profile settings and click 'reset'."));
-        Map<String, Object> responseBody = Map.of("choices", List.of(choice));
+        Map<String, Object> responseBody = Map.of("message", Map.of("content", "To reset your password, navigate to profile settings and click 'reset'."));
         ResponseEntity<Map> responseEntity = new ResponseEntity<>(responseBody, HttpStatus.OK);
 
         when(restTemplate.exchange(
-                eq("https://openrouter.ai/api/v1/chat/completions"),
+                eq("http://ollama:11434/api/chat"),
                 eq(HttpMethod.POST),
                 any(HttpEntity.class),
                 eq(Map.class)
@@ -98,6 +101,7 @@ public class ChatServiceTest {
         ChatMessage savedMessage = ChatMessage.builder()
                 .id(1L)
                 .sessionId(sessionId)
+                .ownerUsername("alice")
                 .documentId(docId)
                 .documentIds(String.valueOf(docId))
                 .userMessage(userMsg)
@@ -108,12 +112,13 @@ public class ChatServiceTest {
         when(chatMessageRepository.save(any(ChatMessage.class))).thenReturn(savedMessage);
 
         // Act
-        ChatMessage result = chatService.processQuery(sessionId, docId, userMsg);
+        ChatMessage result = chatService.processQuery("alice", sessionId, docId, null, userMsg);
 
         // Assert
         assertNotNull(result);
         assertEquals(sessionId, result.getSessionId());
         assertEquals("To reset your password, navigate to profile settings and click 'reset'.", result.getAiResponse());
         verify(chatMessageRepository, times(1)).save(any(ChatMessage.class));
+        verify(ragMetrics).confidence(0.85);
     }
 }
