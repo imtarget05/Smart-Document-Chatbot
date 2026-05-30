@@ -62,10 +62,10 @@ services:
           memory: 1G
           cpus: '0.5'
 
-  # --- Ollama Local LLM (DeepSeek) ---
-  ollama:
+  # --- Local LLM & Embedding Engine (DeepSeek) ---
+  llm:
     image: ollama/ollama:latest
-    container_name: sdc-ollama
+    container_name: sdc-llm
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -75,14 +75,14 @@ services:
       - app-network
 
   # --- Automated DeepSeek Model Puller ---
-  ollama-model-puller:
+  llm-model-puller:
     image: curlimages/curl:latest
-    container_name: sdc-ollama-puller
+    container_name: sdc-llm-puller
     depends_on:
-      - ollama
+      - llm
     networks:
       - app-network
-    entrypoint: [ "sh", "-c", "until curl -s http://ollama:11434/api/tags >/dev/null; do sleep 2; done; echo 'Pulling DeepSeek-R1...'; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://ollama:11434/api/pull; echo 'Pulling nomic-embed-text...'; curl -d '{\"name\": \"nomic-embed-text\"}' http://ollama:11434/api/pull; echo 'All local models pulled successfully!'" ]
+    entrypoint: [ "sh", "-c", "until curl -s http://llm:11434/api/tags >/dev/null; do sleep 2; done; echo 'Pulling DeepSeek-R1...'; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://llm:11434/api/pull; echo 'Pulling nomic-embed-text...'; curl -d '{\"name\": \"nomic-embed-text\"}' http://llm:11434/api/pull; echo 'All local models pulled successfully!'" ]
 
   # --- Spring Boot Backend ---
   backend:
@@ -103,11 +103,11 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       QDRANT_API_KEY: ${QDRANT_API_KEY:-qdrant_key_123}
-      # Local Ollama models; no AI provider API key is used.
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-deepseek-r1:1.5b}
-      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
-      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.3}
+      # Local LLM models & embeddings; no AI provider API key is used.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:11434}
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-deepseek-r1:1.5b}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
       # JVM
       JAVA_OPTS: "${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}"
       # Spring profile

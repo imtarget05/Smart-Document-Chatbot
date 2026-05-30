@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ollama
+  name: llm
   labels:
-    app: ollama
-    app.kubernetes.io/name: ollama
+    app: llm
+    app.kubernetes.io/name: llm
     app.kubernetes.io/component: llm-runtime
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ollama
+      app: llm
   template:
     metadata:
       labels:
-        app: ollama
+        app: llm
     spec:
       containers:
-        - name: ollama
+        - name: llm
           image: ollama/ollama:latest
           ports:
             - name: http
@@ -36,7 +36,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
           volumeMounts:
-            - name: ollama-data
+            - name: llm-data
               mountPath: /root/.ollama
         - name: model-puller
           image: curlimages/curl:latest
@@ -47,19 +47,19 @@ spec:
               curl -sf -d '{"name":"deepseek-r1:1.5b"}' http://localhost:11434/api/pull;
               curl -sf -d '{"name":"nomic-embed-text"}' http://localhost:11434/api/pull
           volumeMounts:
-            - name: ollama-data
+            - name: llm-data
               mountPath: /root/.ollama
       volumes:
-        - name: ollama-data
+        - name: llm-data
           persistentVolumeClaim:
-            claimName: ollama-pvc
+            claimName: llm-pvc
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: ollama
+  name: llm
   labels:
-    app: ollama
+    app: llm
 spec:
   type: ClusterIP
   ports:
@@ -67,4 +67,4 @@ spec:
       port: 11434
       targetPort: http
   selector:
-    app: ollama
+    app: llm

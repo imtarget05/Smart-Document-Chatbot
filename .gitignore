@@ -80,3 +80,12 @@ docker/monitoring/grafana/data/
 # Production env files (keep .env.example as template)
 .env.production
 .env.staging
+
+# Evaluation results (regenerated per run)
+eval/results/*.json
+!eval/results/.gitkeep.json
+
+# Raw uploaded data
+data/raw/
+data/processed/
+

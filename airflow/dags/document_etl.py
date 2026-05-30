@@ -12,9 +12,9 @@ QDRANT_URL = "http://qdrant:6333"
 
 # Default API URLs for LLM inside Docker
 # Overridden by environment variables or configuration config
-OLLAMA_URL = os.getenv("AIRFLOW_OLLAMA_URL", "http://ollama:11434")
-OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "deepseek-r1:1.5b")
-OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+OLLAMA_URL = os.getenv("LLM_BASE_URL", os.getenv("AIRFLOW_OLLAMA_URL", "http://llm:11434"))
+OLLAMA_CHAT_MODEL = os.getenv("LLM_CHAT_MODEL", os.getenv("OLLAMA_CHAT_MODEL", "deepseek-r1:1.5b"))
+OLLAMA_EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"))
 INTERNAL_SERVICE_TOKEN = os.environ["INTERNAL_SERVICE_TOKEN"]
 CALLBACK_HEADERS = {"X-Internal-Token": INTERNAL_SERVICE_TOKEN}
 

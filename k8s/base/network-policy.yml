@@ -43,11 +43,11 @@ spec:
       ports:
         - port: 6333
         - port: 6334
-    # Allow local model inference through Ollama
+    # Allow local model inference through Generic LLM service
     - to:
         - podSelector:
             matchLabels:
-              app: ollama
+              app: llm
       ports:
         - port: 11434
     # Allow DNS

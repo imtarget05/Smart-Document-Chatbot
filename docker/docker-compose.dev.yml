@@ -42,20 +42,20 @@ services:
       timeout: 5s
       retries: 5
 
-  ollama:
+  llm:
     image: ollama/ollama:latest
-    container_name: sdc-ollama-dev
+    container_name: sdc-llm-dev
     ports:
       - "11434:11434"
     volumes:
       - ollama_dev_data:/root/.ollama
 
-  ollama-model-puller:
+  llm-model-puller:
     image: curlimages/curl:latest
-    container_name: sdc-ollama-puller-dev
+    container_name: sdc-llm-puller-dev
     depends_on:
-      - ollama
-    entrypoint: [ "sh", "-c", "until curl -s http://ollama:11434/api/tags >/dev/null; do sleep 2; done; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://ollama:11434/api/pull; curl -d '{\"name\": \"nomic-embed-text\"}' http://ollama:11434/api/pull" ]
+      - llm
+    entrypoint: [ "sh", "-c", "until curl -s http://llm:11434/api/tags >/dev/null; do sleep 2; done; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://llm:11434/api/pull; curl -d '{\"name\": \"nomic-embed-text\"}' http://llm:11434/api/pull" ]
 
   # --- pgAdmin (Database Management UI) ---
   pgadmin:

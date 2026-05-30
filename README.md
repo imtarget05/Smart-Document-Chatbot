@@ -113,6 +113,12 @@ Smart-Document-Chatbot/
 ├── airflow/
 │   └── dags/
 │       └── document_etl.py           # Pipeline ETL Apache Airflow ingestion
+├── eval/                              # 📊 RAG Evaluation Pipeline
+│   ├── questions.json                # Bộ câu hỏi test (20 câu, 3 mức độ)
+│   ├── eval.py                       # Script đánh giá tự động
+│   └── results/                      # Kết quả evaluation JSON
+├── data/                              # 🗂️ Intermediate Data Artifacts
+│   └── sample_chunks.json            # Mẫu chunks để debug pipeline
 └── docker/
     └── docker-compose.yml            # Khởi động Qdrant, PostgreSQL, Airflow, MLflow
 ```
@@ -180,7 +186,7 @@ make dev-up
 *Hạ tầng sẽ hoạt động tại: PostgreSQL (`localhost:5432`), Qdrant (`localhost:6333`) và Ollama (`localhost:11434`). Container puller tự tải `deepseek-r1:1.5b` cùng `nomic-embed-text`.*
 
 ### Bước 2: Khởi động Backend (Spring Boot)
-1. Cấu hình `OLLAMA_BASE_URL=http://localhost:11434` khi backend chạy ngoài Docker, cùng `JWT_SECRET` và `INTERNAL_SERVICE_TOKEN` trong file `.env`. Model AI chạy cục bộ và không cần API key.
+1. Cấu hình `LLM_BASE_URL=http://localhost:11434` khi backend chạy ngoài Docker, cùng `JWT_SECRET` và `INTERNAL_SERVICE_TOKEN` trong file `.env`. Model AI chạy cục bộ và không cần API key.
 2. Khởi chạy ứng dụng Spring Boot:
 ```bash
 cd backend
@@ -219,6 +225,103 @@ API protected yêu cầu JWT (`Authorization: Bearer <token>`); tài liệu và 
 *   `GET /api/chat/history/{sessionId}/{documentId}` - Lấy lịch sử hội thoại được phân tách theo tài liệu cụ thể.
 *   `DELETE /api/chat/history/{sessionId}` - Xóa lịch sử phiên chat.
 
+### 🏥 System Health & Metrics
+*   `GET /api/system/health` - Kiểm tra kết nối Qdrant, Ollama và trạng thái tổng thể (public, không cần JWT).
+*   `GET /api/system/metrics` - Tổng hợp RAG metrics: total requests, latency, fallback rate, error rate.
+
+**Ví dụ output `/api/system/health`:**
+```json
+{
+  "vector_db": "connected",
+  "llm_provider": "available",
+  "status": "ok"
+}
+```
+
+**Ví dụ output `/api/system/metrics`:**
+```json
+{
+  "total_requests": 1024,
+  "average_latency_ms": 1350,
+  "p95_latency_ms": 3200,
+  "fallback_count": 42,
+  "fallback_rate": 0.041,
+  "stream_errors": 3,
+  "error_rate": 0.003,
+  "fallback_breakdown": {
+    "corrective_retrieval": 28,
+    "web_search": 10,
+    "general_knowledge": 4
+  }
+}
+```
+
+---
+
+## 🧩 Structured Output Format (AI Engineer Standard)
+
+Mỗi response từ `/chat/ask` và SSE `complete` event đều trả về cấu trúc đầy đủ:
+
+```json
+{
+  "id": 42,
+  "sessionId": "abc-123",
+  "userMessage": "Hệ thống sử dụng framework nào?",
+  "aiResponse": "Theo tài liệu, hệ thống sử dụng Spring Boot làm backend...",
+  "sourceChunks": "[system_design.pdf] Backend service is implemented...",
+  "confidence": "high",
+  "confidenceScore": 0.87,
+  "latencyMs": 1420,
+  "model": "deepseek-r1:1.5b",
+  "ragStrategy": "direct",
+  "sources": [
+    {
+      "document": "system_design.pdf",
+      "documentId": 1,
+      "content": "Backend service is implemented with Spring Boot...",
+      "score": 0.87
+    }
+  ]
+}
+```
+
+| Field | Ý nghĩa |
+| :--- | :--- |
+| `confidence` | `high` (≥0.70), `medium` (≥0.45), `low` (<0.45) |
+| `ragStrategy` | `direct` / `corrective` / `web_search` / `general_knowledge` |
+| `sources` | Danh sách structured citation kèm similarity score |
+
+---
+
+## 📊 Evaluation Pipeline
+
+Hệ thống tích hợp pipeline đánh giá chất lượng RAG tự động:
+
+```bash
+# Chạy evaluation (cần JWT token và document đã upload)
+python eval/eval.py \
+  --base-url http://localhost:8080/api \
+  --token <your-jwt-token> \
+  --document-id 1
+```
+
+**Output mẫu:**
+```
+📊 EVALUATION RESULTS
+============================================================
+  Total Questions:      20
+  Retrieval Accuracy:   85.00%
+  Answer Correctness:   80.00%
+  Hallucination Cases:  2
+  Hallucination Rate:   10.00%
+  Avg Latency:          1420ms
+  P95 Latency:          3200ms
+  Errors:               0
+============================================================
+```
+
+Kết quả chi tiết được lưu tại `eval/results/eval_results.json`.
+
 ---
 
 ## Security, Testing & Operations
@@ -227,5 +330,7 @@ API protected yêu cầu JWT (`Authorization: Bearer <token>`); tài liệu và 
 * Callback Airflow và `/api/actuator/prometheus` cần `INTERNAL_SERVICE_TOKEN`; chỉ health/info được public.
 * Backend dùng JUnit/Mockito/Jacoco; frontend dùng Vitest + Testing Library và Playwright smoke test. GitHub Actions chạy test, build và scan image/IaC.
 * Log backend ở định dạng JSON có `requestId`; Prometheus thu metrics RAG và OTLP tracing có thể xuất sang collector.
+* Structured logging mỗi RAG request ghi nhận: `requestId`, `questionLen`, `retrievedDocs`, `topScore`, `model`, `strategy`, `latencyMs`, `status`.
 
 Tài liệu vận hành: [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md), [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) và quyết định bảo mật [`docs/adr/0001-security-boundaries.md`](docs/adr/0001-security-boundaries.md).
+

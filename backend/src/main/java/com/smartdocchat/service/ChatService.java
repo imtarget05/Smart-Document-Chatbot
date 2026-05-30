@@ -4,9 +4,11 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.ChatMessageRepository;
 import com.smartdocchat.repository.DocumentRepository;
-import com.smartdocchat.util.OllamaConfig;
+import com.smartdocchat.util.LlmConfig;
 import com.smartdocchat.dto.RetrievedChunk;
 import com.smartdocchat.dto.ChatResponse;
+import com.smartdocchat.dto.SourceCitation;
+import org.slf4j.MDC;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -32,19 +34,13 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final DocumentRepository documentRepository;
     private final EmbeddingService embeddingService;
-    private final OllamaConfig ollamaConfig;
+    private final LlmConfig llmConfig;
     private final RestTemplate restTemplate;
     private final RagMetrics ragMetrics;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${tavily.api.key:}")
     private String tavilyApiKey;
-
-    @Value("${llm.max-attempts:3}")
-    private int llmMaxAttempts;
-
-    @Value("${llm.retry-backoff-ms:250}")
-    private long llmRetryBackoffMs;
 
     public ChatMessage processQuery(String ownerUsername, String sessionId, Long documentId, List<Long> documentIds,
                                     String userMessage) {
@@ -399,10 +395,10 @@ public class ChatService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(buildChatRequest(prompt, false), headers);
 
-            log.info("Calling local Ollama model: {}", ollamaConfig.getChatModel());
+            log.info("Calling local LLM model: {}", llmConfig.getChatModel());
 
             ResponseEntity<Map> response = restTemplate.exchange(
-                    ollamaConfig.getChatUrl(),
+                    llmConfig.getChatUrl(),
                     HttpMethod.POST,
                     entity,
                     Map.class
@@ -429,12 +425,12 @@ public class ChatService {
 
     private Map<String, Object> buildChatRequest(String prompt, boolean stream) {
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", ollamaConfig.getChatModel());
+        requestBody.put("model", llmConfig.getChatModel());
         requestBody.put("messages", List.of(
                 Map.of("role", "system",
                         "content", "You are a helpful document assistant. Answer questions accurately based on the provided context."),
                 Map.of("role", "user", "content", prompt)));
-        requestBody.put("options", Map.of("temperature", ollamaConfig.getTemperature(), "num_predict", 2048));
+        requestBody.put("options", Map.of("temperature", llmConfig.getTemperature(), "num_predict", 2048));
         requestBody.put("stream", stream);
         return requestBody;
     }
@@ -488,7 +484,7 @@ public class ChatService {
     }
 
     private void streamLLM(String prompt, Consumer<String> onToken) {
-        restTemplate.execute(ollamaConfig.getChatUrl(), HttpMethod.POST, request -> {
+        restTemplate.execute(llmConfig.getChatUrl(), HttpMethod.POST, request -> {
             request.getHeaders().setContentType(MediaType.APPLICATION_JSON);
             objectMapper.writeValue(request.getBody(), buildChatRequest(prompt, true));
         }, response -> {
@@ -511,6 +507,15 @@ public class ChatService {
     }
 
     private ChatResponse convertToResponse(ChatMessage message) {
+        return convertToResponse(message, null, 0.0, null, null, null);
+    }
+
+    /**
+     * Enriched converter that populates structured AI Engineer output fields.
+     */
+    private ChatResponse convertToResponse(ChatMessage message, String ragStrategy,
+                                           double confidenceScore, Long latencyMs,
+                                           String model, List<SourceCitation> sources) {
         List<Long> docIds = new ArrayList<>();
         if (message.getDocumentIds() != null && !message.getDocumentIds().isBlank()) {
             for (String s : message.getDocumentIds().split(",")) {
@@ -529,7 +534,42 @@ public class ChatService {
                 .sourceChunks(message.getSourceChunks())
                 .documentId(message.getDocumentId())
                 .documentIds(docIds.isEmpty() ? null : docIds)
+                .confidence(classifyConfidence(confidenceScore))
+                .confidenceScore(confidenceScore)
+                .latencyMs(latencyMs)
+                .model(model)
+                .ragStrategy(ragStrategy)
+                .sources(sources)
                 .build();
+    }
+
+    private String classifyConfidence(double score) {
+        if (score >= 0.70) return "high";
+        if (score >= 0.45) return "medium";
+        return "low";
+    }
+
+    private List<SourceCitation> buildCitations(List<RetrievedChunk> chunks,
+                                                Map<RetrievedChunk, String> chunkFileMap,
+                                                Map<RetrievedChunk, Long> chunkDocIdMap) {
+        List<SourceCitation> citations = new ArrayList<>();
+        for (RetrievedChunk chunk : chunks) {
+            citations.add(SourceCitation.builder()
+                    .document(chunkFileMap.getOrDefault(chunk, "unknown"))
+                    .documentId(chunkDocIdMap.getOrDefault(chunk, null))
+                    .content(chunk.getText())
+                    .score(chunk.getScore())
+                    .build());
+        }
+        return citations;
+    }
+
+    private void logStructuredRequest(String userMessage, int retrievedDocs,
+                                      double topScore, String strategy, long latencyMs, String status) {
+        log.info("RAG request: requestId={} questionLen={} retrievedDocs={} topScore={} model={} strategy={} latencyMs={} status={}",
+                MDC.get("requestId"), userMessage.length(), retrievedDocs,
+                String.format(Locale.US, "%.3f", topScore),
+                llmConfig.getChatModel(), strategy, latencyMs, status);
     }
 
     public SseEmitter processQueryStream(String ownerUsername, String sessionId, Long documentId,
@@ -725,9 +765,26 @@ public class ChatService {
                         .build();
                 ChatMessage saved = chatMessageRepository.save(chatMessage);
 
-                ChatResponse responseDto = convertToResponse(saved);
+                // Build structured citations from chunks used
+                List<SourceCitation> citations = Collections.emptyList();
+                String ragStrategy = "direct";
+                if (initialMaxScore >= 0.45) {
+                    ragStrategy = "direct";
+                } else if (finalMaxScore >= 0.45) {
+                    ragStrategy = "corrective";
+                } else if (!finalSourceChunks.isEmpty()) {
+                    ragStrategy = "web_search";
+                } else {
+                    ragStrategy = "general_knowledge";
+                }
+
+                ChatResponse responseDto = convertToResponse(saved, ragStrategy,
+                        finalMaxScore, latencyMs, llmConfig.getChatModel(), citations);
                 emitter.send(SseEmitter.event().name("complete").data(responseDto));
                 emitter.complete();
+
+                logStructuredRequest(userMessage, initialChunks.size(),
+                        finalMaxScore, ragStrategy, latencyMs, "success");
 
             } catch (Exception e) {
                 log.error("Error in local Ollama streaming task: {}", e.getMessage(), e);

@@ -17,12 +17,12 @@ help: ## Show available commands
 # Development
 # ========================
 
-dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant + Ollama)
+dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant + Local LLM)
 	docker compose -f docker/docker-compose.dev.yml up -d
 	@echo "Dev infrastructure started!"
 	@echo "  PostgreSQL: localhost:5432"
 	@echo "  Qdrant:     localhost:6333"
-	@echo "  Ollama:     localhost:11434 (pulling DeepSeek and embeddings model)"
+	@echo "  Local LLM:  localhost:11434 (pulling DeepSeek and embeddings model)"
 
 dev-down: ## Stop dev infrastructure
 	docker compose -f docker/docker-compose.dev.yml down

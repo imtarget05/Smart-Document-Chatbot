@@ -4,14 +4,22 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/**
+ * Enterprise-grade LLM infrastructure configuration.
+ * Decouples the application code from specific LLM providers (e.g. Ollama).
+ */
 @Component
-@ConfigurationProperties(prefix = "ollama")
+@ConfigurationProperties(prefix = "llm")
 @Data
-public class OllamaConfig {
+public class LlmConfig {
     private String baseUrl = "http://localhost:11434";
     private String chatModel = "deepseek-r1:1.5b";
     private String embeddingModel = "nomic-embed-text";
     private double temperature = 0.3;
+    
+    // Retry configurations
+    private int maxAttempts = 3;
+    private long retryBackoffMs = 250;
 
     public String getChatUrl() {
         return stripTrailingSlash(baseUrl) + "/api/chat";

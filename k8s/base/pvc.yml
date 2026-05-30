@@ -14,9 +14,9 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: ollama-pvc
+  name: llm-pvc
   labels:
-    app: ollama
+    app: llm
 spec:
   accessModes:
     - ReadWriteOnce

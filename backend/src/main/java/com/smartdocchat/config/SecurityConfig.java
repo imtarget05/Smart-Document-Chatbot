@@ -46,7 +46,7 @@ public class SecurityConfig {
                     "/swagger-ui.html"
                 ).permitAll()
                 // Only non-sensitive health endpoints are public.
-                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/health/**", "/actuator/info", "/system/health").permitAll()
                 .requestMatchers("/actuator/prometheus").hasRole("SERVICE")
                 .requestMatchers("/documents/*/etl-complete", "/documents/*/etl-fail").hasRole("SERVICE")
                 // All other backend APIs require authentication

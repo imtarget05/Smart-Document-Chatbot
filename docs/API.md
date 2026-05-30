@@ -60,3 +60,11 @@ These endpoints require `X-Internal-Token: <INTERNAL_SERVICE_TOKEN>`. They are n
 | `GET` | `/actuator/prometheus` | Prometheus scraper |
 
 Production deployments must inject a unique internal token into both backend and Airflow. Prometheus must send the same value as a bearer credential or `X-Internal-Token`.
+
+## System Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/system/health` | RAG infrastructure health (Qdrant + Ollama status). Public. |
+| `GET` | `/system/metrics` | Aggregated RAG metrics (requests, latency, fallback/error rates). Requires JWT. |
+

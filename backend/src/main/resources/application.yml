@@ -48,12 +48,14 @@ service:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}
 
-# Local Ollama models. No external AI provider credentials are required.
-ollama:
-  base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-  chat-model: ${OLLAMA_CHAT_MODEL:deepseek-r1:1.5b}
-  embedding-model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
-  temperature: ${OLLAMA_TEMPERATURE:0.3}
+# Local LLM models & embeddings. No external AI provider credentials are required.
+llm:
+  base-url: ${LLM_BASE_URL:http://localhost:11434}
+  chat-model: ${LLM_CHAT_MODEL:deepseek-r1:1.5b}
+  embedding-model: ${LLM_EMBEDDING_MODEL:nomic-embed-text}
+  temperature: ${LLM_TEMPERATURE:0.3}
+  max-attempts: ${LLM_MAX_ATTEMPTS:3}
+  retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}
 
 # Qdrant Configuration
 qdrant:
@@ -68,10 +70,6 @@ airflow:
   url: ${AIRFLOW_URL:http://airflow:8080/api/v1}
   username: ${AIRFLOW_USERNAME:admin}
   password: ${AIRFLOW_PASSWORD:admin}
-
-llm:
-  max-attempts: ${LLM_MAX_ATTEMPTS:3}
-  retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}
 external-services:
   connect-timeout-ms: ${EXTERNAL_CONNECT_TIMEOUT_MS:3000}
   read-timeout-ms: ${EXTERNAL_READ_TIMEOUT_MS:60000}

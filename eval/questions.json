@@ -1,0 +1,142 @@
+[
+  {
+    "id": 1,
+    "question": "Hệ thống sử dụng framework backend nào?",
+    "expected_answer_contains": ["Spring Boot", "FastAPI"],
+    "expected_source_keywords": ["backend", "framework", "Spring"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 2,
+    "question": "Vector database nào được sử dụng để lưu embeddings?",
+    "expected_answer_contains": ["Qdrant"],
+    "expected_source_keywords": ["Qdrant", "vector", "embedding"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 3,
+    "question": "Mô hình embedding nào được dùng để sinh vector?",
+    "expected_answer_contains": ["nomic-embed-text"],
+    "expected_source_keywords": ["nomic", "embed", "embedding"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 4,
+    "question": "Hệ thống xử lý thế nào khi retrieval confidence thấp?",
+    "expected_answer_contains": ["reformulation", "re-retrieval", "web search", "fallback"],
+    "expected_source_keywords": ["confidence", "CRAG", "fallback", "agentic"],
+    "difficulty": "medium"
+  },
+  {
+    "id": 5,
+    "question": "Ngưỡng confidence để kích hoạt Agentic CRAG loop là bao nhiêu?",
+    "expected_answer_contains": ["0.45", "45%"],
+    "expected_source_keywords": ["confidence", "threshold", "0.45"],
+    "difficulty": "medium"
+  },
+  {
+    "id": 6,
+    "question": "Pipeline ETL tài liệu gồm những bước nào?",
+    "expected_answer_contains": ["upload", "parsing", "chunking", "embedding", "index"],
+    "expected_source_keywords": ["pipeline", "ETL", "chunk", "Airflow"],
+    "difficulty": "medium"
+  },
+  {
+    "id": 7,
+    "question": "Frontend sử dụng công nghệ gì để quản lý server state?",
+    "expected_answer_contains": ["TanStack Query", "React Query"],
+    "expected_source_keywords": ["React Query", "TanStack", "cache"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 8,
+    "question": "Hệ thống streaming response cho user như thế nào?",
+    "expected_answer_contains": ["SSE", "Server-Sent Events", "SseEmitter"],
+    "expected_source_keywords": ["stream", "SSE", "SseEmitter"],
+    "difficulty": "medium"
+  },
+  {
+    "id": 9,
+    "question": "Khi không tìm thấy thông tin trong tài liệu, hệ thống làm gì?",
+    "expected_answer_contains": ["web search", "Tavily", "general knowledge", "deep reasoning"],
+    "expected_source_keywords": ["fallback", "Tavily", "web search"],
+    "difficulty": "hard"
+  },
+  {
+    "id": 10,
+    "question": "Mô hình LLM nào được chạy locally trong hệ thống?",
+    "expected_answer_contains": ["DeepSeek", "deepseek-r1"],
+    "expected_source_keywords": ["DeepSeek", "Ollama", "LLM"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 11,
+    "question": "Concept Map được tạo ra bằng cách nào?",
+    "expected_answer_contains": ["AI", "extract", "concept", "SVG"],
+    "expected_source_keywords": ["concept", "map", "mindmap"],
+    "difficulty": "medium"
+  },
+  {
+    "id": 12,
+    "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?",
+    "expected_answer_contains": ["PDF", "DOCX", "TXT"],
+    "expected_source_keywords": ["PDF", "DOCX", "TXT", "upload"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 13,
+    "question": "Authentication được thực hiện bằng phương pháp nào?",
+    "expected_answer_contains": ["JWT", "token"],
+    "expected_source_keywords": ["JWT", "auth", "token"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 14,
+    "question": "Parallel Re-retrieval trong Agentic CRAG hoạt động ra sao?",
+    "expected_answer_contains": ["parallel", "multi-thread", "query variation", "reformulation"],
+    "expected_source_keywords": ["parallel", "retrieval", "CompletableFuture"],
+    "difficulty": "hard"
+  },
+  {
+    "id": 15,
+    "question": "Dữ liệu lịch sử chat được lưu ở đâu?",
+    "expected_answer_contains": ["PostgreSQL", "database"],
+    "expected_source_keywords": ["PostgreSQL", "chat", "history"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 16,
+    "question": "Hệ thống monitoring sử dụng những công cụ nào?",
+    "expected_answer_contains": ["Prometheus", "Grafana"],
+    "expected_source_keywords": ["Prometheus", "Grafana", "monitoring"],
+    "difficulty": "medium"
+  },
+  {
+    "id": 17,
+    "question": "Multi-document synthesis hoạt động như thế nào?",
+    "expected_answer_contains": ["multiple", "document", "parallel", "collection"],
+    "expected_source_keywords": ["multi", "document", "synthesis"],
+    "difficulty": "hard"
+  },
+  {
+    "id": 18,
+    "question": "Web Search fallback sử dụng API nào?",
+    "expected_answer_contains": ["Tavily"],
+    "expected_source_keywords": ["Tavily", "web", "search"],
+    "difficulty": "easy"
+  },
+  {
+    "id": 19,
+    "question": "Cách hệ thống chống hallucination là gì?",
+    "expected_answer_contains": ["confidence", "source", "citation", "fallback"],
+    "expected_source_keywords": ["hallucination", "confidence", "citation"],
+    "difficulty": "hard"
+  },
+  {
+    "id": 20,
+    "question": "Rate limiting được áp dụng ở đâu trong hệ thống?",
+    "expected_answer_contains": ["login", "upload", "chat", "filter"],
+    "expected_source_keywords": ["rate", "limit", "filter"],
+    "difficulty": "medium"
+  }
+]

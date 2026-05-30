@@ -1,0 +1,31 @@
+{
+  "_description": "Sample intermediate chunks output for debugging the RAG pipeline. This file demonstrates the structure of processed document chunks stored in Qdrant.",
+  "document": "system_design.pdf",
+  "document_id": 1,
+  "total_chunks": 24,
+  "embedding_model": "nomic-embed-text",
+  "vector_dimensions": 768,
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "text": "Backend service is implemented with FastAPI framework, providing RESTful API endpoints for document upload, processing, and chat functionality.",
+      "parent_text": "Chapter 2: System Architecture. Backend service is implemented with FastAPI framework, providing RESTful API endpoints for document upload, processing, and chat functionality. The service handles authentication via JWT tokens.",
+      "char_count": 142,
+      "page": 1
+    },
+    {
+      "chunk_index": 1,
+      "text": "Qdrant is used as the vector database for storing document embeddings. Each document gets its own collection with cosine similarity metric.",
+      "parent_text": "Chapter 2: System Architecture. Qdrant is used as the vector database for storing document embeddings. Each document gets its own collection with cosine similarity metric. The embedding dimension is 768 from nomic-embed-text model.",
+      "char_count": 138,
+      "page": 2
+    },
+    {
+      "chunk_index": 2,
+      "text": "The CRAG (Corrective RAG) loop implements a self-reflective retrieval mechanism with confidence thresholds, query reformulation, and parallel re-retrieval.",
+      "parent_text": "Chapter 3: RAG Pipeline. The CRAG (Corrective RAG) loop implements a self-reflective retrieval mechanism with confidence thresholds, query reformulation, and parallel re-retrieval. When initial retrieval confidence is below 0.45, the system activates agentic workflow.",
+      "char_count": 156,
+      "page": 5
+    }
+  ]
+}
