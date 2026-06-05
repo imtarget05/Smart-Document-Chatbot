@@ -53,9 +53,9 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             );
 
-        http.addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        http.addFilterBefore(rateLimitingFilter, internalServiceAuthenticationFilter.class);
+        http.addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class);
+        http.addFilterBefore(rateLimitingFilter, InternalServiceAuthenticationFilter.class);
 
         return http.build();
     }

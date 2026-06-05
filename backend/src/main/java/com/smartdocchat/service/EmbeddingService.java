@@ -1,6 +1,6 @@
 package com.smartdocchat.service;
 
-import com.smartdocchat.util.OllamaConfig;
+import com.smartdocchat.util.LlmConfig;
 import com.smartdocchat.util.QdrantConfig;
 import com.smartdocchat.util.DocumentParser;
 import com.smartdocchat.dto.RetrievedChunk;
@@ -18,7 +18,7 @@ import java.util.*;
 @Slf4j
 public class EmbeddingService {
 
-    private final OllamaConfig ollamaConfig;
+    private final LlmConfig llmConfig;
     private final QdrantConfig qdrantConfig;
     private final RestTemplate restTemplate;
 
@@ -340,15 +340,15 @@ public class EmbeddingService {
         List<List<Float>> allEmbeddings = new ArrayList<>();
 
         try {
-            String url = ollamaConfig.getEmbeddingUrl();
-            log.info("Generating embeddings using Ollama endpoint: {} with model: {}", url, ollamaConfig.getEmbeddingModel());
+            String url = llmConfig.getEmbeddingUrl();
+            log.info("Generating embeddings using Ollama endpoint: {} with model: {}", url, llmConfig.getEmbeddingModel());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             for (String text : texts) {
                 Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("model", ollamaConfig.getEmbeddingModel());
+                requestBody.put("model", llmConfig.getEmbeddingModel());
                 requestBody.put("prompt", text);
 
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);

@@ -57,6 +57,38 @@ services:
       - llm
     entrypoint: [ "sh", "-c", "until curl -s http://llm:11434/api/tags >/dev/null; do sleep 2; done; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://llm:11434/api/pull; curl -d '{\"name\": \"nomic-embed-text\"}' http://llm:11434/api/pull" ]
 
+  # --- Python Agent Service (dev mode with hot-reload) ---
+  agent:
+    build:
+      context: ..
+      dockerfile: agent/Dockerfile
+    container_name: sdc-agent-dev
+    environment:
+      INTERNAL_SERVICE_TOKEN: local-development-service-token-change-me
+      LLM_BASE_URL: http://llm:11434
+      LLM_CHAT_MODEL: deepseek-r1:1.5b
+      LLM_EMBEDDING_MODEL: nomic-embed-text
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: qdrant_key_123
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: smart_doc_chatbot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      REPORT_OUTPUT_DIR: /app/reports
+    ports:
+      - "9000:9000"
+    volumes:
+      - ../agent:/app
+      - agent_dev_reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 9000 --reload
+
   # --- pgAdmin (Database Management UI) ---
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -78,4 +110,6 @@ volumes:
   qdrant_dev_data:
     driver: local
   ollama_dev_data:
+    driver: local
+  agent_dev_reports:
     driver: local

@@ -57,7 +57,7 @@ public class SystemHealthController {
     private String checkService(String url) {
         try {
             restTemplate.getForEntity(url, String.class);
-            if (url.contains("ollama") || url.contains("11434")) {
+            if (url.contains("ollama") || url.contains("llm") || url.contains("11434")) {
                 return "available";
             }
             return "connected";

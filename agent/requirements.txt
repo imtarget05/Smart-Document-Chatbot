@@ -1,0 +1,58 @@
+# ============================================
+# Smart Document Chatbot - Agent Service
+# Python 3.11+
+# ============================================
+
+# Web framework
+fastapi==0.111.1
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+
+# LangGraph & LangChain (Phase 2 - Multi-agent orchestration)
+langgraph==0.1.19
+langchain==0.2.6
+langchain-core==0.2.22
+langchain-community==0.2.6
+langchain-ollama==0.1.1
+langchain-openai==0.1.8
+
+# Vector store (Qdrant)
+qdrant-client==1.10.1
+langchain-qdrant==0.1.2
+
+# Phase 1 - Hybrid search (BM25 keyword + semantic)
+rank-bm25==0.2.2
+
+# Phase 3 - Multi-source connectors
+google-api-python-client==2.134.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+slack-sdk==3.30.0
+
+# Phase 4 - Action agents (PDF, email)
+reportlab==4.2.2
+fpdf2==2.7.9
+jinja2==3.1.4
+aiosmtplib==3.0.1
+
+# Web search (Researcher agent)
+tavily-python==0.3.4
+
+# Database (Long-term memory)
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.31
+psycopg2-binary==2.9.9
+
+# HTTP client
+httpx==0.27.0
+
+# Utilities
+pydantic==2.7.4
+pydantic-settings==2.3.4
+python-dotenv==1.0.1
+tenacity==8.5.0
+
+# Testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+httpx==0.27.0

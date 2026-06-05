@@ -23,4 +23,7 @@ public class ChatRequest {
     @NotBlank(message = "Message must not be blank")
     @Size(max = 8000, message = "Message must be at most 8000 characters")
     private String message;
+
+    private boolean deepThinking;
+    private boolean webSearch;
 }

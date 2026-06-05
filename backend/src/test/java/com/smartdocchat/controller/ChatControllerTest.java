@@ -66,7 +66,7 @@ public class ChatControllerTest {
                 .aiResponse("Hi there")
                 .build();
 
-        Mockito.when(chatService.processQuery(eq("testuser"), anyString(), anyLong(), any(), anyString()))
+        Mockito.when(chatService.processQuery(eq("testuser"), anyString(), anyLong(), any(), anyString(), anyBoolean(), anyBoolean()))
                 .thenReturn(message);
 
         mockMvc.perform(post("/chat/ask")

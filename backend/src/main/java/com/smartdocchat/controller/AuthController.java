@@ -55,7 +55,7 @@ public class AuthController {
 
         return userRepository.findByUsername(authRequest.getUsername())
                 .filter(user -> passwordEncoder.matches(authRequest.getPassword(), user.getPassword()))
-                .map(user -> {
+                .<ResponseEntity<?>>map(user -> {
                     String token = tokenProvider.generateToken(user.getUsername(), user.getRole());
                     return ResponseEntity.ok(AuthResponse.builder()
                             .token(token)

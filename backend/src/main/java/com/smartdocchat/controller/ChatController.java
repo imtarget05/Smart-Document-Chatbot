@@ -16,6 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.security.Principal;
 import java.util.stream.Collectors;
 
@@ -34,7 +35,9 @@ public class ChatController {
                     request.getSessionId(),
                     request.getDocumentId(),
                     request.getDocumentIds(),
-                    request.getMessage()
+                    request.getMessage(),
+                    request.isDeepThinking(),
+                    request.isWebSearch()
             );
             return ResponseEntity.ok(convertToResponse(message));
         } catch (Exception e) {
@@ -51,7 +54,9 @@ public class ChatController {
                     request.getSessionId(),
                     request.getDocumentId(),
                     request.getDocumentIds(),
-                    request.getMessage()
+                    request.getMessage(),
+                    request.isDeepThinking(),
+                    request.isWebSearch()
             );
         } catch (Exception e) {
             log.error("Error starting chat stream", e);
@@ -88,6 +93,11 @@ public class ChatController {
         return ResponseEntity.ok("Chat history cleared");
     }
 
+    @GetMapping("/sessions")
+    public ResponseEntity<List<Map<String, Object>>> getSessions(Principal principal) {
+        return ResponseEntity.ok(chatService.getUniqueSessions(principal.getName()));
+    }
+
     // WebSocket endpoint for real-time chat
     @MessageMapping("/chat/send")
     @SendTo("/topic/messages")
@@ -98,7 +108,9 @@ public class ChatController {
                 request.getSessionId(),
                 request.getDocumentId(),
                 request.getDocumentIds(),
-                request.getMessage()
+                request.getMessage(),
+                request.isDeepThinking(),
+                request.isWebSearch()
         );
         return convertToResponse(message);
     }

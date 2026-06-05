@@ -4,7 +4,7 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.ChatMessageRepository;
 import com.smartdocchat.repository.DocumentRepository;
-import com.smartdocchat.util.OllamaConfig;
+import com.smartdocchat.util.LlmConfig;
 import com.smartdocchat.dto.RetrievedChunk;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ public class ChatServiceTest {
     private EmbeddingService embeddingService;
 
     @Mock
-    private OllamaConfig ollamaConfig;
+    private LlmConfig llmConfig;
 
     @Mock
     private RestTemplate restTemplate;
@@ -84,15 +84,15 @@ public class ChatServiceTest {
         when(documentRepository.findByIdAndOwnerUsername(docId, "alice")).thenReturn(Optional.of(doc));
         when(embeddingService.searchChunks(userMsg, "vector-it-security", 3)).thenReturn(chunks);
         
-        when(ollamaConfig.getChatModel()).thenReturn("deepseek-r1:1.5b");
-        when(ollamaConfig.getChatUrl()).thenReturn("http://ollama:11434/api/chat");
-        when(ollamaConfig.getTemperature()).thenReturn(0.3);
+        when(llmConfig.getChatModel()).thenReturn("deepseek-r1:1.5b");
+        when(llmConfig.getChatUrl()).thenReturn("http://llm:11434/api/chat");
+        when(llmConfig.getTemperature()).thenReturn(0.3);
 
         Map<String, Object> responseBody = Map.of("message", Map.of("content", "To reset your password, navigate to profile settings and click 'reset'."));
         ResponseEntity<Map> responseEntity = new ResponseEntity<>(responseBody, HttpStatus.OK);
 
         when(restTemplate.exchange(
-                eq("http://ollama:11434/api/chat"),
+                eq("http://llm:11434/api/chat"),
                 eq(HttpMethod.POST),
                 any(HttpEntity.class),
                 eq(Map.class)
@@ -112,7 +112,7 @@ public class ChatServiceTest {
         when(chatMessageRepository.save(any(ChatMessage.class))).thenReturn(savedMessage);
 
         // Act
-        ChatMessage result = chatService.processQuery("alice", sessionId, docId, null, userMsg);
+        ChatMessage result = chatService.processQuery("alice", sessionId, docId, null, userMsg, false, false);
 
         // Assert
         assertNotNull(result);

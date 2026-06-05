@@ -39,6 +39,8 @@ function ChatWindow({
   const [input, setInput] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'mindmap'>('chat');
+  const [isDeepThinking, setIsDeepThinking] = useState<boolean>(false);
+  const [isWebSearch, setIsWebSearch] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -134,6 +136,8 @@ function ChatWindow({
     const payload: Record<string, any> = {
       sessionId,
       message: textToSend,
+      deepThinking: isDeepThinking,
+      webSearch: isWebSearch,
     };
 
     if (chatMode === 'multi') {
@@ -458,7 +462,31 @@ function ChatWindow({
                   <div className="flex justify-start">
                     <div className="max-w-xs lg:max-w-xl bg-white border border-gray-200/80 text-gray-800 p-4 rounded-2xl rounded-bl-none shadow-sm shadow-gray-100/30">
                       <div className="text-sm leading-relaxed whitespace-pre-line font-medium text-gray-700">
-                        {msg.aiResponse || (
+                        {msg.aiResponse ? (
+                          <>
+                            {msg.aiResponse.includes('<think>') ? (
+                              <div className="space-y-3">
+                                <details className="mb-3 group bg-gray-50/80 border border-gray-200/50 rounded-xl overflow-hidden">
+                                  <summary className="cursor-pointer px-4 py-2.5 text-[10px] font-bold text-indigo-500 hover:bg-indigo-50/50 transition flex items-center gap-2 select-none">
+                                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                                    AI Thinking Process...
+                                  </summary>
+                                  <div className="px-4 pb-3 pt-1 text-[11px] text-gray-500 font-mono italic border-t border-gray-100/50 bg-white/40">
+                                    {msg.aiResponse.match(/<think>([\s\S]*?)<\/think>/)?.[1]?.trim() || 
+                                     msg.aiResponse.split('</think>')[0].replace('<think>', '').trim()}
+                                  </div>
+                                </details>
+                                <div className="leading-relaxed">
+                                  {msg.aiResponse.includes('</think>') 
+                                    ? msg.aiResponse.split('</think>')[1].trim() 
+                                    : 'Generating answer...'}
+                                </div>
+                              </div>
+                            ) : (
+                              msg.aiResponse
+                            )}
+                          </>
+                        ) : (
                           <div className="typing flex items-center gap-1 py-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce"></span>
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce delay-75"></span>
@@ -506,29 +534,57 @@ function ChatWindow({
 
           {/* Input Area */}
           <div className="border-t border-gray-200/80 p-4 bg-white shadow-lg">
-            <div className="flex gap-3 max-w-3xl mx-auto">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  chatMode === 'multi'
-                    ? "Ask a question synthesizing across selected documents..."
-                    : "Ask a question about the document... (Shift+Enter for new line)"
-                }
-                aria-label="Ask a question about the loaded documents"
-                className="flex-1 p-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium bg-gray-50/30"
-                rows={2}
-                disabled={loading}
-              />
-              <button
-                onClick={() => handleSendMessage()}
-                disabled={loading || !input.trim()}
-                aria-label="Send message"
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white px-5 rounded-xl transition duration-200 font-bold text-xs shadow-md shadow-indigo-100 hover:shadow-indigo-200 flex items-center justify-center flex-shrink-0"
-              >
-                Send
-              </button>
+            <div className="max-w-3xl mx-auto">
+              {/* Agent Mode Toggles */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setIsDeepThinking(!isDeepThinking)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all duration-200 border ${
+                    isDeepThinking 
+                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100' 
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}
+                >
+                  <span className={isDeepThinking ? 'animate-pulse' : ''}>🧠</span>
+                  DeepThinking {isDeepThinking ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  onClick={() => setIsWebSearch(!isWebSearch)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all duration-200 border ${
+                    isWebSearch 
+                      ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100' 
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600'
+                  }`}
+                >
+                  <span>🌐</span>
+                  Web Research {isWebSearch ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div className="flex gap-3">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    chatMode === 'multi'
+                      ? "Ask a question synthesizing across selected documents..."
+                      : "Ask a question about the document... (Shift+Enter for new line)"
+                  }
+                  aria-label="Ask a question about the loaded documents"
+                  className="flex-1 p-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium bg-gray-50/30"
+                  rows={2}
+                  disabled={loading}
+                />
+                <button
+                  onClick={() => handleSendMessage()}
+                  disabled={loading || !input.trim()}
+                  aria-label="Send message"
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white px-5 rounded-xl transition duration-200 font-bold text-xs shadow-md shadow-indigo-100 hover:shadow-indigo-200 flex items-center justify-center flex-shrink-0"
+                >
+                  Send
+                </button>
+              </div>
             </div>
           </div>
         </>

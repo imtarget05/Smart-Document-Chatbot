@@ -4,6 +4,7 @@ import DocumentUpload from './components/DocumentUpload';
 import ChatWindow from './components/ChatWindow';
 import DocumentList from './components/DocumentList';
 import ErrorBoundary from './components/ErrorBoundary';
+import AgentChat from './components/AgentChat';
 import { v4 as uuidv4 } from 'uuid';
 import { useQuery } from '@tanstack/react-query';
 
@@ -22,8 +23,14 @@ export interface Document {
   createdAt: string;
 }
 
+export interface ChatSession {
+  sessionId: string;
+  lastMessage: string;
+  createdAt: string;
+}
+
 function App() {
-  const [sessionId] = useState<string>(() => {
+  const [sessionId, setSessionId] = useState<string>(() => {
     let id = localStorage.getItem('sessionId');
     if (!id) {
       id = uuidv4();
@@ -50,6 +57,12 @@ function App() {
   const [chatMode, setChatMode] = useState<'single' | 'multi'>('single');
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
 
+  // Tab: 'classic' = existing SSE chat, 'agent' = LangGraph multi-agent
+  const [activeTab, setActiveTab] = useState<'classic' | 'agent'>('classic');
+
+  // Sidebar Sub-tab: 'documents' or 'history'
+  const [sidebarTab, setSidebarTab] = useState<'documents' | 'history'>('documents');
+
   // Fetch documents using TanStack Query
   const { data: documents = [], refetch: fetchDocuments } = useQuery<Document[]>({
     queryKey: ['documents', token],
@@ -71,6 +84,30 @@ function App() {
     },
     enabled: !!token,
   });
+
+  // Fetch chat sessions
+  const { data: sessions = [], refetch: fetchSessions } = useQuery<ChatSession[]>({
+    queryKey: ['chatSessions', token],
+    queryFn: async () => {
+      if (!token) return [];
+      const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch sessions');
+      return response.json();
+    },
+    enabled: !!token && sidebarTab === 'history',
+  });
+
+  const handleNewChat = () => {
+    const newId = uuidv4();
+    setSessionId(newId);
+    localStorage.setItem('sessionId', newId);
+    setSelectedDocument(null);
+    setSelectedDocumentIds([]);
+  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,23 +293,98 @@ function App() {
           </div>
         </div>
 
-        <DocumentUpload onDocumentUploaded={handleDocumentUploaded} />
+        <div className="p-3">
+          <button
+            onClick={handleNewChat}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2 mb-3"
+          >
+            <span>+</span> New Conversation
+          </button>
+
+          <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200/50">
+            <button
+              onClick={() => setSidebarTab('documents')}
+              className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                sidebarTab === 'documents' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              DOCUMENTS
+            </button>
+            <button
+              onClick={() => {
+                setSidebarTab('history');
+                fetchSessions();
+              }}
+              className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                sidebarTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              HISTORY
+            </button>
+          </div>
+        </div>
 
         <div className="flex-1 overflow-y-auto">
-          <DocumentList
-            documents={documents}
-            selectedDocument={selectedDocument}
-            onSelectDocument={(doc) => {
-              setSelectedDocument(doc);
-              setChatMode('single');
-            }}
-            onDocumentDeleted={handleDocumentDeleted}
-            chatMode={chatMode}
-            onToggleChatMode={handleToggleChatMode}
-            selectedDocumentIds={selectedDocumentIds}
-            onToggleDocumentSelect={handleToggleDocumentSelect}
-            onSelectAllDocuments={handleSelectAllDocuments}
-          />
+          {sidebarTab === 'documents' ? (
+            <>
+              <DocumentUpload onDocumentUploaded={handleDocumentUploaded} />
+              <DocumentList
+                documents={documents}
+                selectedDocument={selectedDocument}
+                onSelectDocument={(doc) => {
+                  setSelectedDocument(doc);
+                  setChatMode('single');
+                }}
+                onDocumentDeleted={handleDocumentDeleted}
+                chatMode={chatMode}
+                onToggleChatMode={handleToggleChatMode}
+                selectedDocumentIds={selectedDocumentIds}
+                onToggleDocumentSelect={handleToggleDocumentSelect}
+                onSelectAllDocuments={handleSelectAllDocuments}
+              />
+            </>
+          ) : (
+            <div className="p-3 space-y-2">
+              {sessions.length === 0 ? (
+                <div className="text-center py-10">
+                  <span className="text-3xl block mb-2">📥</span>
+                  <p className="text-xs text-gray-400 font-medium">No previous conversations yet.</p>
+                </div>
+              ) : (
+                sessions.map((s) => (
+                  <button
+                    key={s.sessionId}
+                    onClick={() => {
+                      setSessionId(s.sessionId);
+                      localStorage.setItem('sessionId', s.sessionId);
+                    }}
+                    className={`w-full text-left p-3 rounded-xl border transition-all duration-200 group ${
+                      sessionId === s.sessionId
+                        ? 'bg-indigo-50 border-indigo-200'
+                        : 'bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">
+                        {new Date(s.createdAt).toLocaleDateString()}
+                      </span>
+                      {sessionId === s.sessionId && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                      )}
+                    </div>
+                    <p className={`text-xs font-semibold truncate ${
+                      sessionId === s.sessionId ? 'text-indigo-700' : 'text-gray-700'
+                    }`}>
+                      {s.lastMessage || 'Empty conversation'}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-1 truncate opacity-60">
+                      ID: {s.sessionId.substring(0, 8)}...
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Logout Section */}
@@ -321,7 +433,58 @@ function App() {
 
         {/* Chat Content */}
         <ErrorBoundary>
-          {chatMode === 'multi' ? (
+          {/* ── Tab switcher ── */}
+          <div className="flex border-b border-gray-200 bg-white px-4">
+            <button
+              onClick={() => setActiveTab('classic')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'classic'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              💬 Classic Chat
+            </button>
+            <button
+              onClick={() => setActiveTab('agent')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'agent'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              🤖 Agent Chat
+            </button>
+          </div>
+
+          {(() => {
+            let agentDocIds: number[];
+            if (chatMode === 'multi') {
+              agentDocIds = selectedDocumentIds;
+            } else if (selectedDocument) {
+              agentDocIds = [selectedDocument.id];
+            } else {
+              agentDocIds = [];
+            }
+            if (activeTab === 'agent' && token) {
+              return (
+                <AgentChat
+                  token={token}
+                  sessionId={sessionId}
+                  documentIds={agentDocIds}
+                />
+              );
+            }
+            if (activeTab === 'agent') {
+              return (
+                <div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50">
+                  <p className="text-sm">Please log in to use Agent Chat.</p>
+                </div>
+              );
+            }
+            return null;
+          })()}
+          {activeTab === 'classic' && chatMode === 'multi' ? (
             selectedDocumentIds.length > 0 ? (
               <ChatWindow
                 sessionId={sessionId}

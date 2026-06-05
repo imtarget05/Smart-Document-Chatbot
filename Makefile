@@ -37,6 +37,12 @@ dev-backend: ## Run backend locally (requires dev-up)
 dev-frontend: ## Run frontend locally
 	cd frontend && npm run dev
 
+dev-agent: ## Run Python agent service locally (requires dev-up)
+	cd agent && uvicorn main:app --host 0.0.0.0 --port 9000 --reload
+
+dev-agent-install: ## Install Python agent dependencies
+	cd agent && pip install -r requirements.txt
+
 # ========================
 # Production Build & Deploy
 # ========================

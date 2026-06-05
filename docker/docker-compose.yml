@@ -1,13 +1,13 @@
 # ============================================
 # Smart Document Chatbot - Production Docker Compose
-# Usage: docker compose --env-file .env -f docker/docker-compose.yml up -d
+# Usage: docker compose -f docker/docker-compose.yml up -d
 # ============================================
 
 services:
   # --- PostgreSQL Database ---
   postgres:
     image: postgres:15-alpine
-    container_name: sdc-postgres
+    container_name: smart-document-chatbox-postgres
     restart: unless-stopped
     env_file:
       - ../.env
@@ -37,7 +37,7 @@ services:
   # --- Qdrant Vector Database ---
   qdrant:
     image: qdrant/qdrant:v1.7.4
-    container_name: sdc-qdrant
+    container_name: smart-document-chatbox-qdrant
     restart: unless-stopped
     env_file:
       - ../.env
@@ -65,7 +65,7 @@ services:
   # --- Local LLM & Embedding Engine (DeepSeek) ---
   llm:
     image: ollama/ollama:latest
-    container_name: sdc-llm
+    container_name: smart-document-chatbox-llm
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -77,19 +77,20 @@ services:
   # --- Automated DeepSeek Model Puller ---
   llm-model-puller:
     image: curlimages/curl:latest
-    container_name: sdc-llm-puller
+    container_name: smart-document-chatbox-llm-puller
     depends_on:
       - llm
     networks:
       - app-network
     entrypoint: [ "sh", "-c", "until curl -s http://llm:11434/api/tags >/dev/null; do sleep 2; done; echo 'Pulling DeepSeek-R1...'; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://llm:11434/api/pull; echo 'Pulling nomic-embed-text...'; curl -d '{\"name\": \"nomic-embed-text\"}' http://llm:11434/api/pull; echo 'All local models pulled successfully!'" ]
 
-  # --- Spring Boot Backend ---
-  backend:
+  # --- Smart Document API (Spring Boot Backend) ---
+  smart-document:
     build:
       context: ..
       dockerfile: docker/Dockerfile.backend
-    container_name: sdc-backend
+    image: smart-document:latest
+    container_name: smart-document-chatbox-backend
     restart: unless-stopped
     env_file:
       - ../.env
@@ -111,11 +112,12 @@ services:
       # JVM
       JAVA_OPTS: "${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}"
       # Spring profile
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
-      JWT_SECRET: ${JWT_SECRET:-VGhpcy1pcy1hLWxvY2FsLWRldmVsb3BtZW50LWp3dC1zZWNyZXQtMzItYnl0ZXMh}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-development-service-token-change-me}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+      JWT_SECRET: ${JWT_SECRET:-NuPA39HyyLKexZXkcFoNHahCa4kPNVefY8lr5/e/kM8=}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-afa42215985ef50921fecbf8d9d15fa6c04fa6333bdec606556e06d56aecc96b}
       AIRFLOW_USERNAME: ${AIRFLOW_USERNAME:-admin}
       AIRFLOW_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
+      AGENT_SERVICE_URL: ${AGENT_SERVICE_URL:-http://agent:9000}
       # Logging
       LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
       LOGGING_LEVEL_COM_SMARTDOCCHAT: ${LOGGING_LEVEL_COM_SMARTDOCCHAT:-DEBUG}
@@ -132,12 +134,15 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
-      ollama:
+      llm:
         condition: service_started
     volumes:
       - uploads_data:/app/uploads
     networks:
-      - app-network
+      app-network:
+        aliases:
+          - backend
+          - smart-document
     deploy:
       resources:
         limits:
@@ -151,14 +156,14 @@ services:
       dockerfile: docker/Dockerfile.frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
-    container_name: sdc-frontend
+    container_name: smart-document-chatbox-frontend
     restart: unless-stopped
     env_file:
       - ../.env
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      backend:
+      smart-document:
         condition: service_healthy
     networks:
       - app-network
@@ -171,7 +176,7 @@ services:
   # --- Prometheus (Monitoring) ---
   prometheus:
     image: prom/prometheus:v2.45.0
-    container_name: sdc-prometheus
+    container_name: smart-document-chatbox-prometheus
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -181,13 +186,13 @@ services:
     networks:
       - app-network
     depends_on:
-      backend:
+      smart-document:
         condition: service_healthy
 
   # --- Grafana (Dashboard) ---
   grafana:
     image: grafana/grafana:10.0.3
-    container_name: sdc-grafana
+    container_name: smart-document-chatbox-grafana
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -201,6 +206,67 @@ services:
     depends_on:
       - prometheus
 
+  # --- AI Agent Automation Service (LangGraph multi-agent orchestration) ---
+  agent:
+    build:
+      context: ../agent
+      dockerfile: Dockerfile
+    image: smart-doc-agent:latest
+    container_name: smart-document-chatbox-agent
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-afa42215985ef50921fecbf8d9d15fa6c04fa6333bdec606556e06d56aecc96b}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:11434}
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-deepseek-r1:1.5b}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-qdrant_key_123}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-smart_doc_chatbot}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      NOTION_API_TOKEN: ${NOTION_API_TOKEN:-}
+      REPORT_OUTPUT_DIR: /app/reports
+    ports:
+      - "${AGENT_PORT:-9000}:9000"
+    volumes:
+      - agent_reports:/app/reports
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      llm:
+        condition: service_started
+    networks:
+      app-network:
+        aliases:
+          - agent
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
 volumes:
   postgres_data:
     driver: local
@@ -213,6 +279,8 @@ volumes:
   grafana_data:
     driver: local
   ollama_data:
+    driver: local
+  agent_reports:
     driver: local
 
 networks:

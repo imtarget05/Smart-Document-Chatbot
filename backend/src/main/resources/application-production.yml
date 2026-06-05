@@ -21,3 +21,8 @@ logging:
     com.smartdocchat: INFO
     org.springframework: WARN
     org.hibernate: WARN
+
+# In production Docker network, agent service is reachable by container name
+agent:
+  service:
+    url: ${AGENT_SERVICE_URL:http://agent:9000}

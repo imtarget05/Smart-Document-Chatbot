@@ -3,7 +3,7 @@ package com.smartdocchat.service;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.repository.DocumentRepository;
 import com.smartdocchat.util.DocumentParser;
-import com.smartdocchat.util.OllamaConfig;
+import com.smartdocchat.util.LlmConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,7 +25,7 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentParser documentParser;
     private final EmbeddingService embeddingService;
-    private final OllamaConfig ollamaConfig;
+    private final LlmConfig llmConfig;
     private final RestTemplate restTemplate;
 
     @org.springframework.beans.factory.annotation.Value("${airflow.enabled:false}")
@@ -223,7 +223,7 @@ public class DocumentService {
             ));
 
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", ollamaConfig.getChatModel());
+            requestBody.put("model", llmConfig.getChatModel());
             requestBody.put("messages", messages);
             requestBody.put("options", Map.of("temperature", 0.3, "num_predict", 1000));
             requestBody.put("stream", false);
@@ -231,7 +231,7 @@ public class DocumentService {
             org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(requestBody, headers);
 
             org.springframework.http.ResponseEntity<Map> response = restTemplate.exchange(
-                    ollamaConfig.getChatUrl(),
+                    llmConfig.getChatUrl(),
                     org.springframework.http.HttpMethod.POST,
                     entity,
                     Map.class
@@ -240,11 +240,7 @@ public class DocumentService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Map<String, String> message = (Map<String, String>) response.getBody().get("message");
                 if (message != null) {
-                    String jsonString = message.get("content");
-                    // Clean markdown formatting if present
-                    if (jsonString.contains("```")) {
-                        jsonString = jsonString.replaceAll("```json|```", "").trim();
-                    }
+                    String jsonString = cleanJsonContent(message.get("content"));
 
                     com.fasterxml.jackson.databind.JsonNode rootNode = objectMapper.readTree(jsonString);
                     String summary = rootNode.path("summary").asText();
@@ -314,7 +310,7 @@ public class DocumentService {
             ));
 
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", ollamaConfig.getChatModel());
+            requestBody.put("model", llmConfig.getChatModel());
             requestBody.put("messages", messages);
             requestBody.put("options", Map.of("temperature", 0.3, "num_predict", 1500));
             requestBody.put("stream", false);
@@ -322,7 +318,7 @@ public class DocumentService {
             org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(requestBody, headers);
 
             org.springframework.http.ResponseEntity<Map> response = restTemplate.exchange(
-                    ollamaConfig.getChatUrl(),
+                    llmConfig.getChatUrl(),
                     org.springframework.http.HttpMethod.POST,
                     entity,
                     Map.class
@@ -331,10 +327,7 @@ public class DocumentService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Map<String, String> message = (Map<String, String>) response.getBody().get("message");
                 if (message != null) {
-                    String jsonString = message.get("content");
-                    if (jsonString.contains("```")) {
-                        jsonString = jsonString.replaceAll("```json|```", "").trim();
-                    }
+                    String jsonString = cleanJsonContent(message.get("content"));
 
                     // Validate JSON parsing
                     objectMapper.readTree(jsonString);
@@ -351,6 +344,32 @@ public class DocumentService {
             log.error("Error generating mind map for document ID: {}", id, e);
         }
         return null;
+    }
+
+    /**
+     * Cleans LLM response by removing reasoning tags (<think>...</think>) and markdown blocks.
+     */
+    private String cleanJsonContent(String content) {
+        if (content == null || content.isBlank()) return "{}";
+        
+        // Remove <think>...</think> blocks (used by reasoning models like DeepSeek)
+        String cleaned = content.replaceAll("(?s)<think>.*?</think>", "").trim();
+        
+        // Remove markdown JSON code blocks (```json ... ```)
+        if (cleaned.contains("```")) {
+            cleaned = cleaned.replaceAll("(?s)```json\\s*", "");
+            cleaned = cleaned.replaceAll("(?s)```\\s*", "");
+        }
+        
+        // Find the first '{' and last '}' to isolate the JSON object
+        int firstBrace = cleaned.indexOf('{');
+        int lastBrace = cleaned.lastIndexOf('}');
+        
+        if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+            return cleaned.substring(firstBrace, lastBrace + 1);
+        }
+        
+        return cleaned.trim();
     }
 
     public List<Document> getAllDocuments(String ownerUsername) {

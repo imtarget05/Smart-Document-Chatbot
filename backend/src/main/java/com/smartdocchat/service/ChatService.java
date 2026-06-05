@@ -43,7 +43,7 @@ public class ChatService {
     private String tavilyApiKey;
 
     public ChatMessage processQuery(String ownerUsername, String sessionId, Long documentId, List<Long> documentIds,
-                                    String userMessage) {
+                                    String userMessage, boolean forceDeepThinking, boolean forceWebSearch) {
         ragMetrics.request("sync");
         List<Long> finalDocIds = new ArrayList<>();
         if (documentIds != null && !documentIds.isEmpty()) {
@@ -80,7 +80,10 @@ public class ChatService {
         double finalMaxScore = initialMaxScore;
         ragMetrics.confidence(initialMaxScore);
 
-        if (initialMaxScore >= 0.45) {
+        // Decide flow based on confidence OR explicit user flags
+        boolean useAgenticLoop = (initialMaxScore < 0.45) || forceDeepThinking || forceWebSearch;
+
+        if (!useAgenticLoop) {
             // Standard RAG flow: High Confidence
             List<String> contextList = new ArrayList<>();
             for (RetrievedChunk chunk : initialChunks) {
@@ -96,10 +99,10 @@ public class ChatService {
             logToMLflow(userMessage, aiResponse, latencyMs);
         } else {
             ragMetrics.fallback("corrective_retrieval");
-            // Agentic CRAG Loop: Low Confidence (< 0.45)
-            log.info("RAG confidence is low ({} < 0.45). Activating Agentic Loop...", initialMaxScore);
+            // Agentic CRAG Loop: Activated by low confidence or user request
+            log.info("Agentic Loop activated. Confidence: {}, DeepThinking: {}, WebSearch: {}", initialMaxScore, forceDeepThinking, forceWebSearch);
 
-            // Step 1: Query Reformulation via DeepSeek R1
+            // Step 1: Query Reformulation
             List<String> queryVariations = reformulateQuery(userMessage);
             List<String> allQueries = new ArrayList<>();
             allQueries.add(userMessage);
@@ -129,7 +132,7 @@ public class ChatService {
                 }
             }
 
-            // Wait for parallel retrievals to complete
+            // Wait for parallel retrievals
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
             // Step 3: Deduplicate & Rerank
@@ -151,8 +154,32 @@ public class ChatService {
             finalMaxScore = agenticMaxScore;
 
             long startTime = System.currentTimeMillis();
-            if (agenticMaxScore >= 0.45) {
-                // Agentic Synthesis (Confidence successfully restored!)
+            
+            // If user explicitly asked for WebSearch, or if RAG still fails
+            if (forceWebSearch || (agenticMaxScore < 0.45)) {
+                log.info("Performing Web Search (Forced: {} or Low Score: {})", forceWebSearch, agenticMaxScore);
+                List<String> webContexts = searchWeb(userMessage);
+
+                if (!webContexts.isEmpty()) {
+                    ragMetrics.fallback("web_search");
+                    sourceChunks = String.join("\n---\n", webContexts);
+                    String prompt = buildPrompt(userMessage, webContexts);
+                    if (forceDeepThinking) {
+                        prompt = "DIRECTIVE: Perform deep thinking and critical analysis on the following search results.\n\n" + prompt;
+                    }
+                    String llmAnswer = callLLM(prompt);
+                    aiResponse = "🌐 [Web Research Mode Activated]\n\n" + llmAnswer;
+                } else {
+                    ragMetrics.fallback("general_knowledge");
+                    String fallbackPrompt = (forceDeepThinking ? "DIRECTIVE: Perform DEEP THINKING. " : "") + 
+                            "The user is asking a question that is NOT covered by the loaded documents. Please use your internal knowledge to answer.\n\n"
+                            + "User Question: " + userMessage;
+
+                    String llmAnswer = callLLM(fallbackPrompt);
+                    aiResponse = "⚠️ [General Knowledge Mode]\n\n" + llmAnswer;
+                }
+            } else {
+                // Agentic Synthesis (Confidence restored or forced DeepThinking)
                 List<RetrievedChunk> topChunks = rerankedChunks.subList(0, Math.min(rerankedChunks.size(), 4));
                 List<String> contextList = new ArrayList<>();
                 for (RetrievedChunk chunk : topChunks) {
@@ -161,34 +188,18 @@ public class ChatService {
                 }
                 sourceChunks = String.join("\n---\n", contextList);
                 String prompt = buildPrompt(userMessage, contextList);
+                if (forceDeepThinking) {
+                    prompt = "DIRECTIVE: Analyze the context with extreme depth. Perform multi-step reasoning before answering.\n\n" + prompt;
+                }
 
                 String llmAnswer = callLLM(prompt);
-                aiResponse = "🤖 [Agentic Workflow Activated: Query Reformulation & Parallel retrieval executed because initial RAG confidence was "
-                        + String.format(Locale.US, "%.1f", initialMaxScore * 100) + "%]\n\n" + llmAnswer;
-            } else {
-                // Deep Reasoning Fallback with Web Search mitigation
-                log.info("Agentic re-retrieval yielded low score ({} < 0.45). Attempting Web Search Fallback...", agenticMaxScore);
-                List<String> webContexts = searchWeb(userMessage);
-
-                if (!webContexts.isEmpty()) {
-                    ragMetrics.fallback("web_search");
-                    sourceChunks = String.join("\n---\n", webContexts);
-                    String prompt = buildPrompt(userMessage, webContexts);
-                    String llmAnswer = callLLM(prompt);
-                    aiResponse = "🌐 [Độ tin cậy tài liệu thấp. Đang bổ sung ngữ cảnh trực tuyến từ Web Search...]\n\n" + llmAnswer;
-                } else {
-                    ragMetrics.fallback("general_knowledge");
-                    String fallbackPrompt = "The user is asking a question that is NOT covered by the loaded documents (retrieval confidence is too low, max score: "
-                            + agenticMaxScore + "). Please use your deep reasoning, internal knowledge, and general knowledge to answer the question as comprehensively and accurately as possible.\n\n"
-                            + "User Question: " + userMessage;
-
-                    String llmAnswer = callLLM(fallbackPrompt);
-                    aiResponse = "⚠️ Độ tin cậy thấp (RAG Confidence < 45%). Đang kích hoạt chế độ Suy Luận Sâu của Agent...\n\n" + llmAnswer;
-                }
+                String modeLabel = forceDeepThinking ? "🧠 [DeepThinking Mode]" : "🤖 [Agentic Optimization]";
+                aiResponse = modeLabel + "\n\n" + llmAnswer;
             }
             long latencyMs = System.currentTimeMillis() - startTime;
             logToMLflow(userMessage, aiResponse, latencyMs);
         }
+
 
         // Convert document IDs to comma-separated string for DB
         String docIdsStr = null;
@@ -263,7 +274,7 @@ public class ChatService {
 
                 List<Map<String, String>> tags = new ArrayList<>();
                 tags.add(Map.of("key", "user_query", "value", userMessage.substring(0, Math.min(userMessage.length(), 250))));
-                tags.add(Map.of("key", "llm_model", "value", ollamaConfig.getChatModel()));
+                tags.add(Map.of("key", "llm_model", "value", llmConfig.getChatModel()));
                 runBody.put("tags", tags);
 
                 org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(runBody, headers);
@@ -283,8 +294,8 @@ public class ChatService {
                             String runId = (String) info.get("run_id");
 
                             // Step 2: Log parameters (model_name, temperature)
-                            logParameter(mlflowUrl, runId, "model_name", ollamaConfig.getChatModel());
-                            logParameter(mlflowUrl, runId, "temperature", String.valueOf(ollamaConfig.getTemperature()));
+                            logParameter(mlflowUrl, runId, "model_name", llmConfig.getChatModel());
+                            logParameter(mlflowUrl, runId, "temperature", String.valueOf(llmConfig.getTemperature()));
                             logParameter(mlflowUrl, runId, "prompt_length", String.valueOf(userMessage.length()));
 
                             // Step 3: Log metrics (latency_ms, response_length)
@@ -368,15 +379,18 @@ public class ChatService {
     @SuppressWarnings("unchecked")
     private String callLLM(String prompt) {
         String result = null;
-        for (int attempt = 1; attempt <= llmMaxAttempts; attempt++) {
+        int maxAttempts = llmConfig.getMaxAttempts();
+        long backoff = llmConfig.getRetryBackoffMs();
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             result = callLLMOnce(prompt);
             if (!result.startsWith("Sorry, the language model is temporarily unavailable.")
                     && !result.startsWith("Sorry, I could not generate a response.")) {
                 return result;
             }
-            if (attempt < llmMaxAttempts) {
+            if (attempt < maxAttempts) {
                 try {
-                    Thread.sleep(llmRetryBackoffMs * attempt);
+                    Thread.sleep(backoff * attempt);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     return result;
@@ -573,7 +587,8 @@ public class ChatService {
     }
 
     public SseEmitter processQueryStream(String ownerUsername, String sessionId, Long documentId,
-                                         List<Long> documentIds, String userMessage) {
+                                         List<Long> documentIds, String userMessage,
+                                         boolean forceDeepThinking, boolean forceWebSearch) {
         SseEmitter emitter = new SseEmitter(180000L);
         ragMetrics.request("stream");
 
@@ -615,7 +630,9 @@ public class ChatService {
                 String prefix = "";
                 ragMetrics.confidence(initialMaxScore);
 
-                if (initialMaxScore >= 0.45) {
+                boolean useAgenticLoop = (initialMaxScore < 0.45) || forceDeepThinking || forceWebSearch;
+
+                if (!useAgenticLoop) {
                     // Standard RAG flow: High Confidence
                     List<String> contextList = new ArrayList<>();
                     for (RetrievedChunk chunk : initialChunks) {
@@ -626,8 +643,8 @@ public class ChatService {
                     prompt = buildPrompt(userMessage, contextList);
                 } else {
                     ragMetrics.fallback("corrective_retrieval");
-                    // Agentic CRAG Loop: Low Confidence (< 0.45)
-                    log.info("RAG confidence is low ({} < 0.45). Activating Agentic Loop...", initialMaxScore);
+                    // Agentic CRAG Loop: Activated
+                    log.info("Stream Agentic Loop activated. Confidence: {}, Deep: {}, Web: {}", initialMaxScore, forceDeepThinking, forceWebSearch);
 
                     // Step 1: Query Reformulation
                     List<String> queryVariations = reformulateQuery(userMessage);
@@ -680,7 +697,27 @@ public class ChatService {
                     }
                     finalMaxScore = agenticMaxScore;
 
-                    if (agenticMaxScore >= 0.45) {
+                    if (forceWebSearch || (agenticMaxScore < 0.45)) {
+                        // Deep Reasoning Fallback with Web Search
+                        log.info("Stream Web Search (Forced: {} or Score: {})", forceWebSearch, agenticMaxScore);
+                        List<String> webContexts = searchWeb(userMessage);
+
+                        if (!webContexts.isEmpty()) {
+                            ragMetrics.fallback("web_search");
+                            sourceChunks = String.join("\n---\n", webContexts);
+                            prompt = buildPrompt(userMessage, webContexts);
+                            if (forceDeepThinking) {
+                                prompt = "DIRECTIVE: Deep Thinking Analysis.\n" + prompt;
+                            }
+                            prefix = "🌐 [Web Research Mode Activated]\n\n";
+                        } else {
+                            ragMetrics.fallback("general_knowledge");
+                            prompt = (forceDeepThinking ? "DIRECTIVE: DEEP THINKING. " : "") + 
+                                    "The user is asking a question that is NOT covered by the loaded documents. Use internal knowledge.\n\n"
+                                    + "User Question: " + userMessage;
+                            prefix = "⚠️ [General Knowledge Mode]\n\n";
+                        }
+                    } else {
                         // Agentic Synthesis
                         List<RetrievedChunk> topChunks = rerankedChunks.subList(0, Math.min(rerankedChunks.size(), 4));
                         List<String> contextList = new ArrayList<>();
@@ -690,27 +727,13 @@ public class ChatService {
                         }
                         sourceChunks = String.join("\n---\n", contextList);
                         prompt = buildPrompt(userMessage, contextList);
-                        prefix = "🤖 [Agentic Workflow Activated: Query Reformulation & Parallel retrieval executed because initial RAG confidence was "
-                                + String.format(Locale.US, "%.1f", initialMaxScore * 100) + "%]\n\n";
-                    } else {
-                        // Deep Reasoning Fallback with Web Search
-                        log.info("Agentic re-retrieval yielded low score ({} < 0.45). Attempting Web Search Fallback...", agenticMaxScore);
-                        List<String> webContexts = searchWeb(userMessage);
-
-                        if (!webContexts.isEmpty()) {
-                            ragMetrics.fallback("web_search");
-                            sourceChunks = String.join("\n---\n", webContexts);
-                            prompt = buildPrompt(userMessage, webContexts);
-                            prefix = "🌐 [Độ tin cậy tài liệu thấp. Đang bổ sung ngữ cảnh trực tuyến từ Web Search...]\n\n";
-                        } else {
-                            ragMetrics.fallback("general_knowledge");
-                            prompt = "The user is asking a question that is NOT covered by the loaded documents (retrieval confidence is too low, max score: "
-                                    + agenticMaxScore + "). Please use your deep reasoning, internal knowledge, and general knowledge to answer the question as comprehensively and accurately as possible.\n\n"
-                                    + "User Question: " + userMessage;
-                            prefix = "⚠️ Độ tin cậy thấp (RAG Confidence < 45%). Đang kích hoạt chế độ Suy Luận Sâu của Agent...\n\n";
+                        if (forceDeepThinking) {
+                            prompt = "DIRECTIVE: Perform extreme deep reasoning on this context.\n\n" + prompt;
                         }
+                        prefix = (forceDeepThinking ? "🧠 [DeepThinking Mode]" : "🤖 [Agentic Optimization]") + "\n\n";
                     }
                 }
+
 
                 // Convert document IDs to comma-separated string for DB
                 String docIdsStr = null;
@@ -804,5 +827,20 @@ public class ChatService {
     public void clearChatHistory(String ownerUsername, String sessionId) {
         List<ChatMessage> messages = getChatHistory(ownerUsername, sessionId);
         chatMessageRepository.deleteAll(messages);
+    }
+
+    public List<Map<String, Object>> getUniqueSessions(String ownerUsername) {
+        List<Object[]> rows = chatMessageRepository.findUniqueSessionsByOwner(ownerUsername);
+        List<Map<String, Object>> sessions = new ArrayList<>();
+        for (Object[] row : rows) {
+            Map<String, Object> session = new HashMap<>();
+            session.put("sessionId", row[0]);
+            session.put("lastMessage", row[1]);
+            session.put("createdAt", row[2]);
+            sessions.add(session);
+        }
+        // Sort by date descending
+        sessions.sort((a, b) -> ((java.util.Date) b.get("createdAt")).compareTo((java.util.Date) a.get("createdAt")));
+        return sessions;
     }
 }

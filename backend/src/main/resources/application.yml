@@ -70,6 +70,11 @@ airflow:
   url: ${AIRFLOW_URL:http://airflow:8080/api/v1}
   username: ${AIRFLOW_USERNAME:admin}
   password: ${AIRFLOW_PASSWORD:admin}
+
+# Python Agent Service (LangGraph multi-agent orchestration)
+agent:
+  service:
+    url: ${AGENT_SERVICE_URL:http://localhost:9000}
 external-services:
   connect-timeout-ms: ${EXTERNAL_CONNECT_TIMEOUT_MS:3000}
   read-timeout-ms: ${EXTERNAL_READ_TIMEOUT_MS:60000}
