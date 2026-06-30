@@ -8,12 +8,11 @@ Required env vars:
   GOOGLE_TOKEN_JSON        – path to token.json (auto-created on first auth)
 """
 
-import io
-import json
 import logging
 import os
 from typing import Any, Dict, List
 
+from ingestion.pipeline import ConnectorIngestionPipeline
 from settings import settings
 
 logger = logging.getLogger(__name__)
@@ -23,6 +22,10 @@ SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 class GoogleDriveConnector:
     async def ingest(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        documents = await self.fetch_documents(user_id=user_id, params=params)
+        return await ConnectorIngestionPipeline().ingest_documents(user_id, documents)
+
+    async def fetch_documents(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         params:
           folder_id (optional) – Drive folder ID to pull from
@@ -68,14 +71,22 @@ class GoogleDriveConnector:
             )
 
         files = await loop.run_in_executor(None, _list_files)
-        ingested = []
+        documents = []
         for f in files[:max_files]:
             text = await self._download_text(service, f)
             if text:
-                ingested.append({"file_id": f["id"], "file_name": f["name"], "text_length": len(text)})
+                documents.append({
+                    "source": "google_drive",
+                    "external_id": f["id"],
+                    "title": f["name"],
+                    "text": text,
+                    "metadata": {
+                        "mime_type": f.get("mimeType", ""),
+                    },
+                })
 
-        logger.info("Google Drive: ingested %d files for user %s", len(ingested), user_id)
-        return ingested
+        logger.info("Google Drive: pulled %d files for user %s", len(documents), user_id)
+        return documents
 
     def _build_service(self):
         from google.oauth2.credentials import Credentials

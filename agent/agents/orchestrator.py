@@ -17,13 +17,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from llm_factory import LLMFactory
 from graph.state import AgentState
-from settings import settings
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are an intelligent orchestrator for a document Q&A platform.
 Analyze the user's query and output EXACTLY one JSON object (no markdown) with two keys:
-  "intent": one of ["rag", "report", "compare", "research", "action"]
+  "intent": one of ["rag", "report", "compare", "research", "action", "engineering"]
   "plan":   a short 1-sentence description of what needs to be done
 
 Mapping guide:
@@ -34,6 +33,8 @@ Mapping guide:
 - action   → perform an action (send email, create Jira ticket, trigger webhook)
 
 Examples:
+  Engineering analysis requests include test reports, failures, root-cause analysis,
+  corrective actions, and 8D reports. Route those to {"intent":"engineering"}.
   User: "What does the contract say about payment terms?" → {"intent":"rag","plan":"Retrieve payment term clauses from documents."}
   User: "Generate a PDF summary of document 3"           → {"intent":"report","plan":"Build a PDF report from document 3."}
   User: "Compare documents 1 and 2 on pricing"           → {"intent":"compare","plan":"Compare pricing sections of doc 1 and doc 2."}
@@ -91,6 +92,8 @@ class OrchestratorAgent:
     @staticmethod
     def _heuristic_intent(query: str):
         q = query.lower()
+        if any(k in q for k in ("8d", "root cause", "corrective action", "failure", "test report", "engineering report")):
+            return "engineering", "Analyze engineering evidence and produce an 8D-style report."
         if any(k in q for k in ("report", "pdf", "summary", "tóm tắt", "báo cáo", "xuất")):
             return "report", "Generate a report from documents."
         if any(k in q for k in ("compare", "so sánh", "difference", "diff", "vs")):

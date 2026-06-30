@@ -12,6 +12,7 @@ import logging
 import base64
 from typing import Any, Dict, List
 
+from ingestion.pipeline import ConnectorIngestionPipeline
 from settings import settings
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,10 @@ SCOPES = [
 
 class GmailConnector:
     async def ingest(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        documents = await self.fetch_documents(user_id=user_id, params=params)
+        return await ConnectorIngestionPipeline().ingest_documents(user_id, documents)
+
+    async def fetch_documents(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         params:
           gmail_query   – Gmail search query (e.g. "from:boss@co.com subject:report")
@@ -55,15 +60,24 @@ class GmailConnector:
             )
 
         messages = await loop.run_in_executor(None, _list_messages)
-        ingested  = []
+        documents = []
 
         for msg_ref in messages[:max_emails]:
             text, subject = await self._get_email_text(service, msg_ref["id"], loop)
             if text:
-                ingested.append({"message_id": msg_ref["id"], "subject": subject, "text_length": len(text)})
+                documents.append({
+                    "source": "gmail",
+                    "external_id": msg_ref["id"],
+                    "title": subject or f"Gmail message {msg_ref['id']}",
+                    "text": text,
+                    "metadata": {
+                        "subject": subject,
+                        "gmail_query": gmail_query,
+                    },
+                })
 
-        logger.info("Gmail: ingested %d emails for user %s", len(ingested), user_id)
-        return ingested
+        logger.info("Gmail: pulled %d emails for user %s", len(documents), user_id)
+        return documents
 
     def _build_service(self):
         import os

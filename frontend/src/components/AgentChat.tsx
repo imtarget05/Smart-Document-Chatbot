@@ -15,7 +15,7 @@ import { useMutation } from '@tanstack/react-query';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080/api';
 
-type AgentMode = 'auto' | 'rag' | 'report' | 'compare' | 'research' | 'action';
+type AgentMode = 'auto' | 'rag' | 'report' | 'compare' | 'research' | 'action' | 'engineering';
 
 interface Source {
   document_name: string;
@@ -58,6 +58,7 @@ const AGENT_MODE_LABELS: Record<AgentMode, string> = {
   compare:  '⚖️ Compare',
   research: '🔍 Research',
   action:   '⚡ Action',
+  engineering: 'Engineering',
 };
 
 const AGENT_MODE_DESCRIPTIONS: Record<AgentMode, string> = {
@@ -67,6 +68,7 @@ const AGENT_MODE_DESCRIPTIONS: Record<AgentMode, string> = {
   compare:  'So sánh nhiều tài liệu',
   research: 'Tìm kiếm thông tin trên web',
   action:   'Thực thi hành động (email, Jira…)',
+  engineering: 'Analyze test reports, failures, root cause, corrective actions, and 8D reports',
 };
 
 export default function AgentChat({ token, sessionId, documentIds }: Props) {
@@ -149,6 +151,7 @@ export default function AgentChat({ token, sessionId, documentIds }: Props) {
     compare:   'bg-orange-100 text-orange-800',
     research:  'bg-green-100 text-green-800',
     action:    'bg-red-100 text-red-800',
+    engineering: 'bg-cyan-100 text-cyan-800',
     default:   'bg-gray-100 text-gray-800',
   };
 

@@ -24,7 +24,6 @@ spec:
         app: backend
         app.kubernetes.io/name: backend
       annotations:
-        # Configure a ServiceMonitor with INTERNAL_SERVICE_TOKEN before enabling scraping.
         prometheus.io/scrape: "false"
         prometheus.io/port: "8080"
         prometheus.io/path: "/api/actuator/prometheus"
@@ -77,15 +76,13 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 12
+          # No volumeMounts needed:
+          # - uploads → Supabase Storage (cloud, no PVC)
+          # - logs    → stdout/stderr (captured by K8s logging)
           volumeMounts:
-            - name: uploads
-              mountPath: /app/uploads
             - name: logs
               mountPath: /app/logs
       volumes:
-        - name: uploads
-          persistentVolumeClaim:
-            claimName: uploads-pvc
         - name: logs
           emptyDir: {}
       topologySpreadConstraints:

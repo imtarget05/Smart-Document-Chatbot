@@ -12,8 +12,8 @@ QDRANT_URL = "http://qdrant:6333"
 
 # Default API URLs for LLM inside Docker
 # Overridden by environment variables or configuration config
-OLLAMA_URL = os.getenv("LLM_BASE_URL", os.getenv("AIRFLOW_OLLAMA_URL", "http://llm:11434"))
-OLLAMA_CHAT_MODEL = os.getenv("LLM_CHAT_MODEL", os.getenv("OLLAMA_CHAT_MODEL", "deepseek-r1:1.5b"))
+OLLAMA_URL = os.getenv("LLM_BASE_URL", os.getenv("AIRFLOW_OLLAMA_URL", "http://llm-router:8000"))
+OLLAMA_CHAT_MODEL = os.getenv("LLM_CHAT_MODEL", os.getenv("OLLAMA_CHAT_MODEL", "llama3.2:3b"))
 OLLAMA_EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"))
 INTERNAL_SERVICE_TOKEN = os.environ["INTERNAL_SERVICE_TOKEN"]
 CALLBACK_HEADERS = {"X-Internal-Token": INTERNAL_SERVICE_TOKEN}
@@ -117,7 +117,7 @@ Return your response strictly in the following JSON format without any markdown 
 Document Text:
 {preview_text}"""
 
-    # Call Ollama local DeepSeek completion endpoint
+    # Call the Ollama-compatible LLM Router endpoint.
     url = f"{OLLAMA_URL}/api/chat"
     payload = {
         "model": OLLAMA_CHAT_MODEL,

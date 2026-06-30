@@ -48,15 +48,17 @@ RUN QDRANT_VERSION="v1.7.4" && \
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # 5. Setup Application Directories
-RUN mkdir -p /app/backend /app/agent /app/frontend /var/lib/qdrant/storage /var/run/postgresql
+RUN mkdir -p /app/backend /app/agent /app/llm-router /app/frontend /var/lib/qdrant/storage /var/run/postgresql
 
 # 6. Copy Build Artifacts
 COPY --from=backend-builder /build/target/*.jar /app/backend/app.jar
 COPY --from=frontend-builder /build/dist /usr/share/nginx/html
 COPY agent /app/agent
+COPY llm-router /app/llm-router
 
 # 7. Setup Agent Environment
 RUN pip3 install --no-cache-dir -r /app/agent/requirements.txt
+RUN pip3 install --no-cache-dir -r /app/llm-router/requirements.txt
 
 # 8. Copy Configurations
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -71,10 +73,12 @@ ENV POSTGRES_HOST=localhost
 ENV POSTGRES_PORT=5432
 ENV QDRANT_HOST=localhost
 ENV QDRANT_PORT=6333
-ENV LLM_BASE_URL=http://localhost:11434
+ENV LOCAL_LLM_BASE_URL=http://localhost:11434
+ENV LOCAL_LLM_MODEL=llama3.2:3b
+ENV LLM_BASE_URL=http://localhost:8001
 
 # Expose ports
-EXPOSE 80 8080 9000 6333 11434
+EXPOSE 80 8080 8001 9000 6333 11434
 
 # Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]

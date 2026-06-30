@@ -17,6 +17,7 @@ class AgentState(TypedDict):
 
     # ── Conversation messages (append-only via operator.add) ──────────────
     messages: Annotated[List[BaseMessage], operator.add]
+    long_term_history: List[Dict[str, Any]]
 
     # ── Retrieval state (Phase 1 – enhanced RAG) ──────────────────────────
     retrieved_chunks: List[Dict[str, Any]]
@@ -25,7 +26,8 @@ class AgentState(TypedDict):
 
     # ── Orchestration (Phase 2) ───────────────────────────────────────────
     agent_plan: str          # natural-language plan from orchestrator
-    agent_type: str          # "rag" | "report" | "compare" | "research" | "action"
+    agent_type: str          # "rag" | "report" | "compare" | "research" | "action" | "engineering"
+    intent_override: Optional[str]
     use_web_search: bool
 
     # ── Outputs ───────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@ from agents.report_agent import ReportAgent
 from agents.comparator_agent import ComparatorAgent
 from agents.researcher_agent import ResearcherAgent
 from agents.action_agent import ActionAgent
+from agents.engineering_analysis_agent import EngineeringAnalysisAgent
 from graph.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -26,10 +27,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Routing function – reads agent_type set by orchestrator
 # ---------------------------------------------------------------------------
-def route_to_agent(state: AgentState) -> Literal["rag", "report", "compare", "research", "action"]:
+def route_to_agent(state: AgentState) -> Literal["rag", "report", "compare", "research", "action", "engineering"]:
     agent_type = state.get("agent_type", "rag")
     logger.info("Routing to agent: %s", agent_type)
-    return agent_type if agent_type in {"rag", "report", "compare", "research", "action"} else "rag"
+    return agent_type if agent_type in {"rag", "report", "compare", "research", "action", "engineering"} else "rag"
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +43,7 @@ def build_workflow() -> StateGraph:
     comparator = ComparatorAgent()
     researcher = ResearcherAgent()
     action = ActionAgent()
+    engineering = EngineeringAnalysisAgent()
 
     graph = StateGraph(AgentState)
 
@@ -52,6 +54,7 @@ def build_workflow() -> StateGraph:
     graph.add_node("compare",      comparator.run)
     graph.add_node("research",     researcher.run)
     graph.add_node("action",       action.run)
+    graph.add_node("engineering",  engineering.run)
 
     # ── Edges ────────────────────────────────────────────────────────────
     graph.add_edge(START, "orchestrator")
@@ -65,11 +68,12 @@ def build_workflow() -> StateGraph:
             "compare":  "compare",
             "research": "research",
             "action":   "action",
+            "engineering": "engineering",
         },
     )
 
     # All sub-agents lead to END
-    for node in ("rag", "report", "compare", "research", "action"):
+    for node in ("rag", "report", "compare", "research", "action", "engineering"):
         graph.add_edge(node, END)
 
     return graph.compile()

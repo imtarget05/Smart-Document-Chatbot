@@ -61,15 +61,17 @@ class RagAgent:
 
         # 4. Build answer ───────────────────────────────────────────────
         if chunks and max_score >= CONFIDENCE_THRESHOLD:
-            answer = await self._generate_answer(query, chunks, session_id)
-            rag_strategy = "hybrid_rag" if hybrid else "semantic_rag"
+            answer = await self._generate_answer(
+                query,
+                chunks,
+                session_id,
+                state.get("long_term_history", []),
+            )
         elif state.get("use_web_search"):
             answer = await self._web_search_fallback(query)
-            rag_strategy = "web_search"
             chunks = []
         else:
             answer = await self._deep_reasoning_fallback(query)
-            rag_strategy = "deep_reasoning"
             chunks = []
 
         # 5. Build citations ────────────────────────────────────────────
@@ -78,7 +80,7 @@ class RagAgent:
                 "document_name": c.get("document_name", "unknown"),
                 "chunk_text":    c.get("text", "")[:300],
                 "score":         round(c.get("score", 0.0), 4),
-                "source_type":   "document",
+                "source_type":   c.get("source_type", "document"),
             }
             for c in chunks[:TOP_K]
         ]
@@ -168,7 +170,7 @@ class RagAgent:
         )
         try:
             response = await self._llm.ainvoke([HumanMessage(content=prompt)])
-            lines = [l.strip() for l in response.content.strip().split("\n") if l.strip()]
+            lines = [line.strip() for line in response.content.strip().split("\n") if line.strip()]
             return lines[:2]
         except Exception as exc:
             logger.warning("Query reformulation failed: %s", exc)
@@ -215,9 +217,18 @@ class RagAgent:
     # Generate RAG answer
     # ------------------------------------------------------------------
     async def _generate_answer(
-        self, query: str, chunks: List[Dict], session_id: str
+        self,
+        query: str,
+        chunks: List[Dict],
+        session_id: str,
+        long_term_history: List[Dict],
     ) -> str:
         history = self._memory.get_recent(session_id, turns=3)
+        if not history and long_term_history:
+            history = [
+                {"role": item.get("role", ""), "content": item.get("content", "")}
+                for item in long_term_history[-6:]
+            ]
         context_parts = []
         for c in chunks[:TOP_K]:
             doc  = c.get("document_name", "document")

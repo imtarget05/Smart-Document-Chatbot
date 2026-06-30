@@ -9,6 +9,7 @@ import com.smartdocchat.config.JwtAuthenticationFilter;
 import com.smartdocchat.config.RateLimitingFilter;
 import com.smartdocchat.config.InternalServiceAuthenticationFilter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -48,6 +49,25 @@ public class ChatControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void passRequestsThroughMockedFilters() throws Exception {
+        Mockito.doAnswer(invocation -> {
+            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+        Mockito.doAnswer(invocation -> {
+            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(rateLimitingFilter).doFilter(any(), any(), any());
+        Mockito.doAnswer(invocation -> {
+            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(internalServiceAuthenticationFilter).doFilter(any(), any(), any());
+    }
 
     @Test
     @WithMockUser(username = "testuser", roles = {"USER"})

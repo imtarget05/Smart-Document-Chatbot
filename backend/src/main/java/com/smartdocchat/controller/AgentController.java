@@ -147,7 +147,7 @@ public class AgentController {
     }
 
     /**
-     * Ingest data from an external connector (Google Drive, Gmail, Slack).
+     * Ingest data from an external connector (Google Drive, Gmail, Slack, SharePoint).
      */
     @PostMapping("/connector/ingest")
     public ResponseEntity<JsonNode> connectorIngest(

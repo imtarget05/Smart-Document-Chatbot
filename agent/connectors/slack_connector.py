@@ -10,6 +10,7 @@ Required env vars:
 import logging
 from typing import Any, Dict, List
 
+from ingestion.pipeline import ConnectorIngestionPipeline
 from settings import settings
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 class SlackConnector:
     async def ingest(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        documents = await self.fetch_documents(user_id=user_id, params=params)
+        return await ConnectorIngestionPipeline().ingest_documents(user_id, documents)
+
+    async def fetch_documents(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         params:
           channel_id  – Slack channel ID (e.g. "C1234567890")
@@ -27,7 +32,6 @@ class SlackConnector:
             logger.warning("Slack not configured (SLACK_BOT_TOKEN missing) – skipping")
             return []
 
-        import asyncio
         from slack_sdk.web.async_client import AsyncWebClient
 
         client     = AsyncWebClient(token=settings.slack_bot_token)
@@ -50,17 +54,23 @@ class SlackConnector:
             return []
 
         messages = response.get("messages", [])
-        ingested = []
+        documents = []
         for msg in messages:
             text = msg.get("text", "").strip()
             if text:
-                ingested.append({
-                    "ts":          msg.get("ts"),
-                    "user":        msg.get("user", "unknown"),
-                    "text":        text,
-                    "text_length": len(text),
+                ts = msg.get("ts", "")
+                documents.append({
+                    "source": "slack",
+                    "external_id": f"{channel_id}:{ts}",
+                    "title": f"Slack {channel_id} {ts}",
+                    "text": text,
+                    "metadata": {
+                        "channel_id": channel_id,
+                        "ts": ts,
+                        "user": msg.get("user", "unknown"),
+                    },
                 })
 
         logger.info("Slack: pulled %d messages from channel %s for user %s",
-                    len(ingested), channel_id, user_id)
-        return ingested
+                    len(documents), channel_id, user_id)
+        return documents

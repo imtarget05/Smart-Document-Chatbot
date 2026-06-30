@@ -15,7 +15,7 @@ class AgentRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=200)
     document_ids: Optional[List[str]] = []
     use_web_search: bool = False
-    # Optional explicit intent override ("rag", "report", "compare", "research", "action")
+    # Optional explicit intent override ("rag", "report", "compare", "research", "action", "engineering")
     intent_override: Optional[str] = None
 
 
@@ -33,7 +33,7 @@ class ActionRequest(BaseModel):
 
 
 class ConnectorIngestRequest(BaseModel):
-    source: str           # "google_drive" | "gmail" | "slack"
+    source: str           # "google_drive" | "gmail" | "slack" | "sharepoint"
     user_id: str
     params: Dict[str, Any] = {}
 

@@ -38,8 +38,8 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:-local-development-service-token-change-me}
-      - LLM_BASE_URL=${LLM_BASE_URL:-http://llm:11434}
-      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-deepseek-r1:1.5b}
+      - LLM_BASE_URL=http://llm-router:8000
+      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-llama3.2:3b}
       - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL:-nomic-embed-text}
       # Install required Python packages for document parsing and indexing automatically on start
       - _PIP_ADDITIONAL_REQUIREMENTS=pypdf docx python-docx requests qdrant-client
@@ -55,6 +55,7 @@ services:
       "
     depends_on:
       - mlflow
+      - llm-router
     networks:
       - app-network
     deploy:

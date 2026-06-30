@@ -1,80 +1,15 @@
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: postgres
-  labels:
-    app: postgres
-    app.kubernetes.io/name: postgres
-    app.kubernetes.io/component: database
-spec:
-  serviceName: postgres
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      securityContext:
-        runAsUser: 999
-        fsGroup: 999
-      containers:
-        - name: postgres
-          image: postgres:15-alpine
-          ports:
-            - containerPort: 5432
-          envFrom:
-            - secretRef:
-                name: postgres-secrets
-          env:
-            - name: POSTGRES_DB
-              value: smart_doc_chatbot
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-          livenessProbe:
-            exec:
-              command: ["pg_isready", "-U", "postgres"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            exec:
-              command: ["pg_isready", "-U", "postgres"]
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          volumeMounts:
-            - name: postgres-data
-              mountPath: /var/lib/postgresql/data
-  volumeClaimTemplates:
-    - metadata:
-        name: postgres-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 10Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-  labels:
-    app: postgres
-spec:
-  type: ClusterIP
-  ports:
-    - port: 5432
-      targetPort: 5432
-  selector:
-    app: postgres
+# ============================================
+# PostgreSQL: Neon Serverless (free 512MB, long-term)
+# No StatefulSet needed — data lives in Neon cloud.
+# Backend connects via SPRING_DATASOURCE_URL (stored in backend-secrets).
+# ============================================
+#
+# This file intentionally does NOT define a postgres StatefulSet.
+# If you want to revert to self-hosted Postgres (not recommended for production),
+# restore the StatefulSet from git history.
+#
+# The postgres-secrets Secret below is kept for reference — the actual
+# credential is embedded in the SPRING_DATASOURCE_URL connection string.
 ---
 apiVersion: v1
 kind: Secret
@@ -82,5 +17,7 @@ metadata:
   name: postgres-secrets
 type: Opaque
 stringData:
-  POSTGRES_USER: "postgres"
-  POSTGRES_PASSWORD: "CHANGE_ME"
+  # These values are embedded in SPRING_DATASOURCE_URL (Neon connection string).
+  # Kept here as documentation only.
+  POSTGRES_USER: "neondb_owner"
+  POSTGRES_PASSWORD: "CHANGE_ME_USE_NEON_URL_INSTEAD"

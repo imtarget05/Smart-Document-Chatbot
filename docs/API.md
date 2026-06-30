@@ -36,6 +36,11 @@ Documents and chat histories are scoped to the authenticated username. A client 
 | `POST` | `/chat/ask-stream` | SSE RAG response |
 | `GET` | `/chat/history/{sessionId}` | User-scoped conversation history |
 | `DELETE` | `/chat/history/{sessionId}` | Clear user-scoped conversation history |
+| `POST` | `/agent/invoke` | LangGraph agent orchestration through the Python Agent Service |
+| `POST` | `/agent/report` | Explicit report generation through the Agent Service |
+| `POST` | `/agent/action` | Execute configured agent actions |
+| `POST` | `/agent/connector/ingest` | Ingest Google Drive, Gmail, Slack, or SharePoint data into Qdrant |
+| `GET` | `/agent/health` | Proxy health check for the Python Agent Service |
 
 Chat payload:
 
@@ -48,6 +53,32 @@ Chat payload:
 ```
 
 `sessionId` is limited to 100 characters and `message` to 8,000 characters.
+
+Agent invoke payload:
+
+```json
+{
+  "sessionId": "browser-session-id",
+  "documentIds": ["doc_collection_or_connector_collection"],
+  "query": "Summarize failures and generate an 8D report.",
+  "intentOverride": "engineering",
+  "useWebSearch": false
+}
+```
+
+Connector ingestion payload:
+
+```json
+{
+  "source": "sharepoint",
+  "params": {
+    "mock": true
+  }
+}
+```
+
+The connector response includes a Qdrant `collection_id`; pass that value in
+`documentIds` for `/agent/invoke`.
 
 ## Internal Endpoints
 

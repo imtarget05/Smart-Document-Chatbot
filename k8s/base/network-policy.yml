@@ -43,13 +43,13 @@ spec:
       ports:
         - port: 6333
         - port: 6334
-    # Allow local model inference through Generic LLM service
+    # All chat and embedding requests go through the LLM router.
     - to:
         - podSelector:
             matchLabels:
-              app: llm
+              app: llm-router
       ports:
-        - port: 11434
+        - port: 8000
     # Allow DNS
     - to: []
       ports:
@@ -61,6 +61,42 @@ spec:
     - to: []
       ports:
         - port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: llm-router-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: llm-router
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+        - podSelector:
+            matchLabels:
+              app: agent
+      ports:
+        - port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: llm
+      ports:
+        - port: 11434
+    - to: []
+      ports:
+        - port: 443
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

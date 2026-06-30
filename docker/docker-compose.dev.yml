@@ -1,13 +1,22 @@
 # ============================================
 # Smart Document Chatbot - Development Docker Compose
-# Only starts infrastructure services (DB, Qdrant, local Ollama models)
-# Backend & Frontend run locally for hot-reload
+# Only starts infrastructure services that still run locally in dev:
+#   - Ollama (LLM + embeddings)
+#   - llm-router
+#   - Agent service (hot-reload)
+#   - pgAdmin (optional, --profile tools)
+#
+# PostgreSQL → Neon Cloud (set NEON_DATABASE_URL in .env)
+# Qdrant     → Qdrant Cloud (set QDRANT_HOST/API_KEY) OR local below
+# Storage    → local disk (STORAGE_PROVIDER=local, default)
 #
 # Usage: docker compose -f docker/docker-compose.dev.yml up -d
 # ============================================
 
 services:
-  # --- PostgreSQL Database ---
+
+  # ── PostgreSQL (local dev option) ───────────────────────────────────────────
+  # Comment this out if using Neon (set SPRING_DATASOURCE_URL in .env instead).
   postgres:
     image: postgres:15-alpine
     container_name: sdc-postgres-dev
@@ -25,7 +34,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # --- Qdrant Vector Database ---
+  # ── Qdrant (local dev option) ────────────────────────────────────────────────
+  # Comment this out if using Qdrant Cloud (set QDRANT_HOST/etc. in .env).
   qdrant:
     image: qdrant/qdrant:v1.7.4
     container_name: sdc-qdrant-dev
@@ -37,40 +47,94 @@ services:
     volumes:
       - qdrant_dev_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  llm:
+  # ── Ollama LLM Server ────────────────────────────────────────────────────────
+  ollama:
     image: ollama/ollama:latest
-    container_name: sdc-llm-dev
+    container_name: sdc-ollama-dev
     ports:
       - "11434:11434"
     volumes:
       - ollama_dev_data:/root/.ollama
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
 
-  llm-model-puller:
+  # ── Ollama Model Puller (one-shot) ───────────────────────────────────────────
+  ollama-model-puller:
     image: curlimages/curl:latest
-    container_name: sdc-llm-puller-dev
+    container_name: sdc-ollama-puller-dev
     depends_on:
-      - llm
-    entrypoint: [ "sh", "-c", "until curl -s http://llm:11434/api/tags >/dev/null; do sleep 2; done; curl -d '{\"name\": \"deepseek-r1:1.5b\"}' http://llm:11434/api/pull; curl -d '{\"name\": \"nomic-embed-text\"}' http://llm:11434/api/pull" ]
+      ollama:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo "Pulling chat model: ${OLLAMA_CHAT_MODEL:-llama3.2:3b} ..."
+        curl -sf -X POST http://ollama:11434/api/pull \
+          -H 'Content-Type: application/json' \
+          -d "{\"name\": \"${OLLAMA_CHAT_MODEL:-llama3.2:3b}\"}"
+        echo "Pulling embedding model: nomic-embed-text ..."
+        curl -sf -X POST http://ollama:11434/api/pull \
+          -H 'Content-Type: application/json' \
+          -d '{"name": "nomic-embed-text"}'
+        echo "All models ready."
+    restart: "no"
 
-  # --- Python Agent Service (dev mode with hot-reload) ---
+  # ── LLM Router ──────────────────────────────────────────────────────────────
+  llm-router:
+    build:
+      context: ../llm-router
+      dockerfile: Dockerfile
+    container_name: sdc-llm-router-dev
+    environment:
+      LOCAL_LLM_BASE_URL: http://ollama:11434
+      LOCAL_LLM_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
+      LOCAL_LLM_TIMEOUT_SECONDS: ${LOCAL_LLM_TIMEOUT_SECONDS:-3}
+      ROUTER_CONFIDENCE_THRESHOLD: ${ROUTER_CONFIDENCE_THRESHOLD:-0.7}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4o}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_MODEL_ID: ${NVIDIA_MODEL_ID:-}
+      NVIDIA_API_URL: ${NVIDIA_API_URL:-}
+    ports:
+      - "${LLM_ROUTER_PORT:-8001}:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Python Agent Service (hot-reload) ───────────────────────────────────────
   agent:
     build:
-      context: ..
-      dockerfile: agent/Dockerfile
+      context: ../agent
+      dockerfile: Dockerfile
     container_name: sdc-agent-dev
     environment:
       INTERNAL_SERVICE_TOKEN: local-development-service-token-change-me
-      LLM_BASE_URL: http://llm:11434
-      LLM_CHAT_MODEL: deepseek-r1:1.5b
+      LLM_BASE_URL: http://llm-router:8000
+      LLM_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
       LLM_EMBEDDING_MODEL: nomic-embed-text
+      # Qdrant — points to local container by default
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       QDRANT_API_KEY: qdrant_key_123
+      # PostgreSQL — points to local container by default
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: smart_doc_chatbot
@@ -87,9 +151,12 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      llm-router:
+        condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 9000 --reload
+    restart: unless-stopped
 
-  # --- pgAdmin (Database Management UI) ---
+  # ── pgAdmin (optional, activate with --profile tools) ───────────────────────
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: sdc-pgadmin-dev
@@ -104,6 +171,7 @@ services:
     profiles:
       - tools
 
+# ── Named Volumes ────────────────────────────────────────────────────────────
 volumes:
   postgres_dev_data:
     driver: local

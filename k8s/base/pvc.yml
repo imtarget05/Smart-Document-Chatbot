@@ -1,15 +1,12 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: uploads-pvc
-  labels:
-    app: backend
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
+# ============================================
+# PersistentVolumeClaims
+#
+# uploads-pvc: REMOVED — file uploads now go to Supabase Storage (free 1GB)
+#              No local PVC needed. Set STORAGE_PROVIDER=supabase in secrets.
+#
+# llm-pvc: kept for Ollama model weights (local LLM).
+#          Can be removed if you use only external APIs (Anthropic/OpenAI).
+# ============================================
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

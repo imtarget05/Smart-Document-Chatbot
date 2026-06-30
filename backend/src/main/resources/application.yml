@@ -9,7 +9,9 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/smart_doc_chatbot}
+    # Local dev:  jdbc:postgresql://localhost:5432/smart_doc_chatbot
+    # Neon prod:  ${NEON_DATABASE_URL} (already contains user/pass/sslmode)
+    url: ${SPRING_DATASOURCE_URL:${NEON_DATABASE_URL:jdbc:postgresql://localhost:5432/smart_doc_chatbot}}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
@@ -48,19 +50,22 @@ service:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}
 
-# Local LLM models & embeddings. No external AI provider credentials are required.
+# Ollama-compatible router handles chat; embeddings are proxied to local Ollama.
 llm:
-  base-url: ${LLM_BASE_URL:http://localhost:11434}
-  chat-model: ${LLM_CHAT_MODEL:deepseek-r1:1.5b}
+  base-url: ${LLM_BASE_URL:http://localhost:8001}
+  chat-model: ${LLM_CHAT_MODEL:llama3.2:3b}
   embedding-model: ${LLM_EMBEDDING_MODEL:nomic-embed-text}
   temperature: ${LLM_TEMPERATURE:0.3}
   max-attempts: ${LLM_MAX_ATTEMPTS:3}
   retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}
 
 # Qdrant Configuration
+# Local dev:  host=localhost port=6333
+# Qdrant Cloud: host=<cluster-id>.us-east-1-0.aws.cloud.qdrant.io  port=6333  use-https=true
 qdrant:
   host: ${QDRANT_HOST:localhost}
   port: ${QDRANT_PORT:6333}
+  use-https: ${QDRANT_USE_HTTPS:false}
   collection-name: ${QDRANT_COLLECTION:documents}
   api-key: ${QDRANT_API_KEY:}
 
@@ -113,5 +118,17 @@ logging:
     name: ${LOG_FILE:logs/application.log}
     max-size: 10MB
     max-history: 30
+
+# Supabase Storage Configuration
+# Free tier: 1GB, long-term, no expiry
+storage:
+  provider: ${STORAGE_PROVIDER:local}   # local | supabase
+  supabase:
+    url: ${SUPABASE_URL:}
+    bucket: ${SUPABASE_BUCKET:documents}
+    # Service role key (found in Supabase project settings → API)
+    service-key: ${SUPABASE_SERVICE_KEY:}
+  local:
+    upload-dir: ${LOCAL_UPLOAD_DIR:uploads}
 
 # Graceful shutdown is configured under spring.lifecycle above

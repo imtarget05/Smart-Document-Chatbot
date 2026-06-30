@@ -71,21 +71,38 @@ class LongTermMemory:
         except Exception as exc:
             logger.warning("Failed to save turn: %s", exc)
 
-    async def get_history(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_history(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
         if not self._pool:
             return []
         try:
             async with self._pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT role, content, agent_type, created_at
-                    FROM agent_session_history
-                    WHERE session_id = $1
-                    ORDER BY created_at DESC
-                    LIMIT $2
-                    """,
-                    session_id, limit,
-                )
+                if user_id:
+                    rows = await conn.fetch(
+                        """
+                        SELECT role, content, agent_type, created_at
+                        FROM agent_session_history
+                        WHERE session_id = $1 AND user_id = $2
+                        ORDER BY created_at DESC
+                        LIMIT $3
+                        """,
+                        session_id, user_id, limit,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT role, content, agent_type, created_at
+                        FROM agent_session_history
+                        WHERE session_id = $1
+                        ORDER BY created_at DESC
+                        LIMIT $2
+                        """,
+                        session_id, limit,
+                    )
             return [dict(r) for r in reversed(rows)]
         except Exception as exc:
             logger.warning("Failed to fetch history: %s", exc)

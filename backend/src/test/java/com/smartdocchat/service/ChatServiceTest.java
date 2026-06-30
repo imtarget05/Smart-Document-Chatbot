@@ -1,27 +1,17 @@
 package com.smartdocchat.service;
 
-import com.smartdocchat.entity.ChatMessage;
-import com.smartdocchat.entity.Document;
-import com.smartdocchat.repository.ChatMessageRepository;
-import com.smartdocchat.repository.DocumentRepository;
-import com.smartdocchat.util.LlmConfig;
 import com.smartdocchat.dto.RetrievedChunk;
-import org.junit.jupiter.api.BeforeEach;
+import com.smartdocchat.entity.ChatMessage;
+import com.smartdocchat.repository.DocumentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.client.RestTemplate;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -30,20 +20,21 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 public class ChatServiceTest {
 
+    // ── Collaborators of ChatService (post-refactor) ──────────────────────
     @Mock
-    private ChatMessageRepository chatMessageRepository;
+    private AgenticRetrievalService agenticRetrievalService;
+
+    @Mock
+    private MessageHandler messageHandler;
+
+    @Mock
+    private HistoryService historyService;
+
+    @Mock
+    private MlflowTracker mlflowTracker;
 
     @Mock
     private DocumentRepository documentRepository;
-
-    @Mock
-    private EmbeddingService embeddingService;
-
-    @Mock
-    private LlmConfig llmConfig;
-
-    @Mock
-    private RestTemplate restTemplate;
 
     @Mock
     private RagMetrics ragMetrics;
@@ -51,12 +42,24 @@ public class ChatServiceTest {
     @InjectMocks
     private ChatService chatService;
 
-    @BeforeEach
-    public void setUp() {
-        ReflectionTestUtils.setField(chatService, "tavilyApiKey", "test-tavily-key");
-        ReflectionTestUtils.setField(chatService, "llmMaxAttempts", 1);
-        ReflectionTestUtils.setField(chatService, "llmRetryBackoffMs", 0L);
+    // ─────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Build a minimal high-confidence RetrievalResult for the direct-RAG path. */
+    private AgenticRetrievalService.RetrievalResult highConfidenceResult(RetrievedChunk chunk) {
+        return new AgenticRetrievalService.RetrievalResult(
+                List.of(chunk),
+                Map.of(chunk, "it_security.pdf"),
+                0.85,
+                "direct",
+                false
+        );
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tests
+    // ─────────────────────────────────────────────────────────────────────
 
     @Test
     public void testProcessQuery_HighConfidence_Success() {
@@ -65,38 +68,24 @@ public class ChatServiceTest {
         Long docId = 1L;
         String userMsg = "How do I reset my password?";
 
-        Document doc = Document.builder()
-                .id(docId)
-                .fileName("it_security.pdf")
-                .ownerUsername("alice")
-                .vectorCollectionId("vector-it-security")
-                .status("READY")
-                .build();
-
         RetrievedChunk chunk = RetrievedChunk.builder()
                 .text("Go to profile settings and click reset password.")
                 .parentText("Password reset policy: Go to profile settings and click reset password.")
-                .score(0.85) // high score >= 0.45, triggers standard RAG
+                .score(0.85)
                 .build();
 
-        List<RetrievedChunk> chunks = List.of(chunk);
+        // AgenticRetrievalService returns a high-confidence direct result
+        when(agenticRetrievalService.retrieve(
+                eq("alice"), anyList(), eq(userMsg), eq(false), eq(false))
+        ).thenReturn(highConfidenceResult(chunk));
 
-        when(documentRepository.findByIdAndOwnerUsername(docId, "alice")).thenReturn(Optional.of(doc));
-        when(embeddingService.searchChunks(userMsg, "vector-it-security", 3)).thenReturn(chunks);
-        
-        when(llmConfig.getChatModel()).thenReturn("deepseek-r1:1.5b");
-        when(llmConfig.getChatUrl()).thenReturn("http://llm:11434/api/chat");
-        when(llmConfig.getTemperature()).thenReturn(0.3);
+        // buildContextList delegates to the real implementation logic; stub it
+        when(agenticRetrievalService.buildContextList(anyList(), anyMap()))
+                .thenReturn(List.of("[it_security.pdf] Password reset policy: Go to profile settings and click reset password."));
 
-        Map<String, Object> responseBody = Map.of("message", Map.of("content", "To reset your password, navigate to profile settings and click 'reset'."));
-        ResponseEntity<Map> responseEntity = new ResponseEntity<>(responseBody, HttpStatus.OK);
-
-        when(restTemplate.exchange(
-                eq("http://llm:11434/api/chat"),
-                eq(HttpMethod.POST),
-                any(HttpEntity.class),
-                eq(Map.class)
-        )).thenReturn(responseEntity);
+        when(messageHandler.buildPrompt(eq(userMsg), anyList())).thenReturn("test prompt");
+        when(messageHandler.callLLM("test prompt"))
+                .thenReturn("To reset your password, navigate to profile settings and click 'reset'.");
 
         ChatMessage savedMessage = ChatMessage.builder()
                 .id(1L)
@@ -109,7 +98,7 @@ public class ChatServiceTest {
                 .sourceChunks("[it_security.pdf] Password reset policy: Go to profile settings and click reset password.")
                 .build();
 
-        when(chatMessageRepository.save(any(ChatMessage.class))).thenReturn(savedMessage);
+        when(historyService.save(any(ChatMessage.class))).thenReturn(savedMessage);
 
         // Act
         ChatMessage result = chatService.processQuery("alice", sessionId, docId, null, userMsg, false, false);
@@ -118,7 +107,52 @@ public class ChatServiceTest {
         assertNotNull(result);
         assertEquals(sessionId, result.getSessionId());
         assertEquals("To reset your password, navigate to profile settings and click 'reset'.", result.getAiResponse());
-        verify(chatMessageRepository, times(1)).save(any(ChatMessage.class));
+        verify(historyService, times(1)).save(any(ChatMessage.class));
+        verify(messageHandler).callLLM("test prompt");
         verify(ragMetrics).confidence(0.85);
+    }
+
+    @Test
+    public void testProcessQuery_LowConfidence_FallsBackToGeneralKnowledge() {
+        // Arrange
+        String sessionId = "session-456";
+        Long docId = 2L;
+        String userMsg = "Tell me about quantum computing";
+
+        // Agentic loop returns empty chunks with general_knowledge strategy
+        AgenticRetrievalService.RetrievalResult lowConfResult =
+                new AgenticRetrievalService.RetrievalResult(
+                        Collections.emptyList(),
+                        Collections.emptyMap(),
+                        0.20,
+                        "general_knowledge",
+                        true
+                );
+
+        when(agenticRetrievalService.retrieve(
+                eq("alice"), anyList(), eq(userMsg), eq(false), eq(false))
+        ).thenReturn(lowConfResult);
+
+        when(messageHandler.callLLM(anyString()))
+                .thenReturn("Quantum computing uses qubits...");
+
+        ChatMessage savedMessage = ChatMessage.builder()
+                .id(2L)
+                .sessionId(sessionId)
+                .ownerUsername("alice")
+                .documentId(docId)
+                .userMessage(userMsg)
+                .aiResponse("⚠️ [General Knowledge Mode]\n\nQuantum computing uses qubits...")
+                .build();
+
+        when(historyService.save(any(ChatMessage.class))).thenReturn(savedMessage);
+
+        // Act
+        ChatMessage result = chatService.processQuery("alice", sessionId, docId, null, userMsg, false, false);
+
+        // Assert
+        assertNotNull(result);
+        verify(ragMetrics).fallback("general_knowledge");
+        verify(historyService, times(1)).save(any(ChatMessage.class));
     }
 }

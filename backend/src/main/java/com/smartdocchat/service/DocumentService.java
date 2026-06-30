@@ -12,9 +12,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
@@ -27,6 +28,7 @@ public class DocumentService {
     private final EmbeddingService embeddingService;
     private final LlmConfig llmConfig;
     private final RestTemplate restTemplate;
+    private final StorageService storageService;
 
     @org.springframework.beans.factory.annotation.Value("${airflow.enabled:false}")
     private boolean airflowEnabled;
@@ -45,30 +47,23 @@ public class DocumentService {
 
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-    private static final String UPLOAD_DIR = "uploads";
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "txt");
 
     public Document uploadDocument(MultipartFile file, String ownerUsername) throws IOException {
-        // Create upload directory if not exists
-        Files.createDirectories(Paths.get(UPLOAD_DIR));
-
-        // Get file extension
         String originalFileName = sanitizeFileName(file.getOriginalFilename());
         String fileExtension = getFileExtension(originalFileName);
         validateUpload(file, fileExtension);
         String fileName = UUID.randomUUID() + "." + fileExtension;
-        Path filePath = Paths.get(UPLOAD_DIR, fileName);
 
-        // Save physical file
-        Files.write(filePath, file.getBytes());
+        // Delegate to StorageService (local disk or Supabase Cloud)
+        String storagePath = storageService.upload(fileName, file);
 
-        // MLOps Mode: Trigger Airflow DAG
         if (airflowEnabled) {
             log.info("MLOps Mode Enabled: Delegating document '{}' ETL to Airflow", originalFileName);
 
             Document document = Document.builder()
                     .fileName(originalFileName)
-                    .filePath(filePath.toString())
+                    .filePath(storagePath)
                     .ownerUsername(ownerUsername)
                     .fileType(fileExtension)
                     .fileSize(file.getSize())
@@ -85,7 +80,7 @@ public class DocumentService {
         }
 
         // Standard Mode: Parse and chunk locally
-        File savedFile = filePath.toFile();
+        File savedFile = storageService.download(storagePath);
         String extractedText = documentParser.extractText(savedFile, fileExtension);
         List<DocumentParser.HierarchicalChunk> chunks = documentParser.chunkTextHierarchical(extractedText, 500, 125);
 
@@ -97,7 +92,7 @@ public class DocumentService {
         // Save document metadata to database
         Document document = Document.builder()
                 .fileName(originalFileName)
-                .filePath(filePath.toString())
+                .filePath(storagePath)
                 .ownerUsername(ownerUsername)
                 .fileType(fileExtension)
                 .fileSize(file.getSize())
@@ -275,7 +270,7 @@ public class DocumentService {
 
         log.info("Generating new mind map for document ID: {}", id);
         try {
-            java.io.File file = new java.io.File(document.getFilePath());
+            File file = storageService.download(document.getFilePath());
             String extractedText = documentParser.extractText(file, document.getFileType());
             String previewText = extractedText.substring(0, Math.min(extractedText.length(), 15000));
 
@@ -384,14 +379,10 @@ public class DocumentService {
 
     public void deleteDocument(Long id, String ownerUsername) {
         Document document = getDocumentById(id, ownerUsername);
-        // Delete from vector DB (implement based on Qdrant API)
+        // Delete from vector DB
         embeddingService.deleteCollection(document.getVectorCollectionId());
-        // Delete file
-        try {
-            Files.deleteIfExists(Paths.get(document.getFilePath()));
-        } catch (IOException e) {
-            log.error("Error deleting file: {}", document.getFilePath(), e);
-        }
+        // Delete from storage (local disk or Supabase)
+        storageService.delete(document.getFilePath());
         // Delete from database
         documentRepository.delete(document);
     }
@@ -407,22 +398,64 @@ public class DocumentService {
         if (fileName == null || fileName.isBlank()) {
             return "document.txt";
         }
-        return Paths.get(fileName).getFileName().toString().replaceAll("[\\r\\n]", "_");
+        // Extract filename only (strip any path component) without importing Paths
+        String name = fileName.replaceAll("[\\r\\n]", "_");
+        int lastSlash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        return lastSlash >= 0 ? name.substring(lastSlash + 1) : name;
     }
 
-    private void validateUpload(MultipartFile file, String extension) {
+    /**
+     * Two-layer upload validation:
+     * <ol>
+     *   <li>Extension allowlist – reject anything not in {pdf, docx, txt}.</li>
+     *   <li>Magic-byte inspection – read the first bytes of the actual file
+     *       content and verify the signature matches the declared extension.
+     *       This prevents extension-spoofing and bypasses via
+     *       {@code Content-Type: application/octet-stream}.</li>
+     * </ol>
+     */
+    private void validateUpload(MultipartFile file, String extension) throws IOException {
+        // Layer 1: extension allowlist
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
             throw new IllegalArgumentException("Unsupported document type. Allowed types: PDF, DOCX, TXT");
         }
-        String contentType = Optional.ofNullable(file.getContentType()).orElse("");
-        if (!contentType.isBlank() && !contentType.equals("application/octet-stream")) {
-            Map<String, Set<String>> expected = Map.of(
-                    "pdf", Set.of("application/pdf"),
-                    "docx", Set.of("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                    "txt", Set.of("text/plain"));
-            if (!expected.get(extension).contains(contentType)) {
-                throw new IllegalArgumentException("File content type does not match its extension");
+
+        // Layer 2: magic-byte / content inspection
+        byte[] header = new byte[8];
+        try (InputStream in = file.getInputStream()) {
+            int bytesRead = in.read(header);
+            if (bytesRead < 4) {
+                throw new IllegalArgumentException("File is too small to be a valid document.");
             }
         }
+
+        switch (extension) {
+            case "pdf" -> {
+                // PDF magic bytes: %PDF- (0x25 0x50 0x44 0x46 0x2D)
+                if (header[0] != 0x25 || header[1] != 0x50 || header[2] != 0x44 || header[3] != 0x46) {
+                    throw new IllegalArgumentException("File content does not match a valid PDF.");
+                }
+            }
+            case "docx" -> {
+                // DOCX is a ZIP archive: PK\x03\x04 (0x50 0x4B 0x03 0x04)
+                if (header[0] != 0x50 || header[1] != 0x4B || header[2] != 0x03 || header[3] != 0x04) {
+                    throw new IllegalArgumentException("File content does not match a valid DOCX (ZIP) archive.");
+                }
+            }
+            case "txt" -> {
+                // TXT must be decodable as UTF-8 — read first 4 KB and validate
+                byte[] sample = file.getBytes();
+                int sampleLen = Math.min(sample.length, 4096);
+                try {
+                    CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
+                    decoder.decode(java.nio.ByteBuffer.wrap(sample, 0, sampleLen));
+                } catch (java.nio.charset.CharacterCodingException e) {
+                    throw new IllegalArgumentException("TXT file contains invalid UTF-8 characters.");
+                }
+            }
+            default -> throw new IllegalArgumentException("Unsupported extension: " + extension);
+        }
+
+        log.debug("Upload validation passed: extension={} size={}", extension, file.getSize());
     }
 }

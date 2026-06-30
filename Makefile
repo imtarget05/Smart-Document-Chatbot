@@ -22,7 +22,8 @@ dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant + Local LLM)
 	@echo "Dev infrastructure started!"
 	@echo "  PostgreSQL: localhost:5432"
 	@echo "  Qdrant:     localhost:6333"
-	@echo "  Local LLM:  localhost:11434 (pulling DeepSeek and embeddings model)"
+	@echo "  Local LLM:  localhost:11434 (pulling Llama and embeddings model)"
+	@echo "  LLM Router: localhost:8001"
 
 dev-down: ## Stop dev infrastructure
 	docker compose -f docker/docker-compose.dev.yml down
@@ -42,6 +43,9 @@ dev-agent: ## Run Python agent service locally (requires dev-up)
 
 dev-agent-install: ## Install Python agent dependencies
 	cd agent && pip install -r requirements.txt
+
+test-router: ## Run LLM router unit tests
+	cd llm-router && pytest -q
 
 # ========================
 # Production Build & Deploy

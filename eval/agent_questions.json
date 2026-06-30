@@ -1,0 +1,28 @@
+[
+  {
+    "id": "agent-001",
+    "question": "Summarize failures and generate an 8D report.",
+    "document_ids": [],
+    "intent_override": "engineering",
+    "expected_intent": "engineering",
+    "expected_answer_contains": ["root cause", "corrective", "verification"],
+    "expected_source_keywords": ["failure", "root cause", "corrective"]
+  },
+  {
+    "id": "agent-002",
+    "question": "What are the main risks mentioned in the selected documents?",
+    "document_ids": [],
+    "expected_intent": "rag",
+    "expected_answer_contains": ["risk"],
+    "expected_source_keywords": ["risk"]
+  },
+  {
+    "id": "agent-003",
+    "question": "Compare these documents on failure causes and mitigation actions.",
+    "document_ids": [],
+    "expected_intent": "compare",
+    "expected_answer_contains": ["similarities", "differences"],
+    "expected_source_keywords": ["failure", "action"]
+  }
+]
+

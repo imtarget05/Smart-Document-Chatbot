@@ -28,7 +28,7 @@ public class EmbeddingService {
 
     @PostConstruct
     public void init() {
-        qdrantBaseUrl = String.format("http://%s:%d", qdrantConfig.getHost(), qdrantConfig.getPort());
+        qdrantBaseUrl = qdrantConfig.getBaseUrl();
         log.info("Qdrant REST API base URL: {}", qdrantBaseUrl);
 
         // Verify Qdrant connectivity

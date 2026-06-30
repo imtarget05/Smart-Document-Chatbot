@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "llm")
 @Data
 public class LlmConfig {
-    private String baseUrl = "http://localhost:11434";
-    private String chatModel = "deepseek-r1:1.5b";
+    private String baseUrl = "http://localhost:8001";
+    private String chatModel = "llama3.2:3b";
     private String embeddingModel = "nomic-embed-text";
     private double temperature = 0.3;
     

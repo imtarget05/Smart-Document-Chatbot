@@ -44,7 +44,7 @@ spec:
           args:
             - >-
               until curl -sf http://localhost:11434/api/tags >/dev/null; do sleep 2; done;
-              curl -sf -d '{"name":"deepseek-r1:1.5b"}' http://localhost:11434/api/pull;
+              curl -sf -d '{"name":"llama3.2:3b"}' http://localhost:11434/api/pull;
               curl -sf -d '{"name":"nomic-embed-text"}' http://localhost:11434/api/pull
           volumeMounts:
             - name: llm-data

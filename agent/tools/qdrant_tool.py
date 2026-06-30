@@ -10,9 +10,8 @@ The combined score is more robust than either approach alone,
 especially for short/keyword-heavy queries.
 """
 
-import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import httpx
 from rank_bm25 import BM25Okapi
@@ -131,6 +130,9 @@ class QdrantHybridSearch:
                 "text":          pl.get("text", ""),
                 "document_name": pl.get("document_name", collection_id),
                 "chunk_index":   pl.get("chunk_index", 0),
+                "source_type":   pl.get("source_type", "document"),
+                "source":        pl.get("source", ""),
+                "external_id":   pl.get("external_id", ""),
                 "score":         p.get("score", 0.0),
             })
         return results

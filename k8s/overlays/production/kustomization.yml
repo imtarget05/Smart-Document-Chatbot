@@ -56,14 +56,6 @@ patches:
       - op: replace
         path: /spec/tls/0/hosts/0
         value: smartdoc.example.com
-  # Production storage
-  - target:
-      kind: PersistentVolumeClaim
-      name: uploads-pvc
-    patch: |
-      - op: replace
-        path: /spec/resources/requests/storage
-        value: 20Gi
 
 configMapGenerator:
   - name: backend-config

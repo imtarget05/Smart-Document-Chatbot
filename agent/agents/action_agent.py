@@ -55,6 +55,7 @@ class ActionAgent:
             "send_email":      self._send_email,
             "create_jira":     self._create_jira,
             "create_notion":   self._create_notion,
+            "send_teams_webhook": self._send_teams_webhook,
             "trigger_webhook": self._trigger_webhook,
         }
         handler = handlers.get(action_type)
@@ -150,17 +151,27 @@ class ActionAgent:
             return {"error": "Missing 'url' field"}
         return await self._webhook.post(url=url, data=payload.get("data", {}))
 
+    async def _send_teams_webhook(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        url = payload.get("url") or settings.teams_webhook_url
+        if not url:
+            return {"error": "Teams webhook not configured (TEAMS_WEBHOOK_URL missing)"}
+        text = payload.get("text") or payload.get("message") or payload.get("body") or ""
+        if not text:
+            return {"error": "Missing Teams message text"}
+        return await self._webhook.post(url=url, data={"text": text})
+
     # ------------------------------------------------------------------
     # Parse action intent from natural language
     # ------------------------------------------------------------------
     async def _parse_action(self, query: str) -> Dict[str, Any]:
         prompt = (
             f"Extract the action from the following user request. "
-            f"Return a JSON with 'action_type' (one of: send_email, create_jira, create_notion, trigger_webhook) "
+            f"Return a JSON with 'action_type' (one of: send_email, create_jira, create_notion, send_teams_webhook, trigger_webhook) "
             f"and 'payload' (relevant fields). No markdown.\n\nRequest: {query}"
         )
         try:
-            import json, re
+            import json
+            import re
             resp     = await self._llm.ainvoke([HumanMessage(content=prompt)])
             raw      = resp.content.strip()
             match    = re.search(r'\{.*\}', raw, re.DOTALL)

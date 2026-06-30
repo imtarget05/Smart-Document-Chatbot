@@ -6,14 +6,19 @@ metadata:
     app: backend
 data:
   SPRING_PROFILES_ACTIVE: "production"
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/smart_doc_chatbot"
+  # PostgreSQL → Neon (URL in backend-secrets as SPRING_DATASOURCE_URL)
   SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
   FLYWAY_ENABLED: "true"
-  QDRANT_HOST: "qdrant"
+  # Qdrant Cloud (host/key in backend-secrets)
   QDRANT_PORT: "6333"
+  QDRANT_USE_HTTPS: "true"
   QDRANT_COLLECTION: "documents"
-  LLM_BASE_URL: "http://llm:11434"
-  LLM_CHAT_MODEL: "deepseek-r1:1.5b"
+  # Supabase Storage
+  STORAGE_PROVIDER: "supabase"
+  SUPABASE_BUCKET: "documents"
+  # LLM Router
+  LLM_BASE_URL: "http://llm-router:8000"
+  LLM_CHAT_MODEL: "llama3.2:3b"
   LLM_EMBEDDING_MODEL: "nomic-embed-text"
   LLM_TEMPERATURE: "0.3"
   CORS_ALLOWED_ORIGINS: "https://CHANGE_ME_FRONTEND_HOST"
