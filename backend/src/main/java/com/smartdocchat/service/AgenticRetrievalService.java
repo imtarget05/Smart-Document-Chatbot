@@ -47,6 +47,7 @@ public class AgenticRetrievalService {
     public record RetrievalResult(
             List<RetrievedChunk> chunks,
             Map<RetrievedChunk, String> chunkFileNames,
+            Map<RetrievedChunk, Long> chunkDocumentIds,
             double maxScore,
             String strategy,
             boolean usedAgenticLoop
@@ -89,6 +90,7 @@ public class AgenticRetrievalService {
             return new RetrievalResult(
                     initial.chunks(),
                     initial.chunkFileNames(),
+                    initial.chunkDocumentIds(),
                     initial.maxScore(),
                     "direct",
                     false
@@ -105,6 +107,7 @@ public class AgenticRetrievalService {
 
         List<RetrievedChunk> agentChunks = Collections.synchronizedList(new ArrayList<>());
         Map<RetrievedChunk, String> agentChunkFileNames = Collections.synchronizedMap(new HashMap<>());
+        Map<RetrievedChunk, Long> agentChunkDocumentIds = Collections.synchronizedMap(new HashMap<>());
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (String q : allQueries) {
@@ -121,6 +124,7 @@ public class AgenticRetrievalService {
                             for (RetrievedChunk chunk : chunks) {
                                 agentChunks.add(chunk);
                                 agentChunkFileNames.put(chunk, doc.getFileName());
+                                agentChunkDocumentIds.put(chunk, doc.getId());
                             }
                         }));
                     }
@@ -135,13 +139,13 @@ public class AgenticRetrievalService {
         // ── Step 3: Decide final strategy ───────────────────────────────────
         if (agenticMaxScore >= CONFIDENCE_THRESHOLD && !forceWebSearch) {
             // Corrective RAG succeeded
-            return new RetrievalResult(reranked, agentChunkFileNames, agenticMaxScore, "corrective", true);
+            return new RetrievalResult(reranked, agentChunkFileNames, agentChunkDocumentIds, agenticMaxScore, "corrective", true);
         }
 
         // Chunks insufficient — caller must handle web-search / general-knowledge prompt
         // Return empty chunks so ChatService knows to fall back
         String strategy = forceWebSearch ? "web_search" : "general_knowledge";
-        return new RetrievalResult(Collections.emptyList(), Collections.emptyMap(), agenticMaxScore, strategy, true);
+        return new RetrievalResult(Collections.emptyList(), Collections.emptyMap(), Collections.emptyMap(), agenticMaxScore, strategy, true);
     }
 
     // -----------------------------------------------------------------------
@@ -151,6 +155,7 @@ public class AgenticRetrievalService {
     private record InitialRetrieval(
             List<RetrievedChunk> chunks,
             Map<RetrievedChunk, String> chunkFileNames,
+            Map<RetrievedChunk, Long> chunkDocumentIds,
             double maxScore
     ) {}
 
@@ -159,6 +164,7 @@ public class AgenticRetrievalService {
     ) {
         List<RetrievedChunk> chunks = new ArrayList<>();
         Map<RetrievedChunk, String> chunkFileNames = new HashMap<>();
+        Map<RetrievedChunk, Long> chunkDocumentIds = new HashMap<>();
         double maxScore = 0.0;
 
         for (Long docId : docIds) {
@@ -174,13 +180,14 @@ public class AgenticRetrievalService {
             for (RetrievedChunk chunk : docChunks) {
                 chunks.add(chunk);
                 chunkFileNames.put(chunk, doc.getFileName());
+                chunkDocumentIds.put(chunk, doc.getId());
                 if (chunk.getScore() > maxScore) {
                     maxScore = chunk.getScore();
                 }
             }
         }
 
-        return new InitialRetrieval(chunks, chunkFileNames, maxScore);
+        return new InitialRetrieval(chunks, chunkFileNames, chunkDocumentIds, maxScore);
     }
 
     /**

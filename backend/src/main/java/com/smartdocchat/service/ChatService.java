@@ -57,11 +57,14 @@ public class ChatService {
         // ── Build context & prompt ───────────────────────────────────────────
         String sourceChunks;
         String aiResponse;
+        List<SourceCitation> citations = Collections.emptyList();
         long startTime = System.currentTimeMillis();
 
         if (!retrieval.chunks().isEmpty()) {
             List<String> contextList = agenticRetrievalService.buildContextList(
                     retrieval.chunks(), retrieval.chunkFileNames());
+            citations = historyService.buildCitations(
+                    retrieval.chunks(), retrieval.chunkFileNames(), retrieval.chunkDocumentIds());
             sourceChunks = String.join("\n---\n", contextList);
             String prompt = decoratePrompt(messageHandler.buildPrompt(userMessage, contextList), forceDeepThinking, "");
             aiResponse = messageHandler.callLLM(prompt);
@@ -101,7 +104,11 @@ public class ChatService {
                 .sourceChunks(sourceChunks.isEmpty() ? null : sourceChunks)
                 .build();
 
-        return historyService.save(chatMessage);
+        ChatMessage saved = historyService.save(chatMessage);
+        historyService.convertToResponse(
+                saved, retrieval.strategy(), retrieval.maxScore(),
+                System.currentTimeMillis() - startTime, null, citations);
+        return saved;
     }
 
     // -----------------------------------------------------------------------
@@ -133,11 +140,14 @@ public class ChatService {
                 // ── Build prompt & metadata ──────────────────────────────────
                 String prompt;
                 String sourceChunks;
+                List<SourceCitation> citations = Collections.emptyList();
                 String prefix = "";
 
                 if (!retrieval.chunks().isEmpty()) {
                     List<String> contextList = agenticRetrievalService.buildContextList(
                             retrieval.chunks(), retrieval.chunkFileNames());
+                    citations = historyService.buildCitations(
+                            retrieval.chunks(), retrieval.chunkFileNames(), retrieval.chunkDocumentIds());
                     sourceChunks = String.join("\n---\n", contextList);
                     prompt = decoratePrompt(messageHandler.buildPrompt(userMessage, contextList), forceDeepThinking, "");
                     if (retrieval.usedAgenticLoop()) {
@@ -210,7 +220,6 @@ public class ChatService {
                 ChatMessage saved = historyService.save(chatMessage);
 
                 // ── Final SSE complete event ───────────────────────────────────
-                List<SourceCitation> citations = Collections.emptyList();
                 ChatResponse responseDto = historyService.convertToResponse(
                         saved, retrieval.strategy(), retrieval.maxScore(), latencyMs, null, citations);
                 emitter.send(SseEmitter.event().name("complete").data(responseDto));
