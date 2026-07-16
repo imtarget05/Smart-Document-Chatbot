@@ -2,6 +2,7 @@ package com.smartdocchat.controller;
 
 import com.smartdocchat.dto.AuthRequest;
 import com.smartdocchat.dto.AuthResponse;
+import com.smartdocchat.entity.Role;
 import com.smartdocchat.entity.User;
 import com.smartdocchat.repository.UserRepository;
 import com.smartdocchat.util.JwtTokenProvider;
@@ -26,7 +27,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody AuthRequest authRequest) {
         log.info("Registering user: {}", authRequest.getUsername());
-        
+
         if (userRepository.existsByUsername(authRequest.getUsername())) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
@@ -36,16 +37,17 @@ public class AuthController {
         User user = User.builder()
                 .username(authRequest.getUsername())
                 .password(passwordEncoder.encode(authRequest.getPassword()))
-                .role("ROLE_USER")
+                .role(Role.ROLE_USER)
+                .enabled(true)
                 .build();
 
         userRepository.save(user);
-        
-        String token = tokenProvider.generateToken(user.getUsername(), user.getRole());
+
+        String token = tokenProvider.generateToken(user.getUsername(), user.getRole().name());
         return ResponseEntity.ok(AuthResponse.builder()
                 .token(token)
                 .username(user.getUsername())
-                .role(user.getRole())
+                .role(user.getRole().name())
                 .build());
     }
 
@@ -54,13 +56,14 @@ public class AuthController {
         log.info("Authenticating user: {}", authRequest.getUsername());
 
         return userRepository.findByUsername(authRequest.getUsername())
+                .filter(User::getEnabled)
                 .filter(user -> passwordEncoder.matches(authRequest.getPassword(), user.getPassword()))
                 .<ResponseEntity<?>>map(user -> {
-                    String token = tokenProvider.generateToken(user.getUsername(), user.getRole());
+                    String token = tokenProvider.generateToken(user.getUsername(), user.getRole().name());
                     return ResponseEntity.ok(AuthResponse.builder()
                             .token(token)
                             .username(user.getUsername())
-                            .role(user.getRole())
+                            .role(user.getRole().name())
                             .build());
                 })
                 .orElseGet(() -> ResponseEntity

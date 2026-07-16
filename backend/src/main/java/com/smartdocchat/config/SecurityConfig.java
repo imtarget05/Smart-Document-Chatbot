@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -20,6 +22,7 @@ import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -49,6 +52,25 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health/**", "/actuator/info", "/system/health").permitAll()
                 .requestMatchers("/actuator/prometheus").hasRole("SERVICE")
                 .requestMatchers("/documents/*/etl-complete", "/documents/*/etl-fail").hasRole("SERVICE")
+
+                // ========== RBAC: Role-based access ==========
+                // Admin only: user management and audit logs
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/audit/**").hasRole("ADMIN")
+
+                // Engineer+Admin: data sources and ingestion
+                .requestMatchers("/api/datasources/**").hasAnyRole("ENGINEER", "ADMIN")
+                .requestMatchers("/api/ingestion/**").hasAnyRole("ENGINEER", "ADMIN")
+
+                // Engineer+Admin: 8D cases and evaluation
+                .requestMatchers("/api/8d-cases/**").hasAnyRole("ENGINEER", "ADMIN")
+                .requestMatchers("/api/evaluations/**").hasAnyRole("ENGINEER", "ADMIN")
+
+                // Authenticated users: documents and chat
+                .requestMatchers(HttpMethod.GET, "/documents/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/documents/**").hasAnyRole("ENGINEER", "ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/documents/**").hasAnyRole("ENGINEER", "ADMIN")
+
                 // All other backend APIs require authentication
                 .anyRequest().authenticated()
             );

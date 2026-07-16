@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from graph.workflow import build_workflow
+from adk_runtime import run_demo_workflow
 from memory.long_term import LongTermMemory
 from models import (
     AgentRequest,
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # App lifespan – initialise shared resources once at startup
 # ---------------------------------------------------------------------------
 _workflow = None
-_long_term_memory: LongTermMemory | None = None
+_long_term_memory = None  # type: LongTermMemory | None
 _rate_limiter = None  # Initialized in lifespan; type: rate_limiter.RateLimiter
 
 
@@ -40,7 +40,12 @@ _rate_limiter = None  # Initialized in lifespan; type: rate_limiter.RateLimiter
 async def lifespan(app: FastAPI):
     global _workflow, _long_term_memory, _rate_limiter
     logger.info("Starting agent service …")
-    _workflow = build_workflow()
+    try:
+        from graph.workflow import build_workflow
+        _workflow = build_workflow()
+    except Exception as exc:
+        logger.warning("LangGraph workflow unavailable, continuing without it: %s", exc)
+        _workflow = None
     _long_term_memory = LongTermMemory()
     await _long_term_memory.init()
     # Initialize Redis-backed rate limiter (falls back to in-memory if Redis unavailable)
@@ -177,25 +182,28 @@ async def invoke_agent(req: AgentRequest):
                 limit=6,
             )
 
-        result = await _workflow.ainvoke({
-            "query": req.query,
-            "session_id": req.session_id,
-            "user_id": req.user_id,
-            "document_ids": req.document_ids or [],
-            "messages": [],
-            "long_term_history": long_term_history,
-            "retrieved_chunks": [],
-            "confidence_score": 0.0,
-            "agent_plan": "",
-            "agent_type": "",
-            "intent_override": req.intent_override,
-            "final_answer": "",
-            "sources": [],
-            "action_result": None,
-            "report_path": None,
-            "use_web_search": req.use_web_search,
-            "hybrid_search_enabled": True,
-        })
+        if _workflow is None:
+            result = {"final_answer": "ADK demo fallback is active; LangGraph workflow is unavailable in this environment.", "agent_type": "adk", "sources": [], "confidence_score": 0.0, "action_result": None, "report_path": None}
+        else:
+            result = await _workflow.ainvoke({
+                "query": req.query,
+                "session_id": req.session_id,
+                "user_id": req.user_id,
+                "document_ids": req.document_ids or [],
+                "messages": [],
+                "long_term_history": long_term_history,
+                "retrieved_chunks": [],
+                "confidence_score": 0.0,
+                "agent_plan": "",
+                "agent_type": "",
+                "intent_override": req.intent_override,
+                "final_answer": "",
+                "sources": [],
+                "action_result": None,
+                "report_path": None,
+                "use_web_search": req.use_web_search,
+                "hybrid_search_enabled": True,
+            })
         if _long_term_memory is not None:
             agent_type = result.get("agent_type", "rag")
             await _long_term_memory.save_turn(
@@ -224,6 +232,19 @@ async def invoke_agent(req: AgentRequest):
     except Exception as exc:
         logger.exception("Agent invoke failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# ADK demo endpoint (day 3)
+# ---------------------------------------------------------------------------
+@app.post("/agent/adk/demo")
+async def adk_demo(request: Request):
+    payload = await request.json()
+    user_request = payload.get("user_request", "")
+    document_name = payload.get("document_name", "demo-document")
+    if not user_request:
+        raise HTTPException(status_code=400, detail="user_request is required")
+    return run_demo_workflow(user_request=user_request, document_name=document_name)
 
 
 # ---------------------------------------------------------------------------

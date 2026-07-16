@@ -24,6 +24,13 @@ from typing import Any
 
 import requests
 
+# Optional MLflow import — graceful fallback if not installed
+try:
+    import mlflow
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+
 
 def load_questions(path: str) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
@@ -129,6 +136,23 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     print(f"   Session: {session_id}")
     print()
 
+    # Start MLflow run if available
+    mlflow_run = None
+    if args.mlflow and MLFLOW_AVAILABLE:
+        try:
+            mlflow.set_tracking_uri(args.mlflow_uri)
+            experiment = mlflow.set_experiment("rag-evaluation")
+            mlflow_run = mlflow.start_run(run_name=f"eval-{session_id}")
+            mlflow.log_params({
+                "base_url": args.base_url,
+                "document_id": args.document_id,
+                "total_questions": len(questions),
+                "session_id": session_id,
+            })
+        except Exception as e:
+            print(f"  ⚠️  MLflow unavailable: {e}")
+            mlflow_run = None
+
     details = []
     for i, q in enumerate(questions, 1):
         print(f"  [{i}/{len(questions)}] {q['question'][:60]}...", end=" ", flush=True)
@@ -139,6 +163,17 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
 
         status_icon = "✅" if evaluation["answer_correct"] else "❌"
         print(f"{status_icon} ({result['latency_ms']}ms)")
+
+        # Log per-question metrics to MLflow
+        if mlflow_run:
+            try:
+                mlflow.log_metrics({
+                    f"q{i}_latency_ms": evaluation["latency_ms"],
+                    f"q{i}_correct": 1.0 if evaluation["answer_correct"] else 0.0,
+                    f"q{i}_retrieval": 1.0 if evaluation["retrieval_accurate"] else 0.0,
+                }, step=i)
+            except Exception:
+                pass
 
     # Aggregate metrics
     total = len(details)
@@ -159,12 +194,31 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         "hallucination_cases": len(hallucinations),
         "hallucination_rate": round(len(hallucinations) / max(len(successful), 1), 4),
         "average_latency_ms": round(sum(latencies) / max(len(latencies), 1)),
-        "p95_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.95)] if latencies else 0),
+        "p95_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0),
         "min_latency_ms": min(latencies) if latencies else 0,
         "max_latency_ms": max(latencies) if latencies else 0,
         "error_count": total - len(successful),
         "details": details,
     }
+
+    # Log aggregate metrics to MLflow
+    if mlflow_run:
+        try:
+            mlflow.log_metrics({
+                "retrieval_accuracy": summary["retrieval_accuracy"],
+                "answer_correctness": summary["answer_correctness"],
+                "hallucination_rate": summary["hallucination_rate"],
+                "avg_latency_ms": summary["average_latency_ms"],
+                "p95_latency_ms": summary["p95_latency_ms"],
+                "total_questions": total,
+                "error_count": summary["error_count"],
+            })
+            mlflow.end_run(status="FINISHED")
+        except Exception:
+            try:
+                mlflow.end_run(status="FAILED")
+            except Exception:
+                pass
 
     return summary
 
@@ -180,6 +234,10 @@ def main():
                         help="Path to questions JSON file")
     parser.add_argument("--output", default="eval/results/eval_results.json",
                         help="Path to write evaluation results")
+    parser.add_argument("--mlflow", action="store_true",
+                        help="Log results to MLflow tracking server")
+    parser.add_argument("--mlflow-uri", default="http://mlflow:5000",
+                        help="MLflow tracking server URI")
     args = parser.parse_args()
 
     summary = run_evaluation(args)

@@ -15,7 +15,7 @@ import { useMutation } from '@tanstack/react-query';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080/api';
 
-type AgentMode = 'auto' | 'rag' | 'report' | 'compare' | 'research' | 'action' | 'engineering';
+type AgentMode = 'auto' | 'rag' | 'report' | 'compare' | 'research' | 'action' | 'engineering' | 'adk';
 
 interface Source {
   document_name: string;
@@ -33,8 +33,30 @@ interface AgentMessage {
   sources?:    Source[];
   confidence?: number;
   report_path?: string;
+  timeline?:   Array<{ name: string; status: string; summary: string }>;
   timestamp:   Date;
 }
+
+const STEP_ICONS: Record<string, string> = {
+  ingest: '📥',
+  analyze: '🧠',
+  summarize: '📝',
+  actions: '⚡',
+  report: '📄',
+  default: '✨',
+};
+
+const STEP_STATUS_STYLES: Record<string, string> = {
+  ok: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+  pending: 'bg-amber-100 text-amber-700 ring-amber-200',
+  default: 'bg-slate-100 text-slate-700 ring-slate-200',
+};
+
+const STEP_DOT_STYLES: Record<string, string> = {
+  ok: 'bg-emerald-500',
+  pending: 'bg-amber-500',
+  default: 'bg-slate-400',
+};
 
 interface AgentResponse {
   answer:          string;
@@ -43,6 +65,11 @@ interface AgentResponse {
   confidence_score: number;
   action_result?:  Record<string, unknown>;
   report_path?:    string;
+  trace?:          {
+    status: string;
+    step_count: number;
+    steps: string[];
+  };
 }
 
 interface Props {
@@ -59,6 +86,7 @@ const AGENT_MODE_LABELS: Record<AgentMode, string> = {
   research: '🔍 Research',
   action:   '⚡ Action',
   engineering: 'Engineering',
+  adk:      '🧠 ADK',
 };
 
 const AGENT_MODE_DESCRIPTIONS: Record<AgentMode, string> = {
@@ -69,6 +97,7 @@ const AGENT_MODE_DESCRIPTIONS: Record<AgentMode, string> = {
   research: 'Tìm kiếm thông tin trên web',
   action:   'Thực thi hành động (email, Jira…)',
   engineering: 'Analyze test reports, failures, root cause, corrective actions, and 8D reports',
+  adk:      'Run the ADK demo workflow with a visible step-by-step trace',
 };
 
 export default function AgentChat({ token, sessionId, documentIds }: Props) {
@@ -77,10 +106,13 @@ export default function AgentChat({ token, sessionId, documentIds }: Props) {
   const [mode, setMode]             = useState<AgentMode>('auto');
   const [webSearch, setWebSearch]   = useState(false);
   const [showSources, setShowSources] = useState<string | null>(null);
+  const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({});
   const bottomRef                   = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (typeof bottomRef.current?.scrollIntoView === 'function') {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const invokeMutation = useMutation<AgentResponse, Error, string>({
@@ -93,6 +125,9 @@ export default function AgentChat({ token, sessionId, documentIds }: Props) {
       };
       if (mode !== 'auto') {
         body.intentOverride = mode;
+      }
+      if (mode === 'adk') {
+        body.query = `ADK demo request: ${query}`;
       }
       const res = await fetch(`${API_BASE_URL}/agent/invoke`, {
         method: 'POST',
@@ -125,6 +160,11 @@ export default function AgentChat({ token, sessionId, documentIds }: Props) {
           sources:      data.sources,
           confidence:   data.confidence_score,
           report_path:  data.report_path,
+          timeline:     data.trace?.steps?.map((step, index) => ({
+            name: step,
+            status: 'ok',
+            summary: `Step ${index + 1} of ${data.trace?.step_count ?? 0}`,
+          })),
           timestamp:    new Date(),
         },
       ]);
@@ -152,7 +192,15 @@ export default function AgentChat({ token, sessionId, documentIds }: Props) {
     research:  'bg-green-100 text-green-800',
     action:    'bg-red-100 text-red-800',
     engineering: 'bg-cyan-100 text-cyan-800',
+    adk:       'bg-violet-100 text-violet-800',
     default:   'bg-gray-100 text-gray-800',
+  };
+
+  const toggleStep = (stepKey: string) => {
+    setExpandedSteps(prev => ({
+      ...prev,
+      [stepKey]: !prev[stepKey],
+    }));
   };
 
   return (
@@ -232,6 +280,66 @@ export default function AgentChat({ token, sessionId, documentIds }: Props) {
                 <div className="mt-1.5 flex items-center gap-1 text-xs text-purple-600">
                   <span>📄</span>
                   <span>Report generated: <code className="bg-purple-50 px-1 rounded">{msg.report_path}</code></span>
+                </div>
+              )}
+
+              {/* Trace timeline */}
+              {msg.role === 'agent' && msg.timeline && msg.timeline.length > 0 && (
+                <div className="mt-2 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50 p-3 shadow-sm">
+                  <div className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-indigo-700">
+                    <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                    ADK stepper
+                  </div>
+                  <div className="relative ml-1 space-y-3 border-l border-indigo-200 pl-4">
+                    {msg.timeline.map((step, idx) => {
+                      const icon = STEP_ICONS[step.name] ?? STEP_ICONS.default;
+                      const statusKey = step.status === 'ok' ? 'ok' : 'pending';
+                      const statusStyle = STEP_STATUS_STYLES[statusKey] ?? STEP_STATUS_STYLES.default;
+                      const dotStyle = STEP_DOT_STYLES[statusKey] ?? STEP_DOT_STYLES.default;
+                      const stepKey = `${msg.id}-${step.name}-${idx}`;
+                      const isExpanded = expandedSteps[stepKey] ?? idx === 0;
+
+                      return (
+                        <div
+                          key={stepKey}
+                          className="group relative opacity-0 animate-[fadeIn_260ms_ease-out_forwards]"
+                          style={{ animationDelay: `${idx * 120}ms` }}
+                        >
+                          <span className={`absolute -left-[1.3rem] top-2 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm ${dotStyle}`} />
+                          <div className="rounded-xl bg-gradient-to-r from-white via-indigo-50/80 to-violet-50/70 p-2.5 shadow-sm ring-1 ring-indigo-100 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md">
+                            <button
+                              type="button"
+                              onClick={() => toggleStep(stepKey)}
+                              className="flex w-full items-start justify-between gap-2 text-left"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-base">{icon}</span>
+                                <div>
+                                  <div className="text-xs font-semibold capitalize text-gray-800">{step.name}</div>
+                                  <div className="mt-0.5 text-[11px] leading-5 text-gray-500">{step.summary}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${statusStyle}`}>
+                                  {step.status === 'ok' ? 'Completed' : 'Pending'}
+                                </div>
+                                <span className={`text-sm text-indigo-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : 'rotate-0'}`}>
+                                  ⌄
+                                </span>
+                              </div>
+                            </button>
+
+                            <div className={`grid overflow-hidden transition-all duration-300 ease-out ${isExpanded ? 'mt-2 max-h-24 opacity-100' : 'mt-0 max-h-0 opacity-0'}`}>
+                              <div className="overflow-hidden rounded-lg border border-indigo-100 bg-white/80 px-2.5 py-2 text-[11px] leading-5 text-gray-600">
+                                <div className="font-medium text-gray-700">{step.summary}</div>
+                                <div className="mt-1 text-gray-500">Click to {isExpanded ? 'collapse' : 'expand'} this step and review the workflow detail.</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

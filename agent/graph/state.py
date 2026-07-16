@@ -5,7 +5,10 @@ LangGraph shared state definition – passed between all nodes in the workflow.
 import operator
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
-from langchain_core.messages import BaseMessage
+try:
+    from langchain_core.messages import BaseMessage
+except Exception:  # pragma: no cover - environment fallback
+    BaseMessage = Any  # type: ignore
 
 
 class AgentState(TypedDict):

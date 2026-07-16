@@ -159,6 +159,51 @@ services:
           memory: 128M
           cpus: '0.25'
 
+  # --- n8n (Workflow Automation) ---
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: smart-document-chatbox-n8n
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-admin}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${N8N_POSTGRES_DB:-n8n}
+      DB_POSTGRESDB_USER: ${N8N_POSTGRES_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${N8N_POSTGRES_PASSWORD:-n8n}
+      GENERIC_TIMEZONE: ${TZ:-UTC}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - n8n-postgres
+    networks:
+      app-network:
+        aliases:
+          - n8n
+
+  n8n-postgres:
+    image: postgres:16-alpine
+    container_name: smart-document-chatbox-n8n-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${N8N_POSTGRES_DB:-n8n}
+      POSTGRES_USER: ${N8N_POSTGRES_USER:-n8n}
+      POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD:-n8n}
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+    networks:
+      app-network:
+        aliases:
+          - n8n-postgres
+
   # --- Prometheus (Monitoring) ---
   prometheus:
     image: prom/prometheus:v2.45.0
@@ -262,6 +307,8 @@ volumes:
   grafana_data:
     driver: local
   agent_reports:
+    driver: local
+  n8n_data:
     driver: local
 
 networks:

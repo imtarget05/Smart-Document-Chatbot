@@ -1,0 +1,196 @@
+{
+  "company": {
+    "name": "Smart Shoes Vietnam",
+    "description": "Nhà sản xuất giày thể thao hàng đầu Việt Nam, xuất khẩu sang 15 quốc gia",
+    "contact": {"hotline": "1900 1234", "email": "cskh@smartshoes.vn"}
+  },
+  "categories": [
+    {
+      "id": "running",
+      "name": "Giày Chạy Bộ",
+      "description": "Giày chạy bộ chuyên dụng cho mọi cấp độ"
+    },
+    {
+      "id": "training",
+      "name": "Giày Tập Gym",
+      "description": "Giày đa năng cho tập luyện hàng ngày"
+    },
+    {
+      "id": "casual",
+      "name": "Giày Thời Trang",
+      "description": "Giày sneaker thời trang cho cuộc sống hàng ngày"
+    },
+    {
+      "id": "football",
+      "name": "Giày Bóng Đá",
+      "description": "Giày đá bóng chuyên nghiệp"
+    }
+  ],
+  "products": [
+    {
+      "id": "RUN-001",
+      "name": "SmartPro Runner X1",
+      "category": "running",
+      "price": 1890000,
+      "original_price": 2200000,
+      "rating": 4.8,
+      "reviews": 1250,
+      "description": "Giày chạy bộ cao cấp với công nghệ đệm AirBoost, phù hợp chạy đường dài (10-42km)",
+      "features": [
+        "Đệm AirBoost siêu nhẹ, giảm sốc 40%",
+        "Upper lưới FlyKnit thoáng khí",
+        "Đế cao su Continental chống trượt",
+        "Trọng lượng chỉ 220g (size 42)"
+      ],
+      "colors": ["Đen", "Trắng", "Xanh dương", "Đỏ"],
+      "stock": 450,
+      "warranty": "12 tháng"
+    },
+    {
+      "id": "RUN-002",
+      "name": "SmartPro Runner Lite",
+      "category": "running",
+      "price": 890000,
+      "original_price": 1100000,
+      "rating": 4.5,
+      "reviews": 3200,
+      "description": "Giày chạy bộ giá phải chăng cho người mới bắt đầu, phù hợp chạy 5-10km",
+      "features": [
+        "Đệm EVA êm ái",
+        "Thoáng khí, khô ráo",
+        "Đế cao su bền bỉ",
+        "Phù hợp chạy bộ hàng ngày"
+      ],
+      "colors": ["Đen", "Xám", "Xanh lá"],
+      "stock": 1200,
+      "warranty": "6 tháng"
+    },
+    {
+      "id": "TRN-001",
+      "name": "SmartGym Flex Pro",
+      "category": "training",
+      "price": 1490000,
+      "original_price": 1800000,
+      "rating": 4.7,
+      "reviews": 890,
+      "description": "Giày tập gym đa năng, phù hợp cả cardio lẫn tạ",
+      "features": [
+        "Đế phẳng ổn định cho squat/deadlift",
+        "Tăng cường hỗ trợ mắt cá",
+        "Chống trượt đa hướng",
+        "Dễ vệ sinh"
+      ],
+      "colors": ["Đen", "Xám đậm", "Xanh navy"],
+      "stock": 670,
+      "warranty": "12 tháng"
+    },
+    {
+      "id": "TRN-002",
+      "name": "SmartGym Light",
+      "category": "training",
+      "price": 690000,
+      "original_price": 850000,
+      "rating": 4.3,
+      "reviews": 2100,
+      "description": "Giày tập gym cơ bản, phù hợp cho người mới tập",
+      "features": [
+        "Thiết kế đơn giản, nhẹ",
+        "Đệm vừa phải",
+        "Bền bỉ",
+        "Nhiều màu sắc"
+      ],
+      "colors": ["Đen", "Trắng", "Hồng", "Xanh"],
+      "stock": 2000,
+      "warranty": "6 tháng"
+    },
+    {
+      "id": "CSL-001",
+      "name": "SmartStreet Urban",
+      "category": "casual",
+      "price": 1290000,
+      "original_price": 1500000,
+      "rating": 4.6,
+      "reviews": 4500,
+      "description": "Sneaker thời trang phong cách Urban, mix match mọi outfit",
+      "features": [
+        "Phối màu thời trang",
+        "Chất liệu da lộn + lưới",
+        "Đệm êm đi cả ngày",
+        "Phù hợp mặc hàng ngày"
+      ],
+      "colors": ["Trắng", "Đen", "Be", "Xanh olive"],
+      "stock": 850,
+      "warranty": "12 tháng"
+    },
+    {
+      "id": "CSL-002",
+      "name": "SmartStreet Vintage",
+      "category": "casual",
+      "price": 990000,
+      "original_price": 1200000,
+      "rating": 4.4,
+      "reviews": 2800,
+      "description": "Sneaker phong cách Vintage cổ điển, hợp với quần jeans",
+      "features": [
+        "Phong cách retro",
+        "Chất da mềm",
+        "Đế chống trượt",
+        "Form chuẩn"
+      ],
+      "colors": ["Trắng kem", "Nâu", "Đen"],
+      "stock": 620,
+      "warranty": "6 tháng"
+    },
+    {
+      "id": "FBL-001",
+      "name": "SmartFootball Elite",
+      "category": "football",
+      "price": 2490000,
+      "original_price": 3000000,
+      "rating": 4.9,
+      "reviews": 560,
+      "description": "Giày bóng đá chuyên nghiệp, đinh CG linh hoạt trên mọi mặt cỏ",
+      "features": [
+        "Đinh CG (Conical Gradient) linh hoạt",
+        "Upper Kangaroo Leather siêu nhẹ",
+        "Công nghệ SpeedFrame",
+        "Chống nước nhẹ"
+      ],
+      "colors": ["Đen/Vàng", "Trắng/Đỏ", "Xanh dương"],
+      "stock": 230,
+      "warranty": "12 tháng"
+    },
+    {
+      "id": "FBL-002",
+      "name": "SmartFootball Club",
+      "category": "football",
+      "price": 990000,
+      "original_price": 1200000,
+      "rating": 4.4,
+      "reviews": 1800,
+      "description": "Giày bóng đá phong trào, bền bỉ, giá hợp lý",
+      "features": [
+        "Đinh cố định TF (Turf)",
+        "Da tổng hợp bền",
+        "Đệm gót chống sốc",
+        "Phù hợp sân cỏ nhân tạo"
+      ],
+      "colors": ["Đen", "Trắng", "Xanh lá"],
+      "stock": 1500,
+      "warranty": "6 tháng"
+    }
+  ],
+  "policies": {
+    "shipping": {
+      "free": "Miễn phí vận chuyển cho đơn hàng trên 500,000đ",
+      "standard": "30,000đ - Giao 3-5 ngày",
+      "express": "50,000đ - Giao 1-2 ngày"
+    },
+    "return": {
+      "days": 30,
+      "condition": "Sản phẩm còn nguyên tem, chưa qua sử dụng",
+      "process": "Liên hệ hotline 1900 1234 để được hướng dẫn"
+    },
+    "warranty": "Bảo hành 6-12 tháng tùy sản phẩm. Lỗi nhà sản xuất 1 đổi 1 trong 7 ngày."
+  }
+}
