@@ -1,0 +1,74 @@
+[
+  {
+    "process": "Document Search & Q&A",
+    "department": "CSKH",
+    "before_min": 15,
+    "after_min": 0.5,
+    "saved_per_task_min": 14.5,
+    "frequency_per_week": 20,
+    "saved_per_week_min": 290.0,
+    "saved_per_month_hours": 20.9,
+    "productivity_gain_pct": 96.7,
+    "cost_saved_per_month": 251.14
+  },
+  {
+    "process": "Policy Compliance Check",
+    "department": "HR",
+    "before_min": 30,
+    "after_min": 1,
+    "saved_per_task_min": 29,
+    "frequency_per_week": 10,
+    "saved_per_week_min": 290,
+    "saved_per_month_hours": 20.9,
+    "productivity_gain_pct": 96.7,
+    "cost_saved_per_month": 313.93
+  },
+  {
+    "process": "Customer Complaint Resolution",
+    "department": "CSKH",
+    "before_min": 45,
+    "after_min": 5,
+    "saved_per_task_min": 40,
+    "frequency_per_week": 15,
+    "saved_per_week_min": 600,
+    "saved_per_month_hours": 43.3,
+    "productivity_gain_pct": 88.9,
+    "cost_saved_per_month": 779.4
+  },
+  {
+    "process": "Knowledge Base Update",
+    "department": "IT",
+    "before_min": 60,
+    "after_min": 10,
+    "saved_per_task_min": 50,
+    "frequency_per_week": 3,
+    "saved_per_week_min": 150,
+    "saved_per_month_hours": 10.8,
+    "productivity_gain_pct": 83.3,
+    "cost_saved_per_month": 216.5
+  },
+  {
+    "process": "8D Report Generation",
+    "department": "Quality",
+    "before_min": 120,
+    "after_min": 15,
+    "saved_per_task_min": 105,
+    "frequency_per_week": 2,
+    "saved_per_week_min": 210,
+    "saved_per_month_hours": 15.2,
+    "productivity_gain_pct": 87.5,
+    "cost_saved_per_month": 333.41
+  },
+  {
+    "process": "Employee Onboarding Training",
+    "department": "HR",
+    "before_min": 240,
+    "after_min": 30,
+    "saved_per_task_min": 210,
+    "frequency_per_week": 1,
+    "saved_per_week_min": 210,
+    "saved_per_month_hours": 15.2,
+    "productivity_gain_pct": 87.5,
+    "cost_saved_per_month": 227.33
+  }
+]
