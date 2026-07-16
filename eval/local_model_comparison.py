@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Local Model Comparison — Qwen2.5 vs Llama3.2 via Ollama
+Local Model Comparison — RAG Context Evaluation
 
-Runs the same questions against different local LLM models
-and produces a real comparison report.
+Tests LLM models with RAG context provided in the prompt.
+This is the REAL use case: can the model extract answers from provided context?
 
 Usage:
     python eval/local_model_comparison.py
@@ -14,21 +14,57 @@ import httpx
 from pathlib import Path
 
 OLLAMA_URL = "http://localhost:11434"
-MODELS = ["qwen2.5:3b", "llama3.2:1b"]
+ALL_MODELS = ["qwen2.5:3b", "llama3.2:1b", "qwen2.5:7b", "qwen2.5:14b"]
+
+# RAG Context extracted from actual project documentation
+RAG_CONTEXT = """
+Smart Document Chatbot - Enterprise Agentic CRAG Platform
+
+Tech Stack:
+- Backend: Spring Boot 3.2.x (Java), REST API under context-path /api
+- Frontend: React 18 + Vite 5 + TypeScript 5 (strict mode) + TanStack Query v5
+- Vector Database: Qdrant for vector storage and similarity search
+- Embeddings: Ollama with nomic-embed-text model
+- LLM: Ollama local models, also supports Claude, GPT via LLM Router
+- Database: PostgreSQL 15 for chat history, document metadata, user data
+- ETL Pipeline: Apache Airflow for document ingestion
+- Streaming: Server-Sent Events (SSE) via Spring Boot SseEmitter, NDJSON from Ollama
+- Monitoring: Prometheus + Grafana
+
+Architecture:
+- Frontend -> Spring Boot API gateway -> Python Agent Service -> LangGraph Orchestrator -> Specialist Agents
+- 7 specialist agents: orchestrator, rag, report, comparator, researcher, action, engineering_analysis
+- Corrective RAG (CRAG) with confidence threshold of 0.45
+- Query reformulation when confidence is low
+- Web search fallback via Tavily API when documents lack information
+- Deep reasoning fallback for questions outside document scope
+
+Document Processing:
+- Supports PDF, DOCX, TXT formats
+- Hierarchical chunking with overlapping strategy
+- Apache Airflow ETL pipeline: page splitting, content cleaning, embedding generation, Qdrant indexing
+- Multi-document synthesis: single file mode or multi-file chat mode
+
+Features:
+- Visual Concept Mapping: AI extracts core concepts and builds mind maps as SVG
+- Citations: transparent source attribution (file metadata, original paragraph content)
+- Agent chat mode via Python FastAPI agent service
+- n8n workflow automation integration
+"""
 
 QUESTIONS = [
-    {"id": 1, "question": "Hệ thống sử dụng framework nào cho backend?", "expected": ["spring boot", "java"]},
+    {"id": 1, "question": "Hệ thống sử dụng framework nào cho backend?", "expected": ["spring boot"]},
     {"id": 2, "question": "Vector database được sử dụng là gì?", "expected": ["qdrant"]},
     {"id": 3, "question": "Chunking strategy được sử dụng trong RAG là gì?", "expected": ["hierarchical", "overlapping"]},
     {"id": 4, "question": "Confidence threshold của hệ thống là bao nhiêu?", "expected": ["0.45"]},
     {"id": 5, "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?", "expected": ["pdf", "docx", "txt"]},
     {"id": 6, "question": "Streaming response sử dụng protocol nào?", "expected": ["sse", "server-sent events"]},
-    {"id": 7, "question": "Frontend sử dụng công nghệ gì?", "expected": ["react", "vite", "typescript"]},
-    {"id": 8, "question": "Hệ thống có bao nhiêu specialist agents?", "expected": ["7", "seven"]},
+    {"id": 7, "question": "Frontend sử dụng công nghệ gì?", "expected": ["react", "vite"]},
+    {"id": 8, "question": "Hệ thống có bao nhiêu specialist agents?", "expected": ["7"]},
     {"id": 9, "question": "Ollama model nào được dùng để generate embeddings?", "expected": ["nomic-embed-text"]},
-    {"id": 10, "question": "Corrective RAG hoạt động như thế nào?", "expected": ["confidence", "reformulation", "fallback"]},
-    {"id": 11, "question": "Khi nào hệ thống sử dụng web search fallback?", "expected": ["low confidence", "thấp", "không đủ"]},
-    {"id": 12, "question": "Hệ thống lưu trữ lịch sử chat ở đâu?", "expected": ["postgresql", "database"]},
+    {"id": 10, "question": "Corrective RAG hoạt động như thế nào?", "expected": ["confidence", "reformulation"]},
+    {"id": 11, "question": "Khi nào hệ thống sử dụng web search fallback?", "expected": ["low confidence", "thấp", "thiếu", "lack"]},
+    {"id": 12, "question": "Hệ thống lưu trữ lịch sử chat ở đâu?", "expected": ["postgresql"]},
     {"id": 13, "question": "LLM Router hỗ trợ những provider nào?", "expected": ["ollama", "claude", "gpt"]},
     {"id": 14, "question": "Airflow được sử dụng để làm gì?", "expected": ["etl", "ingestion", "pipeline"]},
     {"id": 15, "question": "Monitoring stack gồm những thành phần nào?", "expected": ["prometheus", "grafana"]},
@@ -36,9 +72,13 @@ QUESTIONS = [
 
 
 def ask_ollama(model: str, question: str) -> dict:
-    """Send a question to Ollama and measure response."""
-    prompt = f"""You are a helpful assistant. Answer the following question about the Smart Document Chatbot system.
-Answer concisely in 1-2 sentences. Only provide facts, no speculation.
+    """Send a question with RAG context to Ollama and measure response."""
+    prompt = f"""You are a helpful assistant. Use ONLY the context below to answer the question.
+If the answer is not in the context, say "I don't have enough information".
+Answer concisely in 1-2 sentences.
+
+Context:
+{RAG_CONTEXT}
 
 Question: {question}
 
@@ -49,7 +89,7 @@ Answer:"""
         resp = httpx.post(
             f"{OLLAMA_URL}/api/generate",
             json={"model": model, "prompt": prompt, "stream": False},
-            timeout=120
+            timeout=180
         )
         latency_ms = round((time.time() - start) * 1000)
 
@@ -138,7 +178,7 @@ def run_comparison():
 def print_final_report(results: dict):
     """Print comparative report."""
     print(f"\n\n{'='*60}")
-    print(f"📊 FINAL COMPARISON REPORT")
+    print(f"📊 FINAL COMPARISON REPORT (RAG Context)")
     print(f"{'='*60}")
 
     sorted_models = sorted(results.values(), key=lambda x: x["accuracy"], reverse=True)
@@ -156,33 +196,44 @@ def print_final_report(results: dict):
 
 
 def main():
-    print("🔬 Local Model Comparison — Ollama")
-    print(f"   Models: {', '.join(MODELS)}")
+    print("🔬 Local Model Comparison — RAG Context Evaluation")
     print(f"   Questions: {len(QUESTIONS)}")
+    print(f"   Mode: With RAG context (real use case)")
 
-    # Check Ollama
+    # Check Ollama and find available models
     try:
         resp = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=5)
         available = [m["name"] for m in resp.json().get("models", [])]
-        for model in MODELS:
-            if model not in available:
-                print(f"❌ Model '{model}' not found. Available: {available}")
-                return
     except Exception as e:
         print(f"❌ Cannot connect to Ollama: {e}")
         return
+
+    # Filter to only available models
+    models = [m for m in ALL_MODELS if m in available]
+    if not models:
+        print(f"❌ No target models found. Available: {available}")
+        return
+    print(f"   Models: {', '.join(models)}")
+    skipped = [m for m in ALL_MODELS if m not in available]
+    if skipped:
+        print(f"   Skipped (not downloaded): {', '.join(skipped)}")
+
+    # Override global MODELS
+    global MODELS
+    MODELS = models
 
     results = run_comparison()
     print_final_report(results)
 
     # Save results
-    output_path = Path("eval/results/local_model_comparison.json")
+    output_path = Path("eval/results/local_model_comparison_rag.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     save_data = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "models": MODELS,
         "questions_count": len(QUESTIONS),
+        "mode": "rag_context",
         "results": {k: {kk: vv for kk, vv in v.items() if kk != "details"} for k, v in results.items()},
         "per_model_details": results,
     }
