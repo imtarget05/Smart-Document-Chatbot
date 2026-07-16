@@ -1,9 +1,10 @@
 {
-  "timestamp": "2026-07-16T17:53:54Z",
+  "timestamp": "2026-07-16T18:18:53Z",
   "models": [
     "qwen2.5:3b",
     "llama3.2:1b",
-    "qwen2.5:7b"
+    "qwen2.5:7b",
+    "qwen2.5:14b"
   ],
   "questions_count": 15,
   "mode": "rag_context",
@@ -13,27 +14,36 @@
       "total": 15,
       "successful": 15,
       "accuracy": 0.8,
-      "avg_latency_ms": 1125,
-      "p95_latency_ms": 2982,
-      "total_tokens": 455
+      "avg_latency_ms": 981,
+      "p95_latency_ms": 1775,
+      "total_tokens": 361
     },
     "llama3.2:1b": {
       "model": "llama3.2:1b",
       "total": 15,
       "successful": 15,
-      "accuracy": 0.8,
-      "avg_latency_ms": 647,
-      "p95_latency_ms": 1164,
-      "total_tokens": 438
+      "accuracy": 0.4667,
+      "avg_latency_ms": 696,
+      "p95_latency_ms": 2391,
+      "total_tokens": 484
     },
     "qwen2.5:7b": {
       "model": "qwen2.5:7b",
       "total": 15,
       "successful": 15,
+      "accuracy": 0.8,
+      "avg_latency_ms": 2465,
+      "p95_latency_ms": 6482,
+      "total_tokens": 595
+    },
+    "qwen2.5:14b": {
+      "model": "qwen2.5:14b",
+      "total": 15,
+      "successful": 15,
       "accuracy": 0.8667,
-      "avg_latency_ms": 4842,
-      "p95_latency_ms": 13399,
-      "total_tokens": 355
+      "avg_latency_ms": 4043,
+      "p95_latency_ms": 13294,
+      "total_tokens": 484
     }
   },
   "per_model_details": {
@@ -42,32 +52,32 @@
       "total": 15,
       "successful": 15,
       "accuracy": 0.8,
-      "avg_latency_ms": 1125,
-      "p95_latency_ms": 2982,
-      "total_tokens": 455,
+      "avg_latency_ms": 981,
+      "p95_latency_ms": 1775,
+      "total_tokens": 361,
       "details": [
         {
           "question_id": 1,
           "question": "Hệ thống sử dụng framework nào cho backend?",
-          "answer": "Smart Document Chatbot menggunakan Spring Boot 3.2.x sebagai framework cho backend dengan backend yang dikendalikan oleh REST API di context-path /api.",
+          "answer": "Smart Document Chatbot menggunakan Spring Boot 3.2.x untuk framework backend dengan REST API berada di path context-path /api.",
           "correct": true,
           "keywords_found": [
             "spring boot"
           ],
-          "latency_ms": 4255,
-          "eval_count": 33,
+          "latency_ms": 3862,
+          "eval_count": 28,
           "status": "success"
         },
         {
           "question_id": 2,
           "question": "Vector database được sử dụng là gì?",
-          "answer": "Vector Database được sử dụng là Qdrant，用于存储和相似性搜索向量。",
+          "answer": "Vector Database được sử dụng là Qdrant untuk penyimpanan vektor dan pencarian kesamaan.",
           "correct": true,
           "keywords_found": [
             "qdrant"
           ],
-          "latency_ms": 680,
-          "eval_count": 20,
+          "latency_ms": 769,
+          "eval_count": 24,
           "status": "success"
         },
         {
@@ -79,7 +89,7 @@
             "hierarchical",
             "overlapping"
           ],
-          "latency_ms": 652,
+          "latency_ms": 671,
           "eval_count": 19,
           "status": "success"
         },
@@ -91,22 +101,22 @@
           "keywords_found": [
             "0.45"
           ],
-          "latency_ms": 549,
+          "latency_ms": 563,
           "eval_count": 14,
           "status": "success"
         },
         {
           "question_id": 5,
           "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?",
-          "answer": "Hệ thống hỗ trợ các định dạng tài liệu PDF, DOCX và TXT.",
+          "answer": "Smart Document Chatbot hệ thống hỗ trợ các định dạng tài liệu PDF, DOCX và TXT.",
           "correct": true,
           "keywords_found": [
             "pdf",
             "docx",
             "txt"
           ],
-          "latency_ms": 632,
-          "eval_count": 18,
+          "latency_ms": 704,
+          "eval_count": 21,
           "status": "success"
         },
         {
@@ -118,7 +128,7 @@
             "sse",
             "server-sent events"
           ],
-          "latency_ms": 823,
+          "latency_ms": 840,
           "eval_count": 27,
           "status": "success"
         },
@@ -131,7 +141,7 @@
             "react",
             "vite"
           ],
-          "latency_ms": 650,
+          "latency_ms": 679,
           "eval_count": 19,
           "status": "success"
         },
@@ -143,78 +153,80 @@
           "keywords_found": [
             "7"
           ],
-          "latency_ms": 455,
+          "latency_ms": 464,
           "eval_count": 10,
           "status": "success"
         },
         {
           "question_id": 9,
           "question": "Ollama model nào được dùng để generate embeddings?",
-          "answer": "Ollama model được dùng để generate embeddings.",
-          "correct": false,
-          "keywords_found": [],
-          "latency_ms": 475,
-          "eval_count": 11,
+          "answer": "Ollama với mô hình nomic-embed-text được sử dụng để generate embeddings.",
+          "correct": true,
+          "keywords_found": [
+            "nomic-embed-text"
+          ],
+          "latency_ms": 666,
+          "eval_count": 19,
           "status": "success"
         },
         {
           "question_id": 10,
           "question": "Corrective RAG hoạt động như thế nào?",
-          "answer": "Corrective RAG hoạt động dựa trên việc sử dụng các chuyên gia (agent) để xử lý các câu hỏi mà hệ thống Smart Document Chatbot không thể trả lời chính xác. Khi xác suất độ tin cậy của response từ Ollama hoặc Claude là thấp dưới một mức định sẵn (0.45), RAG sẽ yêu cầu các chuyên gia khác nhau để tìm kiếm đáp án dựa trên thông tin đã có trong tài liệu và thực hiện lặp lại quá trình xử lý đến khi đạt được độ tin cậy mong muốn hoặc không tìm thấy câu trả lời phù hợp.",
+          "answer": "Corrective RAG hoạt động bằng cách sử dụng các chuyên gia ngôn ngữ để trả lời câu hỏi nếu xác suất của đáp án từ các cơ sở dữ liệu văn bản không đạt đến ngưỡng 0.45, đồng thời thực hiện tái lập lại câu hỏi cho có thể cải thiện độ tin cậy của kết quả.",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 2982,
-          "eval_count": 124,
+          "latency_ms": 1775,
+          "eval_count": 68,
           "status": "success"
         },
         {
           "question_id": 11,
           "question": "Khi nào hệ thống sử dụng web search fallback?",
-          "answer": "Khi hệ thống nhận thấy độ tin cậy của đáp án từ các tài liệu thấp dưới ngưỡng xác định (0.45), hệ thống sẽ thực hiện cú lấy thông tin từ internet thông qua API Tavily. Ngược lại, nếu tài liệu không cung cấp thông tin cần thiết hoặc quá phức tạp để trả lời bằng cách sử dụng tài liệu, hệ thống sẽ sử dụng fallback để làm rõ câu hỏi và tìm kiếm thông tin từ web.",
-          "correct": true,
-          "keywords_found": [
-            "thấp"
-          ],
-          "latency_ms": 2355,
-          "eval_count": 96,
+          "answer": "Hệ thống sẽ sử dụng fallback tìm kiếm web khi thông tin cần được trả lời không thể tìm thấy trong các tài liệu đã nhập.",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 889,
+          "eval_count": 29,
           "status": "success"
         },
         {
           "question_id": 12,
           "question": "Hệ thống lưu trữ lịch sử chat ở đâu?",
-          "answer": "Database: PostgreSQL 15 được sử dụng để lưu trữ lịch sử chat.",
+          "answer": "Hệ thống lưu trữ lịch sử chat ở database PostgreSQL 15.",
           "correct": true,
           "keywords_found": [
             "postgresql"
           ],
-          "latency_ms": 610,
-          "eval_count": 17,
+          "latency_ms": 604,
+          "eval_count": 16,
           "status": "success"
         },
         {
           "question_id": 13,
           "question": "LLM Router hỗ trợ những provider nào?",
-          "answer": "LLM Router supports Ollama local models and also supports Claude and GPT.",
+          "answer": "LLM Router supports Ollama local models and also supports Claude and GPT. However, I don't have enough information to specify other providers it might support based on the given context.",
           "correct": true,
           "keywords_found": [
             "ollama",
             "claude",
             "gpt"
           ],
-          "latency_ms": 630,
-          "eval_count": 18,
+          "latency_ms": 1107,
+          "eval_count": 39,
           "status": "success"
         },
         {
           "question_id": 14,
           "question": "Airflow được sử dụng để làm gì?",
-          "answer": "Apache Airflow được sử dụng để xử lý quá trình nhập liệu (ETL) của tài liệu.",
+          "answer": "Apache Airflow được sử dụng để xử lý Pipeline ETL cho việc ingestion dữ liệu văn bản.",
           "correct": true,
           "keywords_found": [
-            "etl"
+            "etl",
+            "ingestion",
+            "pipeline"
           ],
-          "latency_ms": 720,
-          "eval_count": 22,
+          "latency_ms": 705,
+          "eval_count": 21,
           "status": "success"
         },
         {
@@ -223,7 +235,7 @@
           "answer": "I don't have enough information",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 403,
+          "latency_ms": 424,
           "eval_count": 7,
           "status": "success"
         }
@@ -233,176 +245,165 @@
       "model": "llama3.2:1b",
       "total": 15,
       "successful": 15,
-      "accuracy": 0.8,
-      "avg_latency_ms": 647,
-      "p95_latency_ms": 1164,
-      "total_tokens": 438,
+      "accuracy": 0.4667,
+      "avg_latency_ms": 696,
+      "p95_latency_ms": 2391,
+      "total_tokens": 484,
       "details": [
         {
           "question_id": 1,
           "question": "Hệ thống sử dụng framework nào cho backend?",
-          "answer": "The backend is built using Spring Boot 3.2.x (Java).",
+          "answer": "Smart Document Chatbot - Enterprise Aggent CRAG Platform sử dụng Backend: Spring Boot 3.2.x (Java).",
           "correct": true,
           "keywords_found": [
             "spring boot"
           ],
-          "latency_ms": 2246,
-          "eval_count": 16,
+          "latency_ms": 2391,
+          "eval_count": 26,
           "status": "success"
         },
         {
           "question_id": 2,
           "question": "Vector database được sử dụng là gì?",
-          "answer": "Vector Database được sử dụng là Qdrant.",
+          "answer": "Vector Database được sử dụng trong Smart Document Chatbot - Enterprise Agentic CRAG Platform là Qdrant.",
           "correct": true,
           "keywords_found": [
             "qdrant"
           ],
-          "latency_ms": 330,
-          "eval_count": 11,
+          "latency_ms": 462,
+          "eval_count": 23,
           "status": "success"
         },
         {
           "question_id": 3,
           "question": "Chunking strategy được sử dụng trong RAG là gì?",
-          "answer": "Chunking strategy được sử dụng trong Corrective RAG (CRAG) để phân chia các văn bản thành các mảnh nhỏ nhất có thể, dựa trên chiến lược chồng chéo.",
+          "answer": "Chunking strategy được sử dụng trong Corrective RAG (CRAG) để chia các tài liệu thành các phần nhỏ hơn, nhằm tăng cường khả năng tìm kiếm và phân tích.",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 636,
-          "eval_count": 39,
+          "latency_ms": 635,
+          "eval_count": 38,
           "status": "success"
         },
         {
           "question_id": 4,
           "question": "Confidence threshold của hệ thống là bao nhiêu?",
-          "answer": "I don't have enough information about the \"confidence threshold\" of the system. The context only mentions that it is set at 0.45 for Corrective RAG (CRAG) but does not explain how this value was determined or what exactly a confidence threshold represents in the context of the Smart Document Chatbot - Enterprise Agentic CRAG Platform.",
-          "correct": true,
-          "keywords_found": [
-            "0.45"
-          ],
-          "latency_ms": 981,
-          "eval_count": 72,
+          "answer": "I don't have enough information about the confidence threshold of the system.",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 375,
+          "eval_count": 15,
           "status": "success"
         },
         {
           "question_id": 5,
           "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?",
-          "answer": "Smart Document Chatbot - Enterprise Aggent CRAG Platform sử dụng Vector Database để xử lý và tìm kiếm các định dạng tài liệu phù hợp, bao gồm PDF, DOCX, TXT.",
+          "answer": "System hỗ trợ các định dạng tài liệu PDF, DOCX, TXT.",
           "correct": true,
           "keywords_found": [
             "pdf",
             "docx",
             "txt"
           ],
-          "latency_ms": 628,
-          "eval_count": 39,
+          "latency_ms": 420,
+          "eval_count": 16,
           "status": "success"
         },
         {
           "question_id": 6,
           "question": "Streaming response sử dụng protocol nào?",
-          "answer": "The question asks about the streaming response protocol used in Smart Document Chatbot. Based on the context, I don't have enough information to provide a precise answer.",
+          "answer": "Streaming response sử dụng Protocol Stream.",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 563,
-          "eval_count": 33,
+          "latency_ms": 297,
+          "eval_count": 8,
           "status": "success"
         },
         {
           "question_id": 7,
           "question": "Frontend sử dụng công nghệ gì?",
-          "answer": "The frontend uses React 18 + Vite 5 + TypeScript 5 (strict mode) with TanStack Query v5.",
-          "correct": true,
-          "keywords_found": [
-            "react",
-            "vite"
-          ],
-          "latency_ms": 496,
-          "eval_count": 27,
+          "answer": "Frontend sử dụng Vector Database Qdrant.",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 332,
+          "eval_count": 11,
           "status": "success"
         },
         {
           "question_id": 8,
           "question": "Hệ thống có bao nhiêu specialist agents?",
-          "answer": "The Specialist Agents are 7 in number.",
+          "answer": "The React frontend is integrated with 7 Specialist Agents.",
           "correct": true,
           "keywords_found": [
             "7"
           ],
-          "latency_ms": 317,
-          "eval_count": 10,
+          "latency_ms": 341,
+          "eval_count": 12,
           "status": "success"
         },
         {
           "question_id": 9,
           "question": "Ollama model nào được dùng để generate embeddings?",
-          "answer": "Ollama sử dụng với các mô hình nomic-embed-text.",
+          "answer": "Ollama sử dụng một mô hình nomic-embed-text.",
           "correct": true,
           "keywords_found": [
             "nomic-embed-text"
           ],
-          "latency_ms": 382,
-          "eval_count": 16,
+          "latency_ms": 375,
+          "eval_count": 15,
           "status": "success"
         },
         {
           "question_id": 10,
           "question": "Corrective RAG hoạt động như thế nào?",
-          "answer": "Corrective RAG (CRAG) hoạt động bằng cách sử dụng một hệ thống kiểm soát độ tin cậy (confidence threshold) để xác định các câu hỏi có thể cần giải đáp thông qua deep reasoning. Nếu độ tin cậy của câu hỏi thấp, CRAG sẽ yêu cầu tìm kiếm câu trả lời thông qua web search nếu không có thông tin trong document hoặc sử dụng Tavily API nếu thiếu thông tin trong document.",
-          "correct": true,
-          "keywords_found": [
-            "confidence"
-          ],
-          "latency_ms": 1164,
-          "eval_count": 89,
+          "answer": "Corrective RAG (CRAG) hoạt động thông qua một quy trình sau: \n\n1. Đầu tiên, hệ thống sẽ xem xét câu hỏi và xác định độ tin cậy của đề xuất bằng cách sử dụng mô hình Ollama với nomic-embed-text model.\n2. Nếu độ tin cậy thấp hơn 0.45, hệ thống sẽ thực hiện tính toán cơ bản để tìm kiếm giải pháp có thể làm giảm độ tin cậy của đề xuất.\n3. Tiếp theo, hệ thống sẽ xem xét các nguồn bổ sung như Tavily API để thêm thông tin và cải thiện độ tin cậy của đề xuất.\n4. Nếu vẫn còn độ tin cậy thấp hơn 0.45 sau khi thực hiện các bước trên, hệ thống sẽ áp dụng phương pháp deep reasoning để tìm kiếm giải pháp có thể làm giảm độ tin cậy của đề xuất.\n\nMục tiêu chính của CRAG là cung cấp giải pháp có khả năng giảm độ tin cậy của đề xuất một cách hiệu quả nhất cho người dùng.",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 2601,
+          "eval_count": 214,
           "status": "success"
         },
         {
           "question_id": 11,
           "question": "Khi nào hệ thống sử dụng web search fallback?",
-          "answer": "Hệ thống sử dụng web search fallback khi document thiếu thông tin.",
-          "correct": true,
-          "keywords_found": [
-            "thiếu"
-          ],
-          "latency_ms": 366,
-          "eval_count": 15,
+          "answer": "Hệ thống sử dụng web search fallback khi lưu lượng truy cập cao.",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 384,
+          "eval_count": 16,
           "status": "success"
         },
         {
           "question_id": 12,
           "question": "Hệ thống lưu trữ lịch sử chat ở đâu?",
-          "answer": "I don't have enough information. The context does not mention where the chat history is stored.",
+          "answer": "I don't have enough information about the specific question. The context only mentions that Smart Document Chatbot is an enterprise agentic CRAG Platform, but it does not explicitly state where the chat history is stored.",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 421,
-          "eval_count": 20,
+          "latency_ms": 678,
+          "eval_count": 43,
           "status": "success"
         },
         {
           "question_id": 13,
           "question": "LLM Router hỗ trợ những provider nào?",
-          "answer": "The LLM Router supports Claude and GPT via LLM Router.",
-          "correct": true,
-          "keywords_found": [
-            "claude",
-            "gpt"
-          ],
-          "latency_ms": 369,
-          "eval_count": 15,
+          "answer": "I don't have enough information. The context does not mention specific providers that the LLM Router supports.",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 452,
+          "eval_count": 22,
           "status": "success"
         },
         {
           "question_id": 14,
           "question": "Airflow được sử dụng để làm gì?",
-          "answer": "Airflow được sử dụng để xây dựng ETL ( Extraction, Transformation, Load) pipeline cho document của Smart Document Chatbot.",
+          "answer": "Airflow được sử dụng để tạo ETL pipeline cho việc document ingestion.",
           "correct": true,
           "keywords_found": [
             "etl",
+            "ingestion",
             "pipeline"
           ],
-          "latency_ms": 497,
-          "eval_count": 27,
+          "latency_ms": 386,
+          "eval_count": 16,
           "status": "success"
         },
         {
@@ -414,7 +415,7 @@
             "prometheus",
             "grafana"
           ],
-          "latency_ms": 308,
+          "latency_ms": 318,
           "eval_count": 9,
           "status": "success"
         }
@@ -424,10 +425,10 @@
       "model": "qwen2.5:7b",
       "total": 15,
       "successful": 15,
-      "accuracy": 0.8667,
-      "avg_latency_ms": 4842,
-      "p95_latency_ms": 13399,
-      "total_tokens": 355,
+      "accuracy": 0.8,
+      "avg_latency_ms": 2465,
+      "p95_latency_ms": 6482,
+      "total_tokens": 595,
       "details": [
         {
           "question_id": 1,
@@ -437,7 +438,7 @@
           "keywords_found": [
             "spring boot"
           ],
-          "latency_ms": 8105,
+          "latency_ms": 6482,
           "eval_count": 16,
           "status": "success"
         },
@@ -449,33 +450,33 @@
           "keywords_found": [
             "qdrant"
           ],
-          "latency_ms": 703,
+          "latency_ms": 729,
           "eval_count": 9,
           "status": "success"
         },
         {
           "question_id": 3,
           "question": "Chunking strategy được sử dụng trong RAG là gì?",
-          "answer": "Hierarchical chunking with an overlapping strategy is used for document processing in the RAG architecture.",
+          "answer": "Hierarchical chunking with an overlapping strategy is used for document processing in the CRAG platform.",
           "correct": true,
           "keywords_found": [
             "hierarchical",
             "overlapping"
           ],
-          "latency_ms": 1185,
+          "latency_ms": 1204,
           "eval_count": 20,
           "status": "success"
         },
         {
           "question_id": 4,
           "question": "Confidence threshold của hệ thống là bao nhiêu?",
-          "answer": "Confidence阈值为0.45。",
+          "answer": "Độ的信心阈值为0.45。",
           "correct": true,
           "keywords_found": [
             "0.45"
           ],
-          "latency_ms": 785,
-          "eval_count": 11,
+          "latency_ms": 844,
+          "eval_count": 12,
           "status": "success"
         },
         {
@@ -488,20 +489,20 @@
             "docx",
             "txt"
           ],
-          "latency_ms": 1090,
+          "latency_ms": 1116,
           "eval_count": 18,
           "status": "success"
         },
         {
           "question_id": 6,
           "question": "Streaming response sử dụng protocol nào?",
-          "answer": "Streaming response sử dụng Server-Sent Events (SSE) qua Spring Boot SseEmitter.",
+          "answer": "Streamingresponse sử dụng Server-Sent Events (SSE)via Spring Boot SseEmitter.",
           "correct": true,
           "keywords_found": [
             "sse",
             "server-sent events"
           ],
-          "latency_ms": 27659,
+          "latency_ms": 1193,
           "eval_count": 20,
           "status": "success"
         },
@@ -514,64 +515,62 @@
             "react",
             "vite"
           ],
-          "latency_ms": 1564,
+          "latency_ms": 1649,
           "eval_count": 29,
           "status": "success"
         },
         {
           "question_id": 8,
           "question": "Hệ thống có bao nhiêu specialist agents?",
-          "answer": "Hệ thống có 7 specialist agents: orchestrator, rag, report, comparator, researcher, action, engineering_analysis。",
+          "answer": "Hệ thống có 7 specialist agents: orchestrator, rag, report, comparator, researcher, action, và engineering_analysis。",
           "correct": true,
           "keywords_found": [
             "7"
           ],
-          "latency_ms": 1435,
-          "eval_count": 26,
+          "latency_ms": 1517,
+          "eval_count": 27,
           "status": "success"
         },
         {
           "question_id": 9,
           "question": "Ollama model nào được dùng để generate embeddings?",
-          "answer": "Ollama với mô hình nomic-embed-text được sử dụng để tạo vector embedding.",
+          "answer": "Ollama với mô hình nomic-embed-text được sử dụng để生成嵌入向量。",
           "correct": true,
           "keywords_found": [
             "nomic-embed-text"
           ],
-          "latency_ms": 1179,
-          "eval_count": 20,
+          "latency_ms": 1292,
+          "eval_count": 22,
           "status": "success"
         },
         {
           "question_id": 10,
           "question": "Corrective RAG hoạt động như thế nào?",
-          "answer": "Corrective RAG（CRAG）在信心值低于0.45时进行查询重构。当查询的信心值较低时，系统会回退到通过Tavily API进行网络搜索以获取更多信息。",
+          "answer": "Corrective RAG（CRAG）会在低置信度时进行纠正，当查询的置信度低于0.45时，会进行查询重写；如果文档中缺乏信息，则通过Tavily API执行网络搜索作为后备方案。",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 3637,
-          "eval_count": 46,
+          "latency_ms": 2776,
+          "eval_count": 55,
           "status": "success"
         },
         {
           "question_id": 11,
           "question": "Khi nào hệ thống sử dụng web search fallback?",
-          "answer": "Hệ thống sử dụng web search fallback khi thông tin không có trong tài liệu.",
+          "answer": "Hệ thống sử dụng web search fallback khi thông tin cần tìm không có trong tài liệu.",
           "correct": false,
           "keywords_found": [],
-          "latency_ms": 3548,
-          "eval_count": 18,
+          "latency_ms": 1209,
+          "eval_count": 20,
           "status": "success"
         },
         {
           "question_id": 12,
           "question": "Hệ thống lưu trữ lịch sử chat ở đâu?",
-          "answer": "Hệ thống lưu trữ lịch sử chat ở Database PostgreSQL 15.",
-          "correct": true,
-          "keywords_found": [
-            "postgresql"
-          ],
-          "latency_ms": 3237,
-          "eval_count": 16,
+          "answer": "Hệ thống lưu trữ lịch史蒂文·雷在问题中的回答显示了他在技术和产品方面的深厚积累，特别是在智能文档处理和聊天机器人领域。他的回答使用了一个简化的架构图来展示系统的工作流程，这有助于读者更好地理解系统的整体结构。\n\n从描述中我们可以看到几个关键点：\n1. **技术栈**：后端使用Spring Boot 3.2.x（Java）提供REST API服务；前端采用React 18 + Vite 5 + TypeScript 5实现；向量数据库使用Qdrant进行存储和相似性搜索。\n2. **模型和服务**：嵌入式模型Ollama的nomic-embed-text模型，本地LLM Ollama以及其他支持的LLMs（如Claude、GPT）通过LLM路由器提供服务。还有一个基于Apache Airflow的数据处理管道用于文档摄取。\n3. **架构设计**：前端通过Spring Boot API网关发送请求到Python代理服务，最终到达LangGraph Orchestrator，并由7个专业代理（包括调度器、RAG、报告生成等）共同协作完成任务。\n\n这个架构图表明系统非常复杂且功能丰富，能够处理从文档的导入、解析、嵌入向量存储直至最后与用户的交互和回答问题的过程。整个过程依赖于多个技术组件和服务之间的协调工作来实现高效的信息检索和智能响应。",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 13343,
+          "eval_count": 289,
           "status": "success"
         },
         {
@@ -583,34 +582,228 @@
             "claude",
             "gpt"
           ],
-          "latency_ms": 2626,
+          "latency_ms": 924,
           "eval_count": 12,
           "status": "success"
         },
         {
           "question_id": 14,
           "question": "Airflow được sử dụng để làm gì?",
-          "answer": "Airflow được sử dụng cho-pipeline của ETL để-ingestion文档处理：\n- 支持PDF、DOCX、TXT格式\n- 嵌套分块策略，具有重叠策略\n- Apache Airflow ETL管道：页面拆分、内容清理、嵌入生成、Qdrant索引\n\nAirflow被用于执行ETL pipeline以进行文档摄取。",
+          "answer": "Airflow được sử dụng cho luồng xử lý dữ liệu ETL (Extract, Transform, Load) trong việc thu thập và.index hóa nội dung của tài liệu.",
           "correct": true,
           "keywords_found": [
-            "etl",
-            "ingestion",
-            "pipeline"
+            "etl"
           ],
-          "latency_ms": 13399,
-          "eval_count": 83,
+          "latency_ms": 1901,
+          "eval_count": 35,
           "status": "success"
         },
         {
           "question_id": 15,
           "question": "Monitoring stack gồm những thành phần nào?",
-          "answer": "Monitoring stack bao gồm Prometheus + Grafana.",
+          "answer": "Monitoring stack bao gồm Prometheus và Grafana.",
           "correct": true,
           "keywords_found": [
             "prometheus",
             "grafana"
           ],
-          "latency_ms": 2473,
+          "latency_ms": 801,
+          "eval_count": 11,
+          "status": "success"
+        }
+      ]
+    },
+    "qwen2.5:14b": {
+      "model": "qwen2.5:14b",
+      "total": 15,
+      "successful": 15,
+      "accuracy": 0.8667,
+      "avg_latency_ms": 4043,
+      "p95_latency_ms": 13294,
+      "total_tokens": 484,
+      "details": [
+        {
+          "question_id": 1,
+          "question": "Hệ thống sử dụng framework nào cho backend?",
+          "answer": "Hệ thống sử dụng Spring Boot 3.2.x (Java) cho backend.",
+          "correct": true,
+          "keywords_found": [
+            "spring boot"
+          ],
+          "latency_ms": 13294,
+          "eval_count": 19,
+          "status": "success"
+        },
+        {
+          "question_id": 2,
+          "question": "Vector database được sử dụng là gì?",
+          "answer": "Vector database được sử dụng là Qdrant.",
+          "correct": true,
+          "keywords_found": [
+            "qdrant"
+          ],
+          "latency_ms": 1446,
+          "eval_count": 11,
+          "status": "success"
+        },
+        {
+          "question_id": 3,
+          "question": "Chunking strategy được sử dụng trong RAG là gì?",
+          "answer": "Chunking strategy sử dụng là hierarchical chunking với overlapping strategy.",
+          "correct": true,
+          "keywords_found": [
+            "hierarchical",
+            "overlapping"
+          ],
+          "latency_ms": 1684,
+          "eval_count": 14,
+          "status": "success"
+        },
+        {
+          "question_id": 4,
+          "question": "Confidence threshold của hệ thống là bao nhiêu?",
+          "answer": "Confidence threshold của hệ thống là 0.45.",
+          "correct": true,
+          "keywords_found": [
+            "0.45"
+          ],
+          "latency_ms": 1669,
+          "eval_count": 14,
+          "status": "success"
+        },
+        {
+          "question_id": 5,
+          "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?",
+          "answer": "Hệ thống hỗ trợ định dạng tài liệu PDF, DOCX và TXT.",
+          "correct": true,
+          "keywords_found": [
+            "pdf",
+            "docx",
+            "txt"
+          ],
+          "latency_ms": 1957,
+          "eval_count": 17,
+          "status": "success"
+        },
+        {
+          "question_id": 6,
+          "question": "Streaming response sử dụng protocol nào?",
+          "answer": "Streaming response sử dụng Server-Sent Events (SSE) via Spring Boot SseEmitter.",
+          "correct": true,
+          "keywords_found": [
+            "sse",
+            "server-sent events"
+          ],
+          "latency_ms": 2220,
+          "eval_count": 20,
+          "status": "success"
+        },
+        {
+          "question_id": 7,
+          "question": "Frontend sử dụng công nghệ gì?",
+          "answer": "Frontend sử dụng React 18 + Vite 5 + TypeScript 5 (strict mode) + TanStack Query v5.",
+          "correct": true,
+          "keywords_found": [
+            "react",
+            "vite"
+          ],
+          "latency_ms": 2981,
+          "eval_count": 29,
+          "status": "success"
+        },
+        {
+          "question_id": 8,
+          "question": "Hệ thống có bao nhiêu specialist agents?",
+          "answer": "Hệ thống có 7 chuyên gia đặc biệt (specialist agents).",
+          "correct": true,
+          "keywords_found": [
+            "7"
+          ],
+          "latency_ms": 1843,
+          "eval_count": 16,
+          "status": "success"
+        },
+        {
+          "question_id": 9,
+          "question": "Ollama model nào được dùng để generate embeddings?",
+          "answer": "Ollama với mô hình nomic-embed-text được sử dụng để tạo ra các embeddings.",
+          "correct": true,
+          "keywords_found": [
+            "nomic-embed-text"
+          ],
+          "latency_ms": 2380,
+          "eval_count": 22,
+          "status": "success"
+        },
+        {
+          "question_id": 10,
+          "question": "Corrective RAG hoạt động như thế nào?",
+          "answer": "Corrective RAG (CRAG) trong hệ thống này hoạt động bằng cách thiết lập ngưỡng tin cậy là 0.45, khi mức độ tự tin của câu trả lời thấp hơn ngưỡng này, hệ thống sẽ thực hiện việc重塑问题以便更好地处理它。\n\n问题应该是关于如何在给定的背景下解释“Corrective RAG (CRAG)”的工作原理。根据上下文，正确的回答是：\n\nAnswer: Corrective RAG (CRAG) 在该系统中通过设置0.45的信心阈值来运作，当答案的信任度低于此阈值时，系统会执行查询重构，并在必要时使用Web搜索（如Tavily API）或深度推理作为备用方案。",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 13847,
+          "eval_count": 151,
+          "status": "success"
+        },
+        {
+          "question_id": 11,
+          "question": "Khi nào hệ thống sử dụng web search fallback?",
+          "answer": "Hệ thống sử dụng web search fallback qua API Tavily khi các tài liệu trong库存在提供的上下文中并没有用越南语提出关于何时使用web搜索备份的信息，但根据之前的英文描述，在文档中缺乏所需信息时会通过Tavily API进行网络搜索。因此翻译回答：\n\n当文档中的信息不足时，系统会通过Tavily API进行网络搜索fallback。",
+          "correct": false,
+          "keywords_found": [],
+          "latency_ms": 7702,
+          "eval_count": 82,
+          "status": "success"
+        },
+        {
+          "question_id": 12,
+          "question": "Hệ thống lưu trữ lịch sử chat ở đâu?",
+          "answer": "Hệ thống lưu trữ lịch sử chat trong PostgreSQL 15.",
+          "correct": true,
+          "keywords_found": [
+            "postgresql"
+          ],
+          "latency_ms": 1759,
+          "eval_count": 15,
+          "status": "success"
+        },
+        {
+          "question_id": 13,
+          "question": "LLM Router hỗ trợ những provider nào?",
+          "answer": "LLM Router hỗ trợ Ollama local models, Claude, và GPT.",
+          "correct": true,
+          "keywords_found": [
+            "ollama",
+            "claude",
+            "gpt"
+          ],
+          "latency_ms": 2029,
+          "eval_count": 18,
+          "status": "success"
+        },
+        {
+          "question_id": 14,
+          "question": "Airflow được sử dụng để làm gì?",
+          "answer": "Apache Airflow được sử dụng trong ETL pipeline để xử lý các tài liệu, bao gồm việc chia trang, làm sạch nội dung, tạo ra các embedding và lập chỉ mục vào Qdrant.",
+          "correct": true,
+          "keywords_found": [
+            "etl",
+            "pipeline"
+          ],
+          "latency_ms": 4423,
+          "eval_count": 45,
+          "status": "success"
+        },
+        {
+          "question_id": 15,
+          "question": "Monitoring stack gồm những thành phần nào?",
+          "answer": "Monitoring stack bao gồm Prometheus và Grafana.",
+          "correct": true,
+          "keywords_found": [
+            "prometheus",
+            "grafana"
+          ],
+          "latency_ms": 1411,
           "eval_count": 11,
           "status": "success"
         }
