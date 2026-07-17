@@ -1,0 +1,19 @@
+{
+  "drift_detected": false,
+  "alerts": [],
+  "metrics": {
+    "psi_confidence": 0.0,
+    "psi_latency": 0.0742,
+    "psi_length": 0.0,
+    "zscore_confidence": 0.0,
+    "zscore_latency": 0.04,
+    "strategy_shifts": {
+      "unknown": 0.0
+    }
+  },
+  "window_sizes": {
+    "reference": 100,
+    "current": 50
+  },
+  "timestamp": "2026-07-16T16:23:44.245509+00:00"
+}

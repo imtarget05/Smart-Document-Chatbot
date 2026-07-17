@@ -1,0 +1,16 @@
+[
+  {
+    "version": "v1.0.0",
+    "model_name": "test-model",
+    "stage": "Production",
+    "metrics": {
+      "retrieval_accuracy": 0.88,
+      "answer_correctness": 0.82,
+      "hallucination_rate": 0.04
+    },
+    "config": {},
+    "created_at": "2026-07-16T16:24:22.275357+00:00",
+    "mlflow_run_id": null,
+    "description": "Test"
+  }
+]
