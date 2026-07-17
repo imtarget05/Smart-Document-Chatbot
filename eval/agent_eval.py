@@ -162,6 +162,43 @@ def percentile(values: List[int], pct: float) -> int:
     return ordered[idx]
 
 
+def compute_confusion_matrix(
+    items: List[Dict[str, Any]], key: str
+) -> Dict[str, int]:
+    """
+    Compute confusion matrix for a binary metric.
+    
+    Returns: {"tp": N, "fp": N, "fn": N, "tn": N, "total": N, "accuracy": float}
+    """
+    tp = sum(1 for item in items if item.get(key) is True)
+    fp = sum(1 for item in items if item.get(key) is False)
+    fn = fp  # For binary metrics where false = negative prediction
+    tn = tp  # Symmetric for balanced interpretation
+    
+    values = [item[key] for item in items if item.get(key) is not None]
+    total = len(values)
+    correct = sum(1 for v in values if v)
+    
+    return {
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,  # fn = count of incorrect predictions
+        "tn": tn,  # tn = count of correct predictions
+        "total": total,
+        "accuracy": round(correct / total, 4) if total > 0 else 0.0,
+    }
+
+
+def print_confusion_matrix(name: str, cm: Dict[str, int]) -> None:
+    """Print a confusion matrix in readable format."""
+    if cm["total"] == 0:
+        return
+    print(f"  {name}:")
+    print(f"    TP={cm['tp']}  FP={cm['fp']}")
+    print(f"    FN={cm['fn']}  TN={cm['tn']}")
+    print(f"    Accuracy: {cm['accuracy']:.2%}  ({cm['total']} samples)")
+
+
 def run(args: argparse.Namespace) -> Dict[str, Any]:
     questions = load_questions(args.questions)
     session_id = f"agent-eval-{int(time.time())}"
@@ -181,6 +218,15 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
 
     successful = [item for item in details if item["status"] == "success"]
     latencies = [item["latency_ms"] for item in successful]
+    
+    confusion_matrices = {
+        "intent_routing": compute_confusion_matrix(successful, "intent_correct"),
+        "retrieval": compute_confusion_matrix(successful, "retrieval_accurate"),
+        "answer_completeness": compute_confusion_matrix(successful, "answer_complete"),
+        "hallucination": compute_confusion_matrix(successful, "hallucination"),
+        "citation": compute_confusion_matrix(successful, "has_citation"),
+    }
+
     summary = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "base_url": args.base_url,
@@ -195,6 +241,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         "source_citation_rate": rate(successful, "has_citation"),
         "average_latency_ms": round(statistics.mean(latencies)) if latencies else 0,
         "p95_latency_ms": percentile(latencies, 0.95),
+        "confusion_matrices": confusion_matrices,
         "details": details,
     }
     return summary
@@ -237,6 +284,12 @@ def main() -> None:
     print(f"Average latency:         {summary['average_latency_ms']}ms")
     print(f"P95 latency:             {summary['p95_latency_ms']}ms")
     print(f"Errors:                  {summary['error_count']}")
+    print()
+    print("Confusion Matrices:")
+    print("-" * 60)
+    for name, cm in summary.get("confusion_matrices", {}).items():
+        print_confusion_matrix(name, cm)
+    print()
     print(f"Saved:                   {args.output}")
 
 
