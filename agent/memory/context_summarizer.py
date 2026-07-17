@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
 from llm_factory import LLMFactory
 
