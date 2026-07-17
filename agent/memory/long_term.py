@@ -1,6 +1,12 @@
 """
 Long-term memory – stores user preferences and history in PostgreSQL.
 Uses asyncpg for non-blocking DB access.
+
+Features:
+  - Persist conversation turns to agent_session_history
+  - Retrieve session history with optional LLM-based summarization
+  - User preference storage (JSONB)
+  - Context summarization for long-running sessions (>16 turns)
 """
 
 import json
@@ -11,10 +17,13 @@ from settings import settings
 
 logger = logging.getLogger(__name__)
 
+_SUMMARY_TURNS = 16
+
 
 class LongTermMemory:
     def __init__(self):
         self._pool = None
+        self._summarizer = None  # lazy import
 
     async def init(self) -> None:
         try:
@@ -76,6 +85,7 @@ class LongTermMemory:
         session_id: str,
         user_id: Optional[str] = None,
         limit: int = 20,
+        include_summary: bool = False,
     ) -> List[Dict[str, Any]]:
         if not self._pool:
             return []
@@ -103,10 +113,32 @@ class LongTermMemory:
                         """,
                         session_id, limit,
                     )
-            return [dict(r) for r in reversed(rows)]
+            turns = [dict(r) for r in reversed(rows)]
+
+            if include_summary and len(turns) > _SUMMARY_TURNS:
+                summary = await self._summarize_context(turns)
+                recent = turns[-_SUMMARY_TURNS:]
+                return {
+                    "summary": summary,
+                    "recent_turns": recent,
+                    "total_turns": len(turns),
+                }
+
+            return turns
         except Exception as exc:
             logger.warning("Failed to fetch history: %s", exc)
             return []
+
+    async def _summarize_context(self, turns: List[Dict[str, Any]]) -> str:
+        if self._summarizer is None:
+            try:
+                from memory.context_summarizer import ContextSummarizer
+                self._summarizer = ContextSummarizer()
+            except Exception as exc:
+                logger.warning("ContextSummarizer unavailable: %s", exc)
+                return ""
+        old_turns = turns[:-_SUMMARY_TURNS] if len(turns) > _SUMMARY_TURNS else turns
+        return await self._summarizer.summarize(old_turns)
 
     async def get_user_prefs(self, user_id: str) -> Dict[str, Any]:
         if not self._pool:

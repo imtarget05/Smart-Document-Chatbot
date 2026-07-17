@@ -48,6 +48,10 @@ class SourceCitation(BaseModel):
     source_type: str = "document"   # "document" | "web" | "connector"
 
 
+class AgentStreamEvent(BaseModel):
+    event: str      # "plan" | "token" | "source" | "error" | "complete"
+    data: Any
+
 class AgentResponse(BaseModel):
     session_id: str
     answer: str

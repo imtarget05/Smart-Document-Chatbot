@@ -4,12 +4,14 @@ FastAPI entrypoint for the multi-agent LangGraph orchestration layer.
 Accepts requests from the Spring Boot backend (verified via INTERNAL_SERVICE_TOKEN).
 """
 
+import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from adk_runtime import run_demo_workflow
 from memory.long_term import LongTermMemory
@@ -232,6 +234,109 @@ async def invoke_agent(req: AgentRequest):
     except Exception as exc:
         logger.exception("Agent invoke failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Streaming agent endpoint (SSE)
+# ---------------------------------------------------------------------------
+async def _stream_events(req: AgentRequest):
+    """
+    Async generator that yields SSE-formatted events for the streaming agent endpoint.
+    Events: plan → token(s) → source → complete
+    """
+    try:
+        logger.info("Agent stream: session=%s user=%s query=%s", req.session_id, req.user_id, req.query[:80])
+        long_term_history = []
+        if _long_term_memory is not None:
+            long_term_history = await _long_term_memory.get_history(
+                session_id=req.session_id,
+                user_id=req.user_id,
+                limit=6,
+            )
+
+        # 1. Plan event
+        plan_data = {"agent_type": "rag", "plan": f"Processing query: {req.query[:100]}"}
+        yield f"event: plan\ndata: {json.dumps(plan_data)}\n\n"
+
+        if _workflow is None:
+            result = {
+                "final_answer": "ADK demo fallback is active; LangGraph workflow is unavailable in this environment.",
+                "agent_type": "adk", "sources": [], "confidence_score": 0.0,
+                "action_result": None, "report_path": None,
+            }
+        else:
+            result = await _workflow.ainvoke({
+                "query": req.query,
+                "session_id": req.session_id,
+                "user_id": req.user_id,
+                "document_ids": req.document_ids or [],
+                "messages": [],
+                "long_term_history": long_term_history,
+                "retrieved_chunks": [],
+                "confidence_score": 0.0,
+                "agent_plan": "",
+                "agent_type": "",
+                "intent_override": req.intent_override,
+                "final_answer": "",
+                "sources": [],
+                "action_result": None,
+                "report_path": None,
+                "use_web_search": req.use_web_search,
+                "hybrid_search_enabled": True,
+            })
+
+        if _long_term_memory is not None:
+            agent_type = result.get("agent_type", "rag")
+            await _long_term_memory.save_turn(req.user_id, req.session_id, "user", req.query, agent_type)
+            await _long_term_memory.save_turn(
+                req.user_id, req.session_id, "assistant",
+                result.get("final_answer", ""), agent_type,
+            )
+
+        # 2. Token events – stream the answer character-by-character
+        answer = result.get("final_answer", "")
+        chunk_size = 5
+        for i in range(0, len(answer), chunk_size):
+            chunk = answer[i:i + chunk_size]
+            yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
+            await asyncio.sleep(0.02)
+
+        # 3. Source events
+        sources = result.get("sources", [])
+        if sources:
+            yield f"event: source\ndata: {json.dumps({'sources': sources})}\n\n"
+
+        # 4. Complete event
+        complete_data = {
+            "agent_type": result.get("agent_type", "rag"),
+            "confidence_score": result.get("confidence_score", 0.0),
+        }
+        yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
+
+    except Exception as exc:
+        logger.exception("Agent stream failed: %s", exc)
+        yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+
+
+@app.post("/agent/invoke-stream", dependencies=[Depends(verify_and_rate_limit)])
+async def invoke_agent_stream(req: AgentRequest):
+    """
+    SSE streaming endpoint. Returns Server-Sent Events with:
+      - plan:      agent plan and type
+      - token:     answer text chunks
+      - source:    document sources
+      - complete:  final metadata
+      - error:     error details (if any)
+    """
+    return StreamingResponse(
+        _stream_events(req),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
