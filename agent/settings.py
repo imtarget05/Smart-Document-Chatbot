@@ -19,7 +19,8 @@ class Settings(BaseSettings):
 
     # OpenRouter (Reasoning Tasks)
     openrouter_api_key: str = ""
-    reasoning_model: str = "google/gemini-2.0-flash-001"  # Default reasoning model
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "qwen2.5:72b-instruct"
 
     # Qdrant
     qdrant_host: str = "qdrant"

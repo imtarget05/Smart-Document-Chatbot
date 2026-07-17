@@ -133,11 +133,9 @@ class ProviderClient:
     async def chat(self, request: ChatRequest, decision: RouteDecision, request_id: str) -> dict[str, Any]:
         if decision.provider == "local":
             return await self._local_chat(request, decision, request_id)
-        if decision.provider == "anthropic":
-            return await self._anthropic_chat(request, decision, request_id)
         if decision.provider == "nvidia":
             return await self._nvidia_chat(request, decision, request_id)
-        return await self._openai_chat(request, decision, request_id)
+        return await self._openrouter_chat(request, decision, request_id)
 
     async def stream_chat(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
@@ -145,14 +143,11 @@ class ProviderClient:
         if decision.provider == "local":
             async for chunk in self._local_stream(request, decision, request_id):
                 yield chunk
-        elif decision.provider == "anthropic":
-            async for chunk in self._anthropic_stream(request, decision, request_id):
-                yield chunk
         elif decision.provider == "nvidia":
             async for chunk in self._nvidia_stream(request, decision, request_id):
                 yield chunk
         else:
-            async for chunk in self._openai_stream(request, decision, request_id):
+            async for chunk in self._openrouter_stream(request, decision, request_id):
                 yield chunk
 
 
@@ -185,60 +180,32 @@ class ProviderClient:
         payload["router"] = route_metadata(decision, request_id)
         return payload
 
-    async def _anthropic_chat(
+    async def _openrouter_chat(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> dict[str, Any]:
-        self._require_key(self.settings.anthropic_api_key, "ANTHROPIC_API_KEY")
-        system, messages = _anthropic_messages(request.messages)
-        body: dict[str, Any] = {
-            "model": decision.model,
-            "messages": messages,
-            "max_tokens": _max_tokens(request),
-            "temperature": _temperature(request),
-        }
-        if system:
-            body["system"] = system
+        self._require_key(self.settings.openrouter_api_key, "OPENROUTER_API_KEY")
+        messages_body = _openai_messages(request.messages, request.routing.attachments)
         try:
             response = await self.client.post(
-                self.settings.anthropic_api_url,
-                json=body,
-                headers={
-                    "x-api-key": self.settings.anthropic_api_key,
-                    "anthropic-version": self.settings.anthropic_version,
-                },
-                timeout=self.settings.cloud_timeout_seconds,
-            )
-            self._raise_provider_status(response, "anthropic")
-            payload = response.json()
-            content = "".join(block.get("text", "") for block in payload.get("content", []))
-        except ProviderError:
-            raise
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
-            raise ProviderError(f"anthropic_error:{type(exc).__name__}") from exc
-        return _ollama_response(content, decision, request_id)
-
-    async def _openai_chat(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> dict[str, Any]:
-        self._require_key(self.settings.openai_api_key, "OPENAI_API_KEY")
-        try:
-            response = await self.client.post(
-                self.settings.openai_api_url,
+                f"{self.settings.openrouter_base_url.rstrip('/')}/chat/completions",
                 json={
                     "model": decision.model,
-                    "messages": _openai_messages(request.messages, request.routing.attachments),
+                    "messages": messages_body,
                     "max_tokens": _max_tokens(request),
                     "temperature": _temperature(request),
                 },
-                headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
+                headers={
+                    "Authorization": f"Bearer {self.settings.openrouter_api_key}",
+                    "Content-Type": "application/json",
+                },
                 timeout=self.settings.cloud_timeout_seconds,
             )
-            self._raise_provider_status(response, "openai")
+            self._raise_provider_status(response, "openrouter")
             content = response.json()["choices"][0]["message"]["content"] or ""
         except ProviderError:
             raise
         except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
-            raise ProviderError(f"openai_error:{type(exc).__name__}") from exc
+            raise ProviderError(f"openrouter_error:{type(exc).__name__}") from exc
         return _ollama_response(content, decision, request_id)
 
     async def _local_stream(
@@ -267,61 +234,29 @@ class ProviderClient:
         except httpx.HTTPError as exc:
             raise ProviderError(f"local_error:{type(exc).__name__}") from exc
 
-    async def _anthropic_stream(
+    async def _openrouter_stream(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> AsyncIterator[bytes]:
-        self._require_key(self.settings.anthropic_api_key, "ANTHROPIC_API_KEY")
-        system, messages = _anthropic_messages(request.messages)
-        body: dict[str, Any] = {
-            "model": decision.model,
-            "messages": messages,
-            "max_tokens": _max_tokens(request),
-            "temperature": _temperature(request),
-            "stream": True,
-        }
-        if system:
-            body["system"] = system
-        headers = {
-            "x-api-key": self.settings.anthropic_api_key,
-            "anthropic-version": self.settings.anthropic_version,
-        }
+        self._require_key(self.settings.openrouter_api_key, "OPENROUTER_API_KEY")
+        messages_body = _openai_messages(request.messages, request.routing.attachments)
         try:
             async with self.client.stream(
-                "POST", self.settings.anthropic_api_url, json=body, headers=headers,
+                "POST",
+                f"{self.settings.openrouter_base_url.rstrip('/')}/chat/completions",
+                json={
+                    "model": decision.model,
+                    "messages": messages_body,
+                    "max_tokens": _max_tokens(request),
+                    "temperature": _temperature(request),
+                    "stream": True,
+                },
+                headers={
+                    "Authorization": f"Bearer {self.settings.openrouter_api_key}",
+                    "Content-Type": "application/json",
+                },
                 timeout=self.settings.cloud_timeout_seconds,
             ) as response:
-                self._raise_provider_status(response, "anthropic")
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    event = json.loads(line[6:])
-                    delta = event.get("delta", {})
-                    if event.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
-                        yield self._ollama_chunk(delta.get("text", ""), False, decision, request_id)
-        except ProviderError:
-            raise
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
-            raise ProviderError(f"anthropic_error:{type(exc).__name__}") from exc
-        yield self._ollama_chunk("", True, decision, request_id)
-
-    async def _openai_stream(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> AsyncIterator[bytes]:
-        self._require_key(self.settings.openai_api_key, "OPENAI_API_KEY")
-        body = {
-            "model": decision.model,
-            "messages": _openai_messages(request.messages, request.routing.attachments),
-            "max_tokens": _max_tokens(request),
-            "temperature": _temperature(request),
-            "stream": True,
-        }
-        try:
-            async with self.client.stream(
-                "POST", self.settings.openai_api_url, json=body,
-                headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
-                timeout=self.settings.cloud_timeout_seconds,
-            ) as response:
-                self._raise_provider_status(response, "openai")
+                self._raise_provider_status(response, "openrouter")
                 async for line in response.aiter_lines():
                     if not line.startswith("data: ") or line == "data: [DONE]":
                         continue
@@ -332,7 +267,7 @@ class ProviderClient:
         except ProviderError:
             raise
         except (httpx.HTTPError, ValueError, IndexError, TypeError) as exc:
-            raise ProviderError(f"openai_error:{type(exc).__name__}") from exc
+            raise ProviderError(f"openrouter_error:{type(exc).__name__}") from exc
         yield self._ollama_chunk("", True, decision, request_id)
 
     @staticmethod

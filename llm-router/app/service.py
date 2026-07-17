@@ -66,8 +66,8 @@ class LLMRouter:
 
     def _escalation(self, previous: RouteDecision, reason: str) -> RouteDecision:
         return RouteDecision(
-            provider="anthropic",
-            model=self.settings.anthropic_model,
+            provider="openrouter",
+            model=self.settings.openrouter_model,
             reason=f"escalated:{reason}",
             task_type=previous.task_type,
             escalated=True,

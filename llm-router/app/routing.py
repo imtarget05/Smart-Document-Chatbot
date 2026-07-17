@@ -93,29 +93,24 @@ def choose_route(request: ChatRequest, settings: Settings) -> RouteDecision:
             task_type=task_type,
         )
 
-    if has_visual_input(request):
-        return RouteDecision(
-            provider="openai",
-            model=settings.vision_model,
-            reason="visual_input",
-            task_type=task_type,
-        )
-
     document_count = infer_document_count(request)
     if (
-        document_count > 2
+        has_visual_input(request)
+        or document_count > 2
         or request.routing.page_count > 10
         or task_type in COMPLEX_TASKS
     ):
-        if task_type in COMPLEX_TASKS:
+        if has_visual_input(request):
+            reason = "visual_input"
+        elif task_type in COMPLEX_TASKS:
             reason = f"complex_task:{task_type}"
         elif document_count > 2:
             reason = "document_count_gt_2"
         else:
             reason = "page_count_gt_10"
         return RouteDecision(
-            provider="anthropic",
-            model=settings.anthropic_model,
+            provider="openrouter",
+            model=settings.openrouter_model,
             reason=reason,
             task_type=task_type,
         )
@@ -123,8 +118,8 @@ def choose_route(request: ChatRequest, settings: Settings) -> RouteDecision:
     confidence = request.routing.confidence_score
     if confidence is not None and confidence < settings.confidence_threshold:
         return RouteDecision(
-            provider="anthropic",
-            model=settings.anthropic_model,
+            provider="openrouter",
+            model=settings.openrouter_model,
             reason=f"low_confidence:{confidence:.3f}",
             task_type=task_type,
             escalated=True,

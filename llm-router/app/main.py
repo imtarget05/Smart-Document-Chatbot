@@ -24,8 +24,8 @@ def create_app(app_settings: Settings = settings, router: LLMRouter | None = Non
 
     app = FastAPI(
         title="Smart Document Chatbot - LLM Router",
-        version="1.0.0",
-        description="Routes Ollama-compatible chat requests across local, Claude, and GPT-4o backends.",
+        version="2.0.0",
+        description="Routes Ollama-compatible chat requests across local Ollama and OpenRouter backends.",
         lifespan=lifespan,
     )
     app.state.router = service
@@ -43,8 +43,7 @@ def create_app(app_settings: Settings = settings, router: LLMRouter | None = Non
             "service": "llm-router",
             "providers": {
                 "local": True,
-                "anthropic": bool(app_settings.anthropic_api_key),
-                "openai": bool(app_settings.openai_api_key),
+                "openrouter": bool(app_settings.openrouter_api_key),
                 "nvidia": bool(app_settings.nvidia_api_key),
             },
 

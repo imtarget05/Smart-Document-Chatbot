@@ -34,7 +34,7 @@ class ChatRequest(BaseModel):
 
 
 class RouteDecision(BaseModel):
-    provider: Literal["local", "anthropic", "openai", "nvidia"]
+    provider: Literal["local", "openrouter", "nvidia"]
     model: str
     reason: str
     task_type: str
