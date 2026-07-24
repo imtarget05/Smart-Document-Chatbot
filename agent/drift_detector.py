@@ -25,14 +25,14 @@ Usage:
     # Check for drift
     report = drift_detector.check_drift()
     if report["drift_detected"]:
-        print(f"⚠️ Drift detected: {report['alerts']}")
+        logger.warning(f"Drift detected: {report['alerts']}")
 """
 
 import os
 import json
 import logging
 import math
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,7 +139,7 @@ class DriftDetector:
         if len(self.current_window) < 20:
             return {
                 "drift_detected": False,
-                "reason": "Insufficient current data (need ≥20 samples)",
+                "reason": "Insufficient current data (need >=20 samples)",
                 "alerts": [],
                 "metrics": {},
             }
@@ -177,39 +177,47 @@ class DriftDetector:
             strategy_shifts[s] = round(cur_pct - ref_pct, 3)
 
         if psi_confidence > PSI_THRESHOLD:
-            self.alerts.append({
-                "type": "confidence_drift",
-                "severity": "WARNING",
-                "message": f"Confidence distribution shifted (PSI={psi_confidence:.3f})",
-                "psi": psi_confidence,
-                "zscore": zscore_confidence,
-            })
+            self.alerts.append(
+                {
+                    "type": "confidence_drift",
+                    "severity": "WARNING",
+                    "message": f"Confidence distribution shifted (PSI={psi_confidence:.3f})",
+                    "psi": psi_confidence,
+                    "zscore": zscore_confidence,
+                }
+            )
 
         if psi_latency > PSI_THRESHOLD:
-            self.alerts.append({
-                "type": "latency_drift",
-                "severity": "WARNING",
-                "message": f"Latency distribution shifted (PSI={psi_latency:.3f})",
-                "psi": psi_latency,
-                "zscore": zscore_latency,
-            })
+            self.alerts.append(
+                {
+                    "type": "latency_drift",
+                    "severity": "WARNING",
+                    "message": f"Latency distribution shifted (PSI={psi_latency:.3f})",
+                    "psi": psi_latency,
+                    "zscore": zscore_latency,
+                }
+            )
 
         if abs(zscore_latency) > ZSCORE_THRESHOLD:
-            self.alerts.append({
-                "type": "latency_spike",
-                "severity": "CRITICAL" if zscore_latency > 0 else "INFO",
-                "message": f"Latency {'increased' if zscore_latency > 0 else 'decreased'} significantly (Z={zscore_latency:.2f})",
-                "zscore": zscore_latency,
-            })
+            self.alerts.append(
+                {
+                    "type": "latency_spike",
+                    "severity": "CRITICAL" if zscore_latency > 0 else "INFO",
+                    "message": f"Latency {'increased' if zscore_latency > 0 else 'decreased'} significantly (Z={zscore_latency:.2f})",
+                    "zscore": zscore_latency,
+                }
+            )
 
         for strategy, shift in strategy_shifts.items():
             if abs(shift) > 0.15:
-                self.alerts.append({
-                    "type": "strategy_shift",
-                    "severity": "WARNING",
-                    "message": f"RAG strategy '{strategy}' shifted by {shift:+.1%}",
-                    "shift": shift,
-                })
+                self.alerts.append(
+                    {
+                        "type": "strategy_shift",
+                        "severity": "WARNING",
+                        "message": f"RAG strategy '{strategy}' shifted by {shift:+.1%}",
+                        "shift": shift,
+                    }
+                )
 
         report = {
             "drift_detected": len(self.alerts) > 0,

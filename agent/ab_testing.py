@@ -41,6 +41,7 @@ AB_HISTORY_DIR = Path(os.getenv("AB_HISTORY_DIR", "ab_history"))
 @dataclass
 class Variant:
     """A single A/B test variant."""
+
     id: str
     name: str
     description: str = ""
@@ -52,6 +53,7 @@ class Variant:
 @dataclass
 class Experiment:
     """An A/B test experiment with two or more variants."""
+
     id: str
     name: str
     description: str = ""
@@ -69,6 +71,7 @@ class Experiment:
 @dataclass
 class QueryResult:
     """Result of a single query in an A/B test."""
+
     query_id: str
     variant_id: str
     latency_ms: float = 0
@@ -95,22 +98,60 @@ class ABTestManager:
             exp = Experiment(
                 id="rag-config-v1",
                 name="RAG Configuration Test",
-                description="Test different RAG confidence thresholds and chunk sizes",
+                description="Test different RAG retrieval strategies: chunk_size, top-k, hybrid weight, RRF k",
                 variants=[
                     Variant(
                         id="control",
                         name="Control (Default)",
-                        description="Default RAG config: confidence=0.45, chunk_size=512",
-                        weight=0.5,
+                        description="Default: chunk_size=512, top_k=5, hybrid=true, rrf_k=60",
+                        weight=0.25,
                         is_control=True,
-                        config={"confidence_threshold": 0.45, "chunk_size": 512},
+                        config={
+                            "confidence_threshold": 0.45,
+                            "chunk_size": 512,
+                            "top_k": 5,
+                            "hybrid": True,
+                            "rrf_k": 60,
+                        },
                     ),
                     Variant(
                         id="variant-a",
-                        name="Aggressive Retrieval",
-                        description="Lower confidence threshold, larger chunks",
-                        weight=0.5,
-                        config={"confidence_threshold": 0.35, "chunk_size": 1024},
+                        name="Larger Chunks",
+                        description="Double chunk size for richer context",
+                        weight=0.25,
+                        config={
+                            "confidence_threshold": 0.45,
+                            "chunk_size": 1024,
+                            "top_k": 5,
+                            "hybrid": True,
+                            "rrf_k": 60,
+                        },
+                    ),
+                    Variant(
+                        id="variant-b",
+                        name="Higher Top-K",
+                        description="Retrieve more chunks for broader coverage",
+                        weight=0.25,
+                        config={
+                            "confidence_threshold": 0.40,
+                            "chunk_size": 512,
+                            "top_k": 10,
+                            "hybrid": True,
+                            "rrf_k": 60,
+                        },
+                    ),
+                    Variant(
+                        id="variant-c",
+                        name="BM25 Heavy",
+                        description="Higher RRF weight for keyword matching",
+                        weight=0.25,
+                        config={
+                            "confidence_threshold": 0.45,
+                            "chunk_size": 512,
+                            "top_k": 5,
+                            "hybrid": True,
+                            "rrf_k": 100,
+                        },
                     ),
                 ],
                 min_samples=30,
@@ -118,6 +159,15 @@ class ABTestManager:
             self.experiments[exp.id] = exp
             self.results[exp.id] = []
             self._save_state()
+
+    def get_active_variant_config(
+        self, query_id: str, experiment_id: str = "rag-config-v1"
+    ) -> Dict[str, Any]:
+        """Assign a variant and return its config dict (or empty dict if no experiment active)."""
+        variant = self.assign_variant(query_id, experiment_id)
+        if variant is None:
+            return {}
+        return {"variant_id": variant.id, **variant.config}
 
     def _load_state(self):
         state_file = AB_HISTORY_DIR / "ab_state.json"
@@ -160,7 +210,9 @@ class ABTestManager:
         with open(AB_HISTORY_DIR / "ab_state.json", "w") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
 
-    def assign_variant(self, query_id: str, experiment_id: str = "rag-config-v1") -> Optional[Variant]:
+    def assign_variant(
+        self, query_id: str, experiment_id: str = "rag-config-v1"
+    ) -> Optional[Variant]:
         """Deterministically assign a variant based on query_id hash."""
         exp = self.experiments.get(experiment_id)
         if not exp or exp.status != "active":
@@ -176,10 +228,17 @@ class ABTestManager:
 
         return exp.variants[-1]
 
-    def log_result(self, query_id: str, variant_id: str, experiment_id: str = "rag-config-v1",
-                   latency_ms: float = 0, confidence_score: float = 0,
-                   answer_correct: bool = False, retrieval_accurate: bool = False,
-                   is_hallucination: bool = False):
+    def log_result(
+        self,
+        query_id: str,
+        variant_id: str,
+        experiment_id: str = "rag-config-v1",
+        latency_ms: float = 0,
+        confidence_score: float = 0,
+        answer_correct: bool = False,
+        retrieval_accurate: bool = False,
+        is_hallucination: bool = False,
+    ):
         """Log the result of a query for a specific variant."""
         result = QueryResult(
             query_id=query_id,
@@ -197,9 +256,13 @@ class ABTestManager:
         self.results[experiment_id].append(result)
         self._save_state()
 
-    def get_variant_metrics(self, experiment_id: str, variant_id: str) -> Dict[str, Any]:
+    def get_variant_metrics(
+        self, experiment_id: str, variant_id: str
+    ) -> Dict[str, Any]:
         """Calculate aggregated metrics for a variant."""
-        results = [r for r in self.results.get(experiment_id, []) if r.variant_id == variant_id]
+        results = [
+            r for r in self.results.get(experiment_id, []) if r.variant_id == variant_id
+        ]
         if not results:
             return {"sample_size": 0}
 
@@ -212,7 +275,9 @@ class ABTestManager:
         return {
             "sample_size": len(results),
             "avg_latency_ms": round(sum(latencies) / len(latencies)),
-            "p95_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0),
+            "p95_latency_ms": round(
+                sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0
+            ),
             "avg_confidence": round(sum(confidences) / len(confidences), 3),
             "accuracy_rate": round(correct / len(results), 3),
             "retrieval_rate": round(retrieval / len(results), 3),
@@ -243,7 +308,10 @@ class ABTestManager:
             control_m = self.get_variant_metrics(experiment_id, control.id)
             treatment_m = self.get_variant_metrics(experiment_id, treatment.id)
 
-            if control_m["sample_size"] >= exp.min_samples and treatment_m["sample_size"] >= exp.min_samples:
+            if (
+                control_m["sample_size"] >= exp.min_samples
+                and treatment_m["sample_size"] >= exp.min_samples
+            ):
                 acc_diff = treatment_m["accuracy_rate"] - control_m["accuracy_rate"]
                 lat_diff = treatment_m["avg_latency_ms"] - control_m["avg_latency_ms"]
 

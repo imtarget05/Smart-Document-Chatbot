@@ -70,7 +70,12 @@ def test_local_timeout_escalates_to_claude(settings):
 def test_stream_timeout_before_first_chunk_escalates(settings):
     async def run():
         providers = FakeProviders(fail_local=True)
-        chunks = [chunk async for chunk in LLMRouter(settings, providers).stream_chat(simple_request(stream=True))]
+        chunks = [
+            chunk
+            async for chunk in LLMRouter(settings, providers).stream_chat(
+                simple_request(stream=True)
+            )
+        ]
         return providers, chunks
 
     providers, chunks = asyncio.run(run())
@@ -83,11 +88,13 @@ def test_openai_payload_includes_structured_attachment():
     request = ChatRequest(
         messages=[{"role": "user", "content": "Read the invoice"}],
         routing={
-            "attachments": [{
-                "filename": "invoice.png",
-                "content_type": "image/png",
-                "data": "aW1hZ2U=",
-            }]
+            "attachments": [
+                {
+                    "filename": "invoice.png",
+                    "content_type": "image/png",
+                    "data": "aW1hZ2U=",
+                }
+            ]
         },
     )
 
@@ -100,14 +107,25 @@ def test_openai_payload_includes_structured_attachment():
 
 
 def test_input_image_part_is_normalized_for_chat_completions():
-    request = ChatRequest(messages=[{
-        "role": "user",
-        "content": [{"type": "input_image", "image_url": "https://example.test/scan.png"}],
-    }])
+    request = ChatRequest(
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "image_url": "https://example.test/scan.png",
+                    }
+                ],
+            }
+        ]
+    )
 
     messages = _openai_messages(request.messages)
 
-    assert messages[0]["content"] == [{
-        "type": "image_url",
-        "image_url": {"url": "https://example.test/scan.png"},
-    }]
+    assert messages[0]["content"] == [
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://example.test/scan.png"},
+        }
+    ]

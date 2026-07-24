@@ -19,13 +19,17 @@ class TavilySearch:
 
         try:
             from tavily import TavilyClient
-            client  = TavilyClient(api_key=settings.tavily_api_key)
+
+            client = TavilyClient(api_key=settings.tavily_api_key)
             # Run synchronous Tavily call in a thread pool to keep async
             import asyncio
-            loop    = asyncio.get_event_loop()
+
+            loop = asyncio.get_event_loop()
             results = await loop.run_in_executor(
                 None,
-                lambda: client.search(query=query, max_results=max_results, search_depth="advanced"),
+                lambda: client.search(
+                    query=query, max_results=max_results, search_depth="advanced"
+                ),
             )
             return results.get("results", [])
         except Exception as exc:

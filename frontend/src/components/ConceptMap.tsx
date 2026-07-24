@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../context/AuthContext";
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080/api';
+const API_BASE_URL =
+  (import.meta.env.VITE_API_URL as string) || "http://localhost:8080/api";
 
 interface ConceptNode {
   id: string;
@@ -31,6 +33,7 @@ interface ConceptMapProps {
 function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
   const [selectedNode, setSelectedNode] = useState<ConceptNode | null>(null);
   const [hoveredNode, setHoveredNode] = useState<ConceptNode | null>(null);
+  const { token } = useAuth();
 
   // SVG Canvas configuration
   const width = 800;
@@ -39,18 +42,25 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
   const centerY = height / 2;
 
   // React Query fetch for Mind Map data
-  const { data, isLoading, error, refetch: fetchMindMap } = useQuery<MindMapData>({
-    queryKey: ['mindmap', documentId],
+  const {
+    data,
+    isLoading,
+    error,
+    refetch: fetchMindMap,
+  } = useQuery<MindMapData>({
+    queryKey: ["mindmap", documentId],
     queryFn: async () => {
       setSelectedNode(null);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/documents/${documentId}/mindmap`, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/documents/${documentId}/mindmap`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+      );
       if (!response.ok) {
-        throw new Error('Failed to load mind map data');
+        throw new Error("Failed to load mind map data");
       }
       return response.json();
     },
@@ -63,18 +73,25 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
           <div className="absolute inset-0 rounded-full border-4 border-indigo-200 animate-pulse"></div>
           <div className="absolute inset-0 rounded-full border-4 border-t-indigo-600 animate-spin"></div>
         </div>
-        <p className="text-sm font-semibold text-gray-700">AI is mapping document concepts...</p>
-        <p className="text-xs text-gray-400 mt-1">This takes just a moment for deep analytical modeling.</p>
+        <p className="text-sm font-semibold text-gray-700">
+          AI is mapping document concepts...
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          This takes just a moment for deep analytical modeling.
+        </p>
       </div>
     );
   }
 
   if (error || !data || !data.nodes || data.nodes.length === 0) {
-    const errorMsg = error instanceof Error ? error.message : 'No concepts found.';
+    const errorMsg =
+      error instanceof Error ? error.message : "No concepts found.";
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50/50">
         <div className="text-4xl mb-3">⚠️</div>
-        <p className="text-sm font-semibold text-gray-700">Could not generate concept map</p>
+        <p className="text-sm font-semibold text-gray-700">
+          Could not generate concept map
+        </p>
         <p className="text-xs text-gray-400 mt-1 mb-4">{errorMsg}</p>
         <button
           onClick={() => fetchMindMap()}
@@ -99,49 +116,49 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
   });
 
   const centerNode: ConceptNode & { x: number; y: number } = {
-    id: 'center',
+    id: "center",
     label: documentName,
-    type: 'Document',
-    description: 'Target document under conceptual analysis.',
+    type: "Document",
+    description: "Target document under conceptual analysis.",
     x: centerX,
-    y: centerY
+    y: centerY,
   };
 
   const allNodes = [centerNode, ...nodesWithCoords];
 
   const getNodeColor = (type?: string) => {
     switch (type?.toLowerCase()) {
-      case 'document':
-        return 'from-slate-700 to-slate-900 border-slate-600 shadow-slate-200 text-white';
-      case 'core':
-        return 'from-indigo-500 to-indigo-600 border-indigo-400 shadow-indigo-100 text-white';
-      case 'financial':
-        return 'from-emerald-500 to-emerald-600 border-emerald-400 shadow-emerald-100 text-white';
-      case 'technical':
-        return 'from-sky-500 to-sky-600 border-sky-400 shadow-sky-100 text-white';
-      case 'process':
-        return 'from-amber-500 to-amber-600 border-amber-400 shadow-amber-100 text-white';
-      case 'metric':
-        return 'from-rose-500 to-rose-600 border-rose-400 shadow-rose-100 text-white';
+      case "document":
+        return "from-slate-700 to-slate-900 border-slate-600 shadow-slate-200 text-white";
+      case "core":
+        return "from-indigo-500 to-indigo-600 border-indigo-400 shadow-indigo-100 text-white";
+      case "financial":
+        return "from-emerald-500 to-emerald-600 border-emerald-400 shadow-emerald-100 text-white";
+      case "technical":
+        return "from-sky-500 to-sky-600 border-sky-400 shadow-sky-100 text-white";
+      case "process":
+        return "from-amber-500 to-amber-600 border-amber-400 shadow-amber-100 text-white";
+      case "metric":
+        return "from-rose-500 to-rose-600 border-rose-400 shadow-rose-100 text-white";
       default:
-        return 'from-violet-500 to-violet-600 border-violet-400 shadow-violet-100 text-white';
+        return "from-violet-500 to-violet-600 border-violet-400 shadow-violet-100 text-white";
     }
   };
 
   const getCategoryBadgeColor = (type?: string) => {
     switch (type?.toLowerCase()) {
-      case 'core':
-        return 'bg-indigo-100 text-indigo-800';
-      case 'financial':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'technical':
-        return 'bg-sky-100 text-sky-800';
-      case 'process':
-        return 'bg-amber-100 text-amber-800';
-      case 'metric':
-        return 'bg-rose-100 text-rose-800';
+      case "core":
+        return "bg-indigo-100 text-indigo-800";
+      case "financial":
+        return "bg-emerald-100 text-emerald-800";
+      case "technical":
+        return "bg-sky-100 text-sky-800";
+      case "process":
+        return "bg-amber-100 text-amber-800";
+      case "metric":
+        return "bg-rose-100 text-rose-800";
       default:
-        return 'bg-violet-100 text-violet-800';
+        return "bg-violet-100 text-violet-800";
     }
   };
 
@@ -175,16 +192,17 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
             const cy2 = centerY + dy * 0.25;
             const pathStr = `M ${centerX} ${centerY} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${node.x} ${node.y}`;
 
-            const isHighlighted = hoveredNode?.id === node.id || selectedNode?.id === node.id;
+            const isHighlighted =
+              hoveredNode?.id === node.id || selectedNode?.id === node.id;
 
             return (
               <g key={`edge-${node.id}`}>
                 <path
                   d={pathStr}
                   fill="none"
-                  stroke={isHighlighted ? '#6366f1' : 'url(#edgeGrad)'}
+                  stroke={isHighlighted ? "#6366f1" : "url(#edgeGrad)"}
                   strokeWidth={isHighlighted ? 3 : 1.5}
-                  strokeDasharray={isHighlighted ? '0' : '4,4'}
+                  strokeDasharray={isHighlighted ? "0" : "4,4"}
                   className="transition-all duration-300"
                 />
                 {isHighlighted && (
@@ -206,7 +224,15 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
             const sourceNode = allNodes.find((n) => n.id === edge.source);
             const targetNode = allNodes.find((n) => n.id === edge.target);
 
-            if (!sourceNode || !targetNode || sourceNode.x === undefined || sourceNode.y === undefined || targetNode.x === undefined || targetNode.y === undefined) return null;
+            if (
+              !sourceNode ||
+              !targetNode ||
+              sourceNode.x === undefined ||
+              sourceNode.y === undefined ||
+              targetNode.x === undefined ||
+              targetNode.y === undefined
+            )
+              return null;
 
             const dx = targetNode.x - sourceNode.x;
             const dy = targetNode.y - sourceNode.y;
@@ -225,7 +251,7 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
                 <path
                   d={pathStr}
                   fill="none"
-                  stroke={isEdgeHighlighted ? '#4f46e5' : '#e2e8f0'}
+                  stroke={isEdgeHighlighted ? "#4f46e5" : "#e2e8f0"}
                   strokeWidth={isEdgeHighlighted ? 1.5 : 1}
                   strokeOpacity={isEdgeHighlighted ? 0.8 : 0.5}
                   className="transition-all duration-300"
@@ -237,7 +263,7 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
           {/* Render Concept Nodes */}
           {allNodes.map((node) => {
             if (node.x === undefined || node.y === undefined) return null;
-            const isCenter = node.id === 'center';
+            const isCenter = node.id === "center";
             const size = isCenter ? 48 : 28;
             const isHovered = hoveredNode?.id === node.id;
             const isSelected = selectedNode?.id === node.id;
@@ -250,7 +276,7 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
                 onMouseLeave={() => setHoveredNode(null)}
                 onClick={() => !isCenter && setSelectedNode(node)}
                 className={`cursor-pointer transition-all duration-300 ${
-                  isCenter ? '' : 'hover:scale-110'
+                  isCenter ? "" : "hover:scale-110"
                 }`}
               >
                 {/* Outer Glow */}
@@ -270,10 +296,10 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
                   r={size}
                   className={`transition-all duration-300 shadow-md ${
                     isCenter
-                      ? 'fill-slate-800 stroke-slate-700'
+                      ? "fill-slate-800 stroke-slate-700"
                       : isSelected
-                      ? 'fill-indigo-600 stroke-indigo-500'
-                      : 'fill-white stroke-indigo-200'
+                        ? "fill-indigo-600 stroke-indigo-500"
+                        : "fill-white stroke-indigo-200"
                   }`}
                   strokeWidth={isSelected || isCenter ? 2 : 1.5}
                 />
@@ -288,7 +314,7 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
                 >
                   <div
                     className={`w-full h-full rounded-full flex flex-col items-center justify-center p-1.5 bg-gradient-to-tr text-center ${getNodeColor(
-                      isCenter ? 'document' : node.type
+                      isCenter ? "document" : node.type,
                     )}`}
                   >
                     {!isCenter && (
@@ -298,10 +324,10 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
                     )}
                     <span
                       className={`font-semibold truncate max-w-full leading-snug mt-0.5 ${
-                        isCenter ? 'text-xs' : 'text-[10px]'
+                        isCenter ? "text-xs" : "text-[10px]"
                       }`}
                     >
-                      {isCenter ? 'DOCUMENT' : node.label}
+                      {isCenter ? "DOCUMENT" : node.label}
                     </span>
                   </div>
                 </foreignObject>
@@ -313,22 +339,28 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
         {/* Legend overlays */}
         <div className="absolute bottom-6 left-6 bg-white/80 backdrop-blur-md px-3 py-2 rounded-xl border border-gray-200/50 shadow-sm flex flex-wrap gap-x-3 gap-y-1 max-w-md">
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-800"></span> Document
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-800"></span>{" "}
+            Document
           </div>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span> Core
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>{" "}
+            Core
           </div>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Financial
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>{" "}
+            Financial
           </div>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Technical
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>{" "}
+            Technical
           </div>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Process
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>{" "}
+            Process
           </div>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Metric
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>{" "}
+            Metric
           </div>
         </div>
       </div>
@@ -336,14 +368,18 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
       {/* Selected Concept Detail Drawer */}
       <div
         className={`w-72 border-l border-gray-200 bg-white shadow-2xl flex flex-col transition-all duration-300 absolute md:relative right-0 top-0 bottom-0 z-20 ${
-          selectedNode ? 'translate-x-0' : 'translate-x-full md:w-0 overflow-hidden border-l-0'
+          selectedNode
+            ? "translate-x-0"
+            : "translate-x-full md:w-0 overflow-hidden border-l-0"
         }`}
       >
         {selectedNode && (
           <div className="p-5 flex-1 flex flex-col justify-between overflow-y-auto">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getCategoryBadgeColor(selectedNode.type)}`}>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getCategoryBadgeColor(selectedNode.type)}`}
+                >
                   {selectedNode.type}
                 </span>
                 <button
@@ -355,14 +391,19 @@ function ConceptMap({ documentId, documentName, onAskAI }: ConceptMapProps) {
               </div>
 
               <div>
-                <h4 className="text-base font-bold text-gray-800 mb-1">{selectedNode.label}</h4>
+                <h4 className="text-base font-bold text-gray-800 mb-1">
+                  {selectedNode.label}
+                </h4>
                 <div className="h-0.5 w-10 bg-indigo-500 rounded"></div>
               </div>
 
               <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
-                <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Concept definition</h5>
+                <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                  Concept definition
+                </h5>
                 <p className="text-xs text-gray-600 leading-relaxed font-medium">
-                  {selectedNode.description || 'No definition available for this concept.'}
+                  {selectedNode.description ||
+                    "No definition available for this concept."}
                 </p>
               </div>
             </div>

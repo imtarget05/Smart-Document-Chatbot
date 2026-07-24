@@ -1,7 +1,7 @@
 """
 TC-TK-01 → TC-TK-07: TopK Retrieval Pipeline Tests
 """
-import pytest
+
 import time
 import sys
 import os
@@ -25,17 +25,21 @@ class MockRetriever:
     def __init__(self, docs: List[Dict] = None):
         self.docs = docs or []
 
-    def retrieve(self, query: str, k: int = 5, threshold: float = 0.0) -> List[RetrievalResult]:
+    def retrieve(
+        self, query: str, k: int = 5, threshold: float = 0.0
+    ) -> List[RetrievalResult]:
         results = []
         for doc in self.docs:
             score = self._compute_score(query, doc["content"])
             if score >= threshold:
-                results.append(RetrievalResult(
-                    doc_id=doc["id"],
-                    content=doc["content"],
-                    score=score,
-                    metadata=doc.get("metadata", {})
-                ))
+                results.append(
+                    RetrievalResult(
+                        doc_id=doc["id"],
+                        content=doc["content"],
+                        score=score,
+                        metadata=doc.get("metadata", {}),
+                    )
+                )
         results.sort(key=lambda x: x.score, reverse=True)
         return results[:k]
 
@@ -49,19 +53,50 @@ class MockRetriever:
 
 
 SAMPLE_DOCS = [
-    {"id": "doc1", "content": "Chính sách đổi trả cho phép khách hàng đổi trả trong 30 ngày", "metadata": {"category": "policy"}},
-    {"id": "doc2", "content": "Quy định an toàn lao động yêu cầu đội mũ bảo hộ", "metadata": {"category": "safety"}},
-    {"id": "doc3", "content": "Chính sách lương thưởng theo quý dựa trên hiệu suất", "metadata": {"category": "hr"}},
-    {"id": "doc4", "content": "Quy trình vệ sinh máy móc phải thực hiện hàng ngày", "metadata": {"category": "maintenance"}},
-    {"id": "doc5", "content": "Chính sách bảo mật thông tin khách hàng tuyệt đối", "metadata": {"category": "security"}},
-    {"id": "doc6", "content": "Đào tạo nhân viên mới kéo dài 2 tuần", "metadata": {"category": "hr"}},
-    {"id": "doc7", "content": "Quy định về thời gian nghỉ phép năm", "metadata": {"category": "hr"}},
-    {"id": "doc8", "content": "Chính sách sử dụng xe công ty cho mục đích cá nhân", "metadata": {"category": "policy"}},
+    {
+        "id": "doc1",
+        "content": "Chính sách đổi trả cho phép khách hàng đổi trả trong 30 ngày",
+        "metadata": {"category": "policy"},
+    },
+    {
+        "id": "doc2",
+        "content": "Quy định an toàn lao động yêu cầu đội mũ bảo hộ",
+        "metadata": {"category": "safety"},
+    },
+    {
+        "id": "doc3",
+        "content": "Chính sách lương thưởng theo quý dựa trên hiệu suất",
+        "metadata": {"category": "hr"},
+    },
+    {
+        "id": "doc4",
+        "content": "Quy trình vệ sinh máy móc phải thực hiện hàng ngày",
+        "metadata": {"category": "maintenance"},
+    },
+    {
+        "id": "doc5",
+        "content": "Chính sách bảo mật thông tin khách hàng tuyệt đối",
+        "metadata": {"category": "security"},
+    },
+    {
+        "id": "doc6",
+        "content": "Đào tạo nhân viên mới kéo dài 2 tuần",
+        "metadata": {"category": "hr"},
+    },
+    {
+        "id": "doc7",
+        "content": "Quy định về thời gian nghỉ phép năm",
+        "metadata": {"category": "hr"},
+    },
+    {
+        "id": "doc8",
+        "content": "Chính sách sử dụng xe công ty cho mục đích cá nhân",
+        "metadata": {"category": "policy"},
+    },
 ]
 
 
 class TestTopKRetrieval:
-
     def test_tk01_basic_retrieval(self):
         """TC-TK-01: Basic TopK Retrieval — returns K results sorted by score."""
         retriever = MockRetriever(SAMPLE_DOCS)
@@ -69,7 +104,9 @@ class TestTopKRetrieval:
 
         assert len(results) == 5
         for i in range(len(results) - 1):
-            assert results[i].score >= results[i + 1].score, "Results not sorted by score"
+            assert results[i].score >= results[i + 1].score, (
+                "Results not sorted by score"
+            )
 
     def test_tk02_empty_index(self):
         """TC-TK-02: Empty Index — returns empty list, no crash."""

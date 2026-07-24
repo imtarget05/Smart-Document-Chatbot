@@ -1,2 +1,1 @@
 """Connector ingestion utilities."""
-

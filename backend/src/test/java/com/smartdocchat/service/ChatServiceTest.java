@@ -51,6 +51,7 @@ public class ChatServiceTest {
         return new AgenticRetrievalService.RetrievalResult(
                 List.of(chunk),
                 Map.of(chunk, "it_security.pdf"),
+                Map.of(chunk, 1L),
                 0.85,
                 "direct",
                 false
@@ -123,6 +124,7 @@ public class ChatServiceTest {
         AgenticRetrievalService.RetrievalResult lowConfResult =
                 new AgenticRetrievalService.RetrievalResult(
                         Collections.emptyList(),
+                        Collections.emptyMap(),
                         Collections.emptyMap(),
                         0.20,
                         "general_knowledge",

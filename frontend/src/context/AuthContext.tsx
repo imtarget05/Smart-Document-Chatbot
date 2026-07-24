@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
 
 interface AuthContextType {
   token: string | null;
@@ -14,38 +20,53 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080/api';
+const API_BASE_URL =
+  (import.meta.env.VITE_API_URL as string) || "http://localhost:8080/api";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('username'));
-  const [role, setRole] = useState<string | null>(() => localStorage.getItem('role'));
+  // Note: JWT is now stored in httpOnly cookie (set by backend).
+  // We keep username/role in memory only – NOT localStorage – to mitigate XSS.
+  const [token, setToken] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
 
-  const login = useCallback((newToken: string, newUsername: string, newRole: string) => {
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('username', newUsername);
-    localStorage.setItem('role', newRole);
-    setToken(newToken);
-    setUsername(newUsername);
-    setRole(newRole);
-  }, []);
+  const login = useCallback(
+    (newToken: string, newUsername: string, newRole: string) => {
+      // Do NOT store JWT in localStorage – backend sets httpOnly cookie.
+      // Only keep non-sensitive identity info in memory for UI rendering.
+      setToken(newToken);
+      setUsername(newUsername);
+      setRole(newRole);
+    },
+    [],
+  );
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('role');
+    // Clear in-memory state. httpOnly cookie is cleared by backend /auth/logout.
     setToken(null);
     setUsername(null);
     setRole(null);
   }, []);
 
   const isAuthenticated = !!token;
-  const isAdmin = role === 'ROLE_ADMIN' || role === 'ADMIN';
-  const isEngineer = role === 'ROLE_ENGINEER' || role === 'ENGINEER';
-  const isViewer = role === 'ROLE_VIEWER' || role === 'VIEWER';
+  const isAdmin = role === "ROLE_ADMIN" || role === "ADMIN";
+  const isEngineer = role === "ROLE_ENGINEER" || role === "ENGINEER";
+  const isViewer = role === "ROLE_VIEWER" || role === "VIEWER";
 
   return (
-    <AuthContext.Provider value={{ token, username, role, login, logout, isAuthenticated, isAdmin, isEngineer, isViewer }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        username,
+        role,
+        login,
+        logout,
+        isAuthenticated,
+        isAdmin,
+        isEngineer,
+        isViewer,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -54,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return ctx;
 }

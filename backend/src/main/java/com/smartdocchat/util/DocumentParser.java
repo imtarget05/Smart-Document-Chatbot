@@ -50,6 +50,20 @@ public class DocumentParser {
         List<String> chunks = new ArrayList<>();
         String[] sentences = text.split("(?<=[.!?])\\s+");
         
+        // If sentence splitting yielded only one large block, fall back to newline splitting
+        if (sentences.length <= 1) {
+            sentences = text.split("\\n+");
+        }
+        // If still only one block, fall back to splitting by character count
+        if (sentences.length <= 1) {
+            int maxChars = chunkSize * 4;
+            List<String> parts = new ArrayList<>();
+            for (int i = 0; i < text.length(); i += maxChars) {
+                parts.add(text.substring(i, Math.min(i + maxChars, text.length())));
+            }
+            sentences = parts.toArray(new String[0]);
+        }
+        
         StringBuilder chunk = new StringBuilder();
         int tokenCount = 0;
         

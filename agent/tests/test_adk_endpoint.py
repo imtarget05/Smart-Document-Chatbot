@@ -6,7 +6,7 @@ from main import app
 def test_adk_demo_endpoint_returns_workflow_result():
     client = TestClient(app)
     response = client.post(
-        "/agent/adk/demo",
+        "/v1/agent/adk/demo",
         json={"user_request": "Summarize the report", "document_name": "demo.pdf"},
     )
 

@@ -8,6 +8,7 @@ This is the REAL use case: can the model extract answers from provided context?
 Usage:
     python eval/local_model_comparison.py
 """
+
 import json
 import time
 import httpx
@@ -53,21 +54,81 @@ Features:
 """
 
 QUESTIONS = [
-    {"id": 1, "question": "Hệ thống sử dụng framework nào cho backend?", "expected": ["spring boot"]},
-    {"id": 2, "question": "Vector database được sử dụng là gì?", "expected": ["qdrant"]},
-    {"id": 3, "question": "Chunking strategy được sử dụng trong RAG là gì?", "expected": ["hierarchical", "overlapping"]},
-    {"id": 4, "question": "Confidence threshold của hệ thống là bao nhiêu?", "expected": ["0.45"]},
-    {"id": 5, "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?", "expected": ["pdf", "docx", "txt"]},
-    {"id": 6, "question": "Streaming response sử dụng protocol nào?", "expected": ["sse", "server-sent events"]},
-    {"id": 7, "question": "Frontend sử dụng công nghệ gì?", "expected": ["react", "vite"]},
-    {"id": 8, "question": "Hệ thống có bao nhiêu specialist agents?", "expected": ["7"]},
-    {"id": 9, "question": "Ollama model nào được dùng để generate embeddings?", "expected": ["nomic-embed-text"]},
-    {"id": 10, "question": "Corrective RAG hoạt động như thế nào?", "expected": ["confidence", "reformulation"]},
-    {"id": 11, "question": "Khi nào hệ thống sử dụng web search fallback?", "expected": ["low confidence", "thấp", "thiếu", "lack"]},
-    {"id": 12, "question": "Hệ thống lưu trữ lịch sử chat ở đâu?", "expected": ["postgresql"]},
-    {"id": 13, "question": "LLM Router hỗ trợ những provider nào?", "expected": ["ollama", "claude", "gpt"]},
-    {"id": 14, "question": "Airflow được sử dụng để làm gì?", "expected": ["etl", "ingestion", "pipeline"]},
-    {"id": 15, "question": "Monitoring stack gồm những thành phần nào?", "expected": ["prometheus", "grafana"]},
+    {
+        "id": 1,
+        "question": "Hệ thống sử dụng framework nào cho backend?",
+        "expected": ["spring boot"],
+    },
+    {
+        "id": 2,
+        "question": "Vector database được sử dụng là gì?",
+        "expected": ["qdrant"],
+    },
+    {
+        "id": 3,
+        "question": "Chunking strategy được sử dụng trong RAG là gì?",
+        "expected": ["hierarchical", "overlapping"],
+    },
+    {
+        "id": 4,
+        "question": "Confidence threshold của hệ thống là bao nhiêu?",
+        "expected": ["0.45"],
+    },
+    {
+        "id": 5,
+        "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?",
+        "expected": ["pdf", "docx", "txt"],
+    },
+    {
+        "id": 6,
+        "question": "Streaming response sử dụng protocol nào?",
+        "expected": ["sse", "server-sent events"],
+    },
+    {
+        "id": 7,
+        "question": "Frontend sử dụng công nghệ gì?",
+        "expected": ["react", "vite"],
+    },
+    {
+        "id": 8,
+        "question": "Hệ thống có bao nhiêu specialist agents?",
+        "expected": ["7"],
+    },
+    {
+        "id": 9,
+        "question": "Ollama model nào được dùng để generate embeddings?",
+        "expected": ["nomic-embed-text"],
+    },
+    {
+        "id": 10,
+        "question": "Corrective RAG hoạt động như thế nào?",
+        "expected": ["confidence", "reformulation"],
+    },
+    {
+        "id": 11,
+        "question": "Khi nào hệ thống sử dụng web search fallback?",
+        "expected": ["low confidence", "thấp", "thiếu", "lack"],
+    },
+    {
+        "id": 12,
+        "question": "Hệ thống lưu trữ lịch sử chat ở đâu?",
+        "expected": ["postgresql"],
+    },
+    {
+        "id": 13,
+        "question": "LLM Router hỗ trợ những provider nào?",
+        "expected": ["ollama", "claude", "gpt"],
+    },
+    {
+        "id": 14,
+        "question": "Airflow được sử dụng để làm gì?",
+        "expected": ["etl", "ingestion", "pipeline"],
+    },
+    {
+        "id": 15,
+        "question": "Monitoring stack gồm những thành phần nào?",
+        "expected": ["prometheus", "grafana"],
+    },
 ]
 
 
@@ -89,7 +150,7 @@ Answer:"""
         resp = httpx.post(
             f"{OLLAMA_URL}/api/generate",
             json={"model": model, "prompt": prompt, "stream": False},
-            timeout=180
+            timeout=180,
         )
         latency_ms = round((time.time() - start) * 1000)
 
@@ -105,7 +166,12 @@ Answer:"""
         else:
             return {"status": "error", "latency_ms": latency_ms, "answer": ""}
     except Exception as e:
-        return {"status": "error", "latency_ms": round((time.time() - start) * 1000), "answer": "", "error": str(e)}
+        return {
+            "status": "error",
+            "latency_ms": round((time.time() - start) * 1000),
+            "answer": "",
+            "error": str(e),
+        }
 
 
 def evaluate_answer(answer: str, expected_keywords: list) -> dict:
@@ -124,9 +190,9 @@ def run_comparison():
     results = {}
 
     for model in MODELS:
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"🤖 Model: {model}")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
 
         model_results = []
         for q in QUESTIONS:
@@ -161,7 +227,9 @@ def run_comparison():
             "successful": len(successful),
             "accuracy": round(len(correct) / max(len(model_results), 1), 4),
             "avg_latency_ms": round(sum(latencies) / max(len(latencies), 1)),
-            "p95_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0),
+            "p95_latency_ms": round(
+                sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0
+            ),
             "total_tokens": sum(r.get("eval_count", 0) for r in model_results),
             "details": model_results,
         }
@@ -177,9 +245,9 @@ def run_comparison():
 
 def print_final_report(results: dict):
     """Print comparative report."""
-    print(f"\n\n{'='*60}")
-    print(f"📊 FINAL COMPARISON REPORT (RAG Context)")
-    print(f"{'='*60}")
+    print(f"\n\n{'=' * 60}")
+    print("📊 FINAL COMPARISON REPORT (RAG Context)")
+    print(f"{'=' * 60}")
 
     sorted_models = sorted(results.values(), key=lambda x: x["accuracy"], reverse=True)
 
@@ -188,17 +256,19 @@ def print_final_report(results: dict):
     print("-" * len(header))
 
     for r in sorted_models:
-        print(f"{r['model']:20s} {r['accuracy']:>10.2%} {r['avg_latency_ms']:>10d}ms {r['p95_latency_ms']:>10d}ms {r['total_tokens']:>10,}")
+        print(
+            f"{r['model']:20s} {r['accuracy']:>10.2%} {r['avg_latency_ms']:>10d}ms {r['p95_latency_ms']:>10d}ms {r['total_tokens']:>10,}"
+        )
 
     winner = sorted_models[0]
     print(f"\n🏆 Winner: {winner['model']} (Accuracy: {winner['accuracy']:.2%})")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def main():
     print("🔬 Local Model Comparison — RAG Context Evaluation")
     print(f"   Questions: {len(QUESTIONS)}")
-    print(f"   Mode: With RAG context (real use case)")
+    print("   Mode: With RAG context (real use case)")
 
     # Check Ollama and find available models
     try:
@@ -234,7 +304,10 @@ def main():
         "models": MODELS,
         "questions_count": len(QUESTIONS),
         "mode": "rag_context",
-        "results": {k: {kk: vv for kk, vv in v.items() if kk != "details"} for k, v in results.items()},
+        "results": {
+            k: {kk: vv for kk, vv in v.items() if kk != "details"}
+            for k, v in results.items()
+        },
         "per_model_details": results,
     }
     with open(output_path, "w") as f:

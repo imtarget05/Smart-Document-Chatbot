@@ -150,6 +150,9 @@ public class DocumentService {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Value("${agent.service.url:http://localhost:9000}")
+    private String agentServiceUrl;
+
     public void completeEtl(Long id, String vectorCollectionId, int chunkCount, String summary, String suggestedQuestions) {
         Optional<Document> docOpt = documentRepository.findById(id);
         if (docOpt.isPresent()) {
@@ -161,8 +164,33 @@ public class DocumentService {
             doc.setStatus("READY");
             documentRepository.save(doc);
             log.info("Airflow ETL completed successfully for document ID: {}. State updated to READY.", id);
+
+            // Notify agent service to consider auto-retrain
+            CompletableFuture.runAsync(() -> triggerAgentRetrainCheck(id));
         } else {
             throw new RuntimeException("Document not found with ID: " + id);
+        }
+    }
+
+    private void triggerAgentRetrainCheck(Long documentId) {
+        try {
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Internal-Token", internalServiceToken);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("document_id", documentId);
+            body.put("base_url", "http://localhost:8080/api");
+            body.put("token", internalServiceToken);
+
+            org.springframework.http.HttpEntity<Map<String, Object>> entity =
+                new org.springframework.http.HttpEntity<>(body, headers);
+            String url = agentServiceUrl + "/v1/agent/on-ingest-complete";
+
+            restTemplate.exchange(url, org.springframework.http.HttpMethod.POST, entity, Map.class);
+            log.info("Notified agent service about document {} ingestion completion", documentId);
+        } catch (Exception e) {
+            log.warn("Failed to notify agent service for document {}: {}", documentId, e.getMessage());
         }
     }
 

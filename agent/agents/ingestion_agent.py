@@ -24,7 +24,9 @@ class IngestionAgent:
         "sharepoint": SharePointConnector,
     }
 
-    async def ingest(self, source: str, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def ingest(
+        self, source: str, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         connector_cls = self._connectors.get(source)
         if not connector_cls:
             raise ValueError(f"Unknown connector source: {source}")
@@ -35,4 +37,3 @@ class IngestionAgent:
     @classmethod
     def supported_sources(cls) -> List[str]:
         return sorted(cls._connectors.keys())
-

@@ -23,13 +23,17 @@ def request(**routing):
 
 
 def test_visual_input_has_highest_priority():
-    decision = choose_route(request(has_image=True, document_count=8, task_type="compare"), BASE_SETTINGS)
+    decision = choose_route(
+        request(has_image=True, document_count=8, task_type="compare"), BASE_SETTINGS
+    )
     assert decision.provider == "openai"
     assert decision.reason == "visual_input"
 
 
 def test_ollama_images_are_detected():
-    payload = ChatRequest(messages=[{"role": "user", "content": "Read this", "images": ["base64"]}])
+    payload = ChatRequest(
+        messages=[{"role": "user", "content": "Read this", "images": ["base64"]}]
+    )
     assert choose_route(payload, BASE_SETTINGS).provider == "openai"
 
 
@@ -41,7 +45,9 @@ def test_structured_scan_attachment_routes_to_vision():
 
 
 def test_structured_image_mime_type_routes_to_vision():
-    payload = request(attachments=[{"filename": "upload.bin", "content_type": "image/png"}])
+    payload = request(
+        attachments=[{"filename": "upload.bin", "content_type": "image/png"}]
+    )
     assert choose_route(payload, BASE_SETTINGS).provider == "openai"
 
 
@@ -52,10 +58,14 @@ def test_more_than_two_documents_routes_to_claude():
 
 
 def test_document_count_is_inferred_from_legacy_crag_prompt():
-    payload = ChatRequest(messages=[{
-        "role": "user",
-        "content": "[contract-a.pdf] A\n[contract-b.pdf] B\n[contract-c.pdf] C\nQuestion: compare",
-    }])
+    payload = ChatRequest(
+        messages=[
+            {
+                "role": "user",
+                "content": "[contract-a.pdf] A\n[contract-b.pdf] B\n[contract-c.pdf] C\nQuestion: compare",
+            }
+        ]
+    )
     decision = choose_route(payload, BASE_SETTINGS)
     assert decision.provider == "anthropic"
     assert decision.reason == "complex_task:compare"
@@ -81,6 +91,8 @@ def test_low_confidence_escalates_before_local_call():
 
 def test_threshold_is_inclusive_for_local():
     configured = replace(BASE_SETTINGS, confidence_threshold=0.7)
-    decision = choose_route(request(confidence_score=0.7, task_type="extract_field"), configured)
+    decision = choose_route(
+        request(confidence_score=0.7, task_type="extract_field"), configured
+    )
     assert decision.provider == "local"
     assert decision.reason == "cost_optimized:extract_field"

@@ -60,29 +60,34 @@ class OrchestratorAgent:
             return state
 
         try:
-            response = await self._llm.ainvoke([
-                SystemMessage(content=_SYSTEM_PROMPT),
-                HumanMessage(content=query),
-            ])
+            response = await self._llm.ainvoke(
+                [
+                    SystemMessage(content=_SYSTEM_PROMPT),
+                    HumanMessage(content=query),
+                ]
+            )
             raw = response.content.strip()
 
             # Extract JSON – handle models that wrap in markdown code blocks
-            json_match = re.search(r'\{[^}]+\}', raw, re.DOTALL)
+            json_match = re.search(r"\{[^}]+\}", raw, re.DOTALL)
             if json_match:
                 import json
+
                 parsed = json.loads(json_match.group())
                 intent = parsed.get("intent", "rag")
-                plan   = parsed.get("plan", "")
+                plan = parsed.get("plan", "")
             else:
                 # Fallback heuristics
                 intent, plan = self._heuristic_intent(query)
 
         except Exception as exc:
-            logger.warning("Orchestrator LLM call failed: %s – falling back to heuristic", exc)
+            logger.warning(
+                "Orchestrator LLM call failed: %s – falling back to heuristic", exc
+            )
             intent, plan = self._heuristic_intent(query)
 
         state["agent_type"] = intent
-        state["agent_plan"]  = plan
+        state["agent_plan"] = plan
         logger.info("Orchestrator decision → intent=%s plan=%s", intent, plan)
         return state
 
@@ -92,14 +97,42 @@ class OrchestratorAgent:
     @staticmethod
     def _heuristic_intent(query: str):
         q = query.lower()
-        if any(k in q for k in ("8d", "root cause", "corrective action", "failure", "test report", "engineering report")):
-            return "engineering", "Analyze engineering evidence and produce an 8D-style report."
-        if any(k in q for k in ("report", "pdf", "summary", "tóm tắt", "báo cáo", "xuất")):
+        if any(
+            k in q
+            for k in (
+                "8d",
+                "root cause",
+                "corrective action",
+                "failure",
+                "test report",
+                "engineering report",
+            )
+        ):
+            return (
+                "engineering",
+                "Analyze engineering evidence and produce an 8D-style report.",
+            )
+        if any(
+            k in q for k in ("report", "pdf", "summary", "tóm tắt", "báo cáo", "xuất")
+        ):
             return "report", "Generate a report from documents."
         if any(k in q for k in ("compare", "so sánh", "difference", "diff", "vs")):
             return "compare", "Compare documents."
-        if any(k in q for k in ("search web", "tìm kiếm", "news", "latest", "researcher")):
+        if any(
+            k in q for k in ("search web", "tìm kiếm", "news", "latest", "researcher")
+        ):
             return "research", "Research via web."
-        if any(k in q for k in ("send email", "gửi email", "jira", "notion", "task", "webhook", "trigger")):
+        if any(
+            k in q
+            for k in (
+                "send email",
+                "gửi email",
+                "jira",
+                "notion",
+                "task",
+                "webhook",
+                "trigger",
+            )
+        ):
             return "action", "Execute an action."
         return "rag", "Answer from documents using RAG."

@@ -1,169 +1,410 @@
 """
-Long-term memory – stores user preferences and history in PostgreSQL.
-Uses asyncpg for non-blocking DB access.
+Long-term memory - PostgreSQL-backed persistent memory across sessions.
+Stores important facts extracted from conversations per user.
+Retrieved at session start to provide continuity across sessions.
 
-Features:
-  - Persist conversation turns to agent_session_history
-  - Retrieve session history with optional LLM-based summarization
-  - User preference storage (JSONB)
-  - Context summarization for long-running sessions (>16 turns)
+Issue #26: When PostgreSQL is unavailable, the system falls back to an
+in-memory dictionary. This means memory is LOST on process restart. In
+production, PostgreSQL must be available; the fallback is for local dev only.
 """
 
 import json
 import logging
+import os
+import time
+import re
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from settings import settings
 
 logger = logging.getLogger(__name__)
 
-_SUMMARY_TURNS = 16
+# Environments where in-memory fallback is acceptable.
+_PERMISSIVE_ENVS = {"local", "dev", "development", "test"}
+
+
+def _is_strict_env() -> bool:
+    env = os.getenv("APP_ENV", "production").strip().lower()
+    return env not in _PERMISSIVE_ENVS
+
+
+try:
+    import asyncpg
+
+    HAS_PG = True
+except ImportError:
+    HAS_PG = False
+    logger.warning(
+        "asyncpg not installed - long-term memory will use in-memory fallback (data lost on restart)."
+    )
+
+
+def _pg_dsn() -> str:
+    return (
+        f"postgresql://{settings.postgres_user}:{settings.postgres_password}"
+        f"@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+    )
+
+
+@dataclass
+class LongTermFact:
+    fact_text: str
+    importance: float = 0.5
+    category: str = "general"
+    user_id: str = ""
+    session_id: str = ""
+    fact_id: str = ""
+    created_at: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "fact_id": self.fact_id,
+            "fact_text": self.fact_text,
+            "importance": self.importance,
+            "category": self.category,
+            "user_id": self.user_id,
+            "session_id": self.session_id,
+            "created_at": self.created_at,
+        }
+
+
+FACT_EXTRACTION_PROMPT = """You are a memory extraction system. From the conversation below, extract 1-3 important facts that should be remembered LONG-TERM about the user or their preferences.
+
+Rules:
+- Only extract facts that are USEFUL to remember across sessions.
+- Skip trivial/greeting content.
+- Each fact must be a complete sentence.
+- Rate importance 0.0-1.0 (1.0 = critical).
+- Assign category: "personal_info", "preference", "goal", "project", "technical", "general".
+
+Output format - JSON array ONLY:
+[
+  {"fact": "...", "importance": 0.8, "category": "preference"}
+]
+
+Conversation:
+{conversation_text}
+"""
 
 
 class LongTermMemory:
-    def __init__(self):
-        self._pool = None
-        self._summarizer = None  # lazy import
+    """PostgreSQL-backed long-term memory with in-memory fallback.
 
-    async def init(self) -> None:
+    Issue #26: The in-memory fallback loses all data on process restart.
+    In production (non-local env), PG unavailability is logged at ERROR level.
+    """
+
+    def __init__(self, llm_router=None):
+        self._pool: Optional[Any] = None
+        self._llm = llm_router
+        self._local: Dict[str, List[LongTermFact]] = {}
+        self._local_turns: Dict[str, List[Dict]] = {}
+        self._table_ensured = False
+        self._pg_warned = False
+
+    async def _get_pool(self):
+        if self._pool is None and HAS_PG:
+            try:
+                self._pool = await asyncpg.create_pool(
+                    _pg_dsn(), min_size=1, max_size=5, timeout=5
+                )
+                logger.info("LongTermMemory: connected to PostgreSQL")
+            except Exception as exc:
+                if _is_strict_env():
+                    logger.error(
+                        "LongTermMemory: PostgreSQL unavailable (%s). "
+                        "Falling back to in-memory storage - DATA WILL BE LOST ON RESTART. "
+                        "This is unacceptable in production. Ensure PostgreSQL is running.",
+                        exc,
+                    )
+                else:
+                    logger.warning(
+                        "LongTermMemory: PG unavailable (%s), using in-memory fallback "
+                        "(data will be lost on restart - dev mode only).",
+                        exc,
+                    )
+                self._pool = False
+        return self._pool if self._pool else None
+
+    async def ensure_table(self):
+        pool = await self._get_pool()
+        if not pool or self._table_ensured:
+            return
         try:
-            import asyncpg
-            dsn = (
-                f"postgresql://{settings.postgres_user}:{settings.postgres_password}"
-                f"@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS long_term_memory (
+                        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        user_id     VARCHAR(255) NOT NULL,
+                        session_id  VARCHAR(64)  NOT NULL,
+                        fact_text   TEXT         NOT NULL,
+                        importance  FLOAT        NOT NULL DEFAULT 0.5,
+                        category    VARCHAR(64)  DEFAULT 'general',
+                        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                        accessed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_ltm_user ON long_term_memory(user_id);
+                """)
+                self._table_ensured = True
+                logger.info("LongTermMemory: table ensured")
+        except Exception as exc:
+            logger.warning("LongTermMemory: table creation failed (%s)", exc)
+
+    async def extract_and_store(
+        self,
+        session_id: str,
+        user_id: str,
+        conversation_history: List[Dict[str, str]],
+    ) -> List[LongTermFact]:
+        if not conversation_history:
+            return []
+        lines = [
+            f"{m.get('role', 'user').capitalize()}: {m.get('content', '')}"
+            for m in conversation_history
+        ]
+        facts = await self._extract_facts_with_llm("\n".join(lines))
+        stored = []
+        for fd in facts:
+            f = LongTermFact(
+                fact_text=fd.get("fact", ""),
+                importance=float(fd.get("importance", 0.5)),
+                category=fd.get("category", "general"),
+                user_id=user_id,
+                session_id=session_id,
+                created_at=time.time(),
             )
-            self._pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
-            await self._create_tables()
-            logger.info("Long-term memory connected to PostgreSQL")
+            if f.fact_text:
+                await self._store_fact(f)
+                stored.append(f)
+        if stored:
+            logger.info(
+                "LongTermMemory: stored %d fact(s) for user %s", len(stored), user_id
+            )
+        return stored
+
+    async def _extract_facts_with_llm(self, text: str) -> List[Dict]:
+        if not self._llm:
+            return self._heuristic_extract(text)
+        prompt = FACT_EXTRACTION_PROMPT.format(conversation_text=text[:3000])
+        try:
+            from langchain_core.messages import HumanMessage
+
+            response = await self._llm.ainvoke([HumanMessage(content=prompt)])
+            raw = response.content.strip()
+            if raw.startswith("["):
+                return json.loads(raw)
+            m = re.search(r"\[.*?\]", raw, re.DOTALL)
+            if m:
+                return json.loads(m.group())
         except Exception as exc:
-            logger.warning("Long-term memory DB init failed: %s – operating without persistence", exc)
+            logger.warning("LLM extraction failed (%s), heuristic fallback", exc)
+        return self._heuristic_extract(text)
 
-    async def _create_tables(self) -> None:
-        if not self._pool:
-            return
-        async with self._pool.acquire() as conn:
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS agent_user_prefs (
-                    user_id  TEXT PRIMARY KEY,
-                    prefs    JSONB NOT NULL DEFAULT '{}'
-                )
-            """)
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS agent_session_history (
-                    id         BIGSERIAL PRIMARY KEY,
-                    user_id    TEXT NOT NULL,
-                    session_id TEXT NOT NULL,
-                    role       TEXT NOT NULL,
-                    content    TEXT NOT NULL,
-                    agent_type TEXT,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            """)
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_agent_session_history_session
-                ON agent_session_history (session_id, created_at DESC)
-            """)
+    def _heuristic_extract(self, text: str) -> List[Dict]:
+        """Extract sentences with preference keywords."""
+        facts = []
+        keywords = [
+            "i like",
+            "i want",
+            "i am",
+            "my name",
+            "i prefer",
+            "i need",
+            "my goal",
+            "i work",
+            "i have been",
+            "i don't like",
+        ]
+        for line in text.lower().split("\n"):
+            for kw in keywords:
+                if kw in line:
+                    for sent in line.split("."):
+                        if kw in sent:
+                            facts.append(
+                                {
+                                    "fact": sent.strip().capitalize(),
+                                    "importance": 0.5,
+                                    "category": "general",
+                                }
+                            )
+                            break
+                    break
+        return facts[:3]
 
-    async def save_turn(self, user_id: str, session_id: str, role: str,
-                        content: str, agent_type: str = "") -> None:
-        if not self._pool:
+    async def _store_fact(self, fact: LongTermFact):
+        pool = await self._get_pool()
+        if pool:
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "INSERT INTO long_term_memory (user_id, session_id, fact_text, importance, category) VALUES ($1,$2,$3,$4,$5)",
+                        fact.user_id,
+                        fact.session_id,
+                        fact.fact_text,
+                        fact.importance,
+                        fact.category,
+                    )
+                return
+            except Exception as exc:
+                logger.warning("Store failed (%s), in-memory fallback", exc)
+        if fact.user_id not in self._local:
+            self._local[fact.user_id] = []
+        self._local[fact.user_id].append(fact)
+        if len(self._local[fact.user_id]) > 50:
+            self._local[fact.user_id] = self._local[fact.user_id][-50:]
+
+    async def retrieve(self, user_id: str, limit: int = 10) -> List[LongTermFact]:
+        pool = await self._get_pool()
+        if pool:
+            try:
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        "SELECT id, user_id, session_id, fact_text, importance, category, created_at "
+                        "FROM long_term_memory WHERE user_id=$1 ORDER BY importance DESC, created_at DESC LIMIT $2",
+                        user_id,
+                        limit,
+                    )
+                    facts = [
+                        LongTermFact(
+                            fact_id=str(r["id"]),
+                            fact_text=r["fact_text"],
+                            importance=r["importance"],
+                            category=r["category"],
+                            user_id=r["user_id"],
+                            session_id=r["session_id"],
+                            created_at=r["created_at"].timestamp()
+                            if hasattr(r["created_at"], "timestamp")
+                            else 0,
+                        )
+                        for r in rows
+                    ]
+                    if facts:
+                        async with pool.acquire() as conn:
+                            await conn.execute(
+                                "UPDATE long_term_memory SET accessed_at=NOW() WHERE user_id=$1",
+                                user_id,
+                            )
+                    return facts
+            except Exception as exc:
+                logger.warning("Retrieve failed (%s), in-memory fallback", exc)
+        facts = self._local.get(user_id, [])
+        return sorted(facts, key=lambda f: f.importance, reverse=True)[:limit]
+
+    async def ensure_turn_table(self):
+        """Ensure the conversation_turns table exists."""
+        pool = await self._get_pool()
+        if not pool:
             return
         try:
-            async with self._pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO agent_session_history (user_id, session_id, role, content, agent_type)
-                    VALUES ($1, $2, $3, $4, $5)
-                    """,
-                    user_id, session_id, role, content, agent_type,
-                )
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS conversation_turns (
+                        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        user_id     VARCHAR(255) NOT NULL,
+                        session_id  VARCHAR(64)  NOT NULL,
+                        role        VARCHAR(32)  NOT NULL,
+                        content     TEXT         NOT NULL,
+                        agent_type  VARCHAR(64)  DEFAULT '',
+                        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_ct_user_session ON conversation_turns(user_id, session_id);
+                """)
         except Exception as exc:
-            logger.warning("Failed to save turn: %s", exc)
+            logger.warning("Conversation turns table creation failed (%s)", exc)
+
+    async def save_turn(
+        self,
+        user_id: str,
+        session_id: str,
+        role: str,
+        content: str,
+        agent_type: str = "",
+    ) -> None:
+        """Save a conversation turn to long-term storage."""
+        pool = await self._get_pool()
+        if pool:
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "INSERT INTO conversation_turns (user_id, session_id, role, content, agent_type) "
+                        "VALUES ($1, $2, $3, $4, $5)",
+                        user_id,
+                        session_id,
+                        role,
+                        content,
+                        agent_type,
+                    )
+                return
+            except Exception as exc:
+                logger.warning("save_turn failed (%s), in-memory fallback", exc)
+        if user_id not in self._local_turns:
+            self._local_turns[user_id] = []
+        self._local_turns[user_id].append(
+            {
+                "session_id": session_id,
+                "role": role,
+                "content": content,
+                "agent_type": agent_type,
+            }
+        )
+        if len(self._local_turns[user_id]) > 200:
+            self._local_turns[user_id] = self._local_turns[user_id][-200:]
 
     async def get_history(
         self,
         session_id: str,
-        user_id: Optional[str] = None,
-        limit: int = 20,
-        include_summary: bool = False,
+        user_id: str,
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
-        if not self._pool:
-            return []
-        try:
-            async with self._pool.acquire() as conn:
-                if user_id:
-                    rows = await conn.fetch(
-                        """
-                        SELECT role, content, agent_type, created_at
-                        FROM agent_session_history
-                        WHERE session_id = $1 AND user_id = $2
-                        ORDER BY created_at DESC
-                        LIMIT $3
-                        """,
-                        session_id, user_id, limit,
-                    )
-                else:
-                    rows = await conn.fetch(
-                        """
-                        SELECT role, content, agent_type, created_at
-                        FROM agent_session_history
-                        WHERE session_id = $1
-                        ORDER BY created_at DESC
-                        LIMIT $2
-                        """,
-                        session_id, limit,
-                    )
-            turns = [dict(r) for r in reversed(rows)]
-
-            if include_summary and len(turns) > _SUMMARY_TURNS:
-                summary = await self._summarize_context(turns)
-                recent = turns[-_SUMMARY_TURNS:]
-                return {
-                    "summary": summary,
-                    "recent_turns": recent,
-                    "total_turns": len(turns),
-                }
-
-            return turns
-        except Exception as exc:
-            logger.warning("Failed to fetch history: %s", exc)
-            return []
-
-    async def _summarize_context(self, turns: List[Dict[str, Any]]) -> str:
-        if self._summarizer is None:
+        """Get conversation history for a session."""
+        pool = await self._get_pool()
+        if pool:
             try:
-                from memory.context_summarizer import ContextSummarizer
-                self._summarizer = ContextSummarizer()
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        "SELECT role, content, agent_type, created_at "
+                        "FROM conversation_turns "
+                        "WHERE user_id=$1 AND session_id=$2 "
+                        "ORDER BY created_at ASC LIMIT $3",
+                        user_id,
+                        session_id,
+                        limit,
+                    )
+                    return [
+                        {
+                            "role": r["role"],
+                            "content": r["content"],
+                            "agent_type": r["agent_type"],
+                        }
+                        for r in rows
+                    ]
             except Exception as exc:
-                logger.warning("ContextSummarizer unavailable: %s", exc)
-                return ""
-        old_turns = turns[:-_SUMMARY_TURNS] if len(turns) > _SUMMARY_TURNS else turns
-        return await self._summarizer.summarize(old_turns)
+                logger.warning("get_history failed (%s), in-memory fallback", exc)
+        turns = self._local_turns.get(user_id, [])
+        return [
+            {
+                "role": t["role"],
+                "content": t["content"],
+                "agent_type": t.get("agent_type", ""),
+            }
+            for t in turns
+            if t.get("session_id") == session_id
+        ][-limit:]
 
-    async def get_user_prefs(self, user_id: str) -> Dict[str, Any]:
-        if not self._pool:
-            return {}
-        try:
-            async with self._pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT prefs FROM agent_user_prefs WHERE user_id = $1", user_id
-                )
-            return json.loads(row["prefs"]) if row else {}
-        except Exception as exc:
-            logger.warning("Failed to fetch user prefs: %s", exc)
-            return {}
+    async def delete_user_memory(self, user_id: str):
+        pool = await self._get_pool()
+        if pool:
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "DELETE FROM long_term_memory WHERE user_id=$1", user_id
+                    )
+                return
+            except Exception as exc:
+                logger.warning("Delete failed (%s)", exc)
+        self._local.pop(user_id, None)
 
-    async def set_user_prefs(self, user_id: str, prefs: Dict[str, Any]) -> None:
-        if not self._pool:
-            return
-        try:
-            async with self._pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO agent_user_prefs (user_id, prefs) VALUES ($1, $2::jsonb)
-                    ON CONFLICT (user_id) DO UPDATE SET prefs = EXCLUDED.prefs
-                    """,
-                    user_id, json.dumps(prefs),
-                )
-        except Exception as exc:
-            logger.warning("Failed to save user prefs: %s", exc)
+    async def close(self):
+        if self._pool and hasattr(self._pool, "close"):
+            await self._pool.close()

@@ -20,32 +20,46 @@ COPY frontend/ .
 RUN npm run build
 
 # --- Stage 3: Final Monolith Image ---
-FROM ubuntu:22.04
+# Use Ubuntu 24.04 LTS (Noble Numbat) — the latest long-term support release.
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 1. Install System Dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget gnupg2 lsb-release ca-certificates supervisor nginx sudo \
-    openjdk-17-jre-headless python3.11 python3-pip \
+    openjdk-17-jre-headless python3 python3-pip \
     libpq-dev build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install PostgreSQL 15
+# 2. Install PostgreSQL 16 (latest LTS available on Ubuntu 24.04)
 RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
-    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
-    && apt-get update && apt-get install -y postgresql-15 \
+    && curl --silent --fail --location https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg \
+    && apt-get update && apt-get install -y postgresql-16 \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Install Qdrant
 RUN QDRANT_VERSION="v1.7.4" && \
-    wget https://github.com/qdrant/qdrant/releases/download/${QDRANT_VERSION}/qdrant-x86_64-unknown-linux-gnu.tar.gz && \
+    wget --quiet https://github.com/qdrant/qdrant/releases/download/${QDRANT_VERSION}/qdrant-x86_64-unknown-linux-gnu.tar.gz && \
     tar -xvf qdrant-x86_64-unknown-linux-gnu.tar.gz && \
     mv qdrant /usr/local/bin/qdrant && \
     rm qdrant-x86_64-unknown-linux-gnu.tar.gz
 
 # 4. Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# SECURITY: Previously used `curl -fsSL https://ollama.com/install.sh | sh` which
+# executes an arbitrary remote script as root. Instead, download the official
+# pinned Linux binary directly from the GitHub release and verify its presence.
+ARG OLLAMA_VERSION=0.1.48
+RUN arch="$(uname -m)" && \
+    case "$arch" in \
+        x86_64)  ollama_arch="amd64";  ;; \
+        aarch64) ollama_arch="arm64";  ;; \
+        *) echo "Unsupported arch: $arch" && exit 1 ;; \
+    esac && \
+    wget --quiet --output-document=/usr/local/bin/ollama \
+        "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-${ollama_arch}" && \
+    chmod +x /usr/local/bin/ollama
 
 # 5. Setup Application Directories
 RUN mkdir -p /app/backend /app/agent /app/llm-router /app/frontend /var/lib/qdrant/storage /var/run/postgresql
@@ -57,15 +71,17 @@ COPY agent /app/agent
 COPY llm-router /app/llm-router
 
 # 7. Setup Agent Environment
-RUN pip3 install --no-cache-dir -r /app/agent/requirements.txt
-RUN pip3 install --no-cache-dir -r /app/llm-router/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /app/agent/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /app/llm-router/requirements.txt
 
 # 8. Copy Configurations
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/nginx.monolith.conf /etc/nginx/sites-available/default
 COPY docker/qdrant_config.yaml /etc/qdrant/config.yaml
 COPY docker/entrypoint.sh /app/entrypoint.sh
-COPY .env /app/.env
+# SECURITY: Do NOT copy .env into the image. Secrets must be provided at runtime
+# via environment variables, Docker secrets, or a mounted .env file. Copying .env
+# bakes secrets into the image layer and leaks them to anyone with image access.
 RUN chmod +x /app/entrypoint.sh
 
 # 9. Final Environment Settings

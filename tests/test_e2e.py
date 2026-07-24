@@ -1,14 +1,12 @@
 """
 TC-E2E-01 → TC-E2E-04: Integration & End-to-End Tests
 """
-import pytest
+
 import time
 import sys
 import os
-import json
-from typing import List, Dict, Optional
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from typing import List, Dict
+from dataclasses import dataclass
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -40,17 +38,27 @@ class MockRAGPipeline:
             doc_words = set(doc["content"].lower().split())
             overlap = len(words & doc_words)
             score = overlap / max(len(words), 1)
-            results.append(RetrievalResult(doc_id=doc["id"], content=doc["content"], score=score))
+            results.append(
+                RetrievalResult(doc_id=doc["id"], content=doc["content"], score=score)
+            )
         results.sort(key=lambda x: x.score, reverse=True)
         return results[:k]
 
-    def rerank(self, query: str, results: List[RetrievalResult]) -> List[RetrievalResult]:
+    def rerank(
+        self, query: str, results: List[RetrievalResult]
+    ) -> List[RetrievalResult]:
         return results
 
     def generate(self, query: str, context: List[RetrievalResult]) -> E2EAnswer:
         start = time.time()
         if not context:
-            return E2EAnswer(text="Không có thông tin", confidence=0.1, citations=[], latency_ms=0, grounded=False)
+            return E2EAnswer(
+                text="Không có thông tin",
+                confidence=0.1,
+                citations=[],
+                latency_ms=0,
+                grounded=False,
+            )
 
         top = context[0]
         answer_text = f"Dựa trên tài liệu: {top.content[:100]}"
@@ -58,8 +66,11 @@ class MockRAGPipeline:
         latency = (time.time() - start) * 1000
 
         return E2EAnswer(
-            text=answer_text, confidence=0.85, citations=citations,
-            latency_ms=latency, grounded=len(citations) > 0
+            text=answer_text,
+            confidence=0.85,
+            citations=citations,
+            latency_ms=latency,
+            grounded=len(citations) > 0,
         )
 
     def query(self, query: str, k: int = 3) -> E2EAnswer:
@@ -99,9 +110,19 @@ class MockAlertSystem:
     def check(self, metrics: Dict) -> List[Dict]:
         alerts = []
         if metrics.get("temperature", 0) > self.thresholds["temperature"]:
-            alerts.append({"type": "CRITICAL", "message": f"Temperature {metrics['temperature']}°C > {self.thresholds['temperature']}°C"})
+            alerts.append(
+                {
+                    "type": "CRITICAL",
+                    "message": f"Temperature {metrics['temperature']}°C > {self.thresholds['temperature']}°C",
+                }
+            )
         if metrics.get("downtime", 0) > self.thresholds["downtime"]:
-            alerts.append({"type": "WARNING", "message": f"Downtime {metrics['downtime']}min > {self.thresholds['downtime']}min"})
+            alerts.append(
+                {
+                    "type": "WARNING",
+                    "message": f"Downtime {metrics['downtime']}min > {self.thresholds['downtime']}min",
+                }
+            )
         self.alerts.extend(alerts)
         return alerts
 
@@ -112,11 +133,13 @@ class MockPDFExporter:
 
 
 class TestE2EIntegration:
-
     def test_e2e01_full_rag_pipeline(self):
         """TC-E2E-01: Full RAG Pipeline — query → embed → retrieve → rerank → generate → verify."""
         docs = [
-            {"id": "doc1", "content": "Chính sách đổi trả: khách hàng được đổi trả trong 30 ngày."},
+            {
+                "id": "doc1",
+                "content": "Chính sách đổi trả: khách hàng được đổi trả trong 30 ngày.",
+            },
             {"id": "doc2", "content": "Quy định an toàn: đội mũ bảo hộ khi vào xưởng."},
             {"id": "doc3", "content": "Lương thưởng dựa trên hiệu suất quý."},
         ]
@@ -129,7 +152,7 @@ class TestE2EIntegration:
         assert answer.text is not None
         assert answer.confidence > 0
         assert total_latency < 5000, f"Pipeline too slow: {total_latency}ms"
-        assert answer.grounded == True
+        assert answer.grounded
 
     def test_e2e02_multi_turn_conversation(self):
         """TC-E2E-02: Multi-Turn Conversation — context maintained across turns."""
@@ -148,7 +171,9 @@ class TestE2EIntegration:
         context_relevances = []
         for turn in turns:
             answer = pipeline.query(turn)
-            has_relevant = any(c in answer.text for c in ["30", "miễn phí", "vận chuyển"])
+            has_relevant = any(
+                c in answer.text for c in ["30", "miễn phí", "vận chuyển"]
+            )
             context_relevances.append(1.0 if has_relevant else 0.0)
 
         avg_relevance = sum(context_relevances) / len(context_relevances)
@@ -188,6 +213,8 @@ class TestE2EIntegration:
         answer = pipeline.query("Tạo báo cáo sản xuất")
         assert answer.confidence > 0
 
-        pdf_path = exporter.export({"answer": answer.text, "citations": answer.citations})
+        pdf_path = exporter.export(
+            {"answer": answer.text, "citations": answer.citations}
+        )
         assert pdf_path is not None
         assert ".pdf" in pdf_path

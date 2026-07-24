@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import ConceptMap from './ConceptMap';
-import { Document } from '../types';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import ConceptMap from "./ConceptMap";
+import { Document } from "../types";
+import { useAuth } from "../context/AuthContext";
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080/api';
+const API_BASE_URL =
+  (import.meta.env.VITE_API_URL as string) || "http://localhost:8080/api";
 
 export interface ChatMessage {
   id?: number;
@@ -20,7 +22,7 @@ interface ChatWindowProps {
   sessionId: string;
   documentId?: number | null;
   documentIds?: number[];
-  chatMode: 'single' | 'multi';
+  chatMode: "single" | "multi";
   document?: Document | null;
   documents?: Document[];
   onUpdateDocument?: (updatedDoc: Document) => void;
@@ -33,47 +35,48 @@ function ChatWindow({
   chatMode,
   document = null,
   documents = [],
-  onUpdateDocument = () => {}
+  onUpdateDocument = () => {},
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState<string>('');
+  const [input, setInput] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'chat' | 'mindmap'>('chat');
+  const [activeTab, setActiveTab] = useState<"chat" | "mindmap">("chat");
   const [isDeepThinking, setIsDeepThinking] = useState<boolean>(false);
   const [isWebSearch, setIsWebSearch] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const { token } = useAuth();
 
   // React Query for history management
-  const historyQueryKey = chatMode === 'single' && documentId
-    ? ['chatHistory', sessionId, documentId]
-    : ['chatHistory', sessionId];
+  const historyQueryKey =
+    chatMode === "single" && documentId
+      ? ["chatHistory", sessionId, documentId]
+      : ["chatHistory", sessionId];
 
   const fetchChatHistoryFn = useCallback(async () => {
     let url = `${API_BASE_URL}/chat/history/${sessionId}`;
-    if (chatMode === 'single' && documentId) {
+    if (chatMode === "single" && documentId) {
       url = `${API_BASE_URL}/chat/history/${sessionId}/${documentId}`;
     }
-    const token = localStorage.getItem('token');
     const response = await fetch(url, {
       headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      }
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
     if (!response.ok) {
-      throw new Error('Failed to fetch chat history');
+      throw new Error("Failed to fetch chat history");
     }
     const data: ChatMessage[] = await response.json();
-    
+
     // Filter logic for multi mode
-    if (chatMode === 'multi' && documentIds && documentIds.length > 0) {
-      return data.filter(msg => {
+    if (chatMode === "multi" && documentIds && documentIds.length > 0) {
+      return data.filter((msg) => {
         if (!msg.documentIds) return false;
-        return msg.documentIds.some(id => documentIds.includes(id));
+        return msg.documentIds.some((id) => documentIds.includes(id));
       });
     }
     return data;
-  }, [sessionId, documentId, documentIds, chatMode]);
+  }, [sessionId, documentId, documentIds, chatMode, token]);
 
   const { data: history = [] } = useQuery<ChatMessage[]>({
     queryKey: historyQueryKey,
@@ -95,41 +98,44 @@ function ChatWindow({
 
   // If the document is updated in the background (insights populated), poll or fetch again
   useEffect(() => {
-    if (chatMode === 'single' && document && (!document.summary || !document.suggestedQuestions)) {
+    if (
+      chatMode === "single" &&
+      document &&
+      (!document.summary || !document.suggestedQuestions)
+    ) {
       const interval = setInterval(async () => {
         try {
-          const token = localStorage.getItem('token');
           const res = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
             headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
           });
           if (res.ok) {
             const freshDoc = await res.json();
             if (freshDoc.summary && freshDoc.suggestedQuestions) {
               onUpdateDocument(freshDoc);
-              queryClient.invalidateQueries({ queryKey: ['documents'] });
+              queryClient.invalidateQueries({ queryKey: ["documents"] });
               clearInterval(interval);
             }
           }
         } catch (e) {
-          console.error('Error polling document updates:', e);
+          console.error("Error polling document updates:", e);
         }
       }, 3000);
       return () => clearInterval(interval);
     }
     return;
-  }, [document, chatMode, documentId, onUpdateDocument, queryClient]);
+  }, [document, chatMode, documentId, onUpdateDocument, queryClient, token]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const handleSendMessage = async (customMessage?: string) => {
     const textToSend = customMessage || input;
     if (!textToSend.trim()) return;
 
-    setInput('');
+    setInput("");
     setLoading(true);
 
     // 1. Prepare streaming payload
@@ -140,7 +146,7 @@ function ChatWindow({
       webSearch: isWebSearch,
     };
 
-    if (chatMode === 'multi') {
+    if (chatMode === "multi") {
       payload.documentIds = documentIds;
     } else {
       payload.documentId = documentId;
@@ -150,9 +156,9 @@ function ChatWindow({
     const userMsg: ChatMessage = {
       sessionId,
       userMessage: textToSend,
-      aiResponse: '',
-      documentId: chatMode === 'single' ? documentId : null,
-      documentIds: chatMode === 'multi' ? documentIds : null
+      aiResponse: "",
+      documentId: chatMode === "single" ? documentId : null,
+      documentIds: chatMode === "multi" ? documentIds : null,
     };
 
     const streamingPlaceholderId = Date.now();
@@ -160,115 +166,133 @@ function ChatWindow({
       id: streamingPlaceholderId,
       sessionId,
       userMessage: textToSend,
-      aiResponse: '',
+      aiResponse: "",
       sourceChunks: null,
-      documentId: chatMode === 'single' ? documentId : null,
-      documentIds: chatMode === 'multi' ? documentIds : null,
-      isStreaming: true
+      documentId: chatMode === "single" ? documentId : null,
+      documentIds: chatMode === "multi" ? documentIds : null,
+      isStreaming: true,
     };
 
-    setMessages(prev => [...prev, userMsg, streamingAiMsg]);
+    setMessages((prev) => [...prev, userMsg, streamingAiMsg]);
 
     try {
       // 3. Initiate SSE connection via POST
-      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/chat/ask-stream`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error('Streaming response failed');
+        throw new Error("Streaming response failed");
       }
 
       if (!response.body) {
-        throw new Error('ReadableStream not supported in this browser');
+        throw new Error("ReadableStream not supported in this browser");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\n\n');
-        
+        const events = buffer.split("\n\n");
+
         // Save the last block if it is incomplete
-        buffer = events.pop() || '';
+        buffer = events.pop() || "";
 
         for (const rawEvent of events) {
           if (!rawEvent.trim()) continue;
 
-          let eventType = '';
-          let dataStr = '';
+          let eventType = "";
+          let dataStr = "";
 
-          const lines = rawEvent.split('\n');
+          const lines = rawEvent.split("\n");
           for (const line of lines) {
-            if (line.startsWith('event:')) {
-              eventType = line.replace('event:', '').trim();
-            } else if (line.startsWith('data:')) {
-              dataStr = line.replace('data:', '').trim();
+            if (line.startsWith("event:")) {
+              eventType = line.replace("event:", "").trim();
+            } else if (line.startsWith("data:")) {
+              dataStr = line.replace("data:", "").trim();
             }
           }
 
-          if (eventType === 'metadata') {
+          if (eventType === "metadata") {
             const meta = JSON.parse(dataStr);
-            setMessages(prev => prev.map(msg => 
-              msg.id === streamingPlaceholderId 
-                ? { 
-                    ...msg, 
-                    sourceChunks: meta.sourceChunks, 
-                    aiResponse: meta.prefix || '' 
-                  }
-                : msg
-            ));
-          } else if (eventType === 'chunk') {
-            setMessages(prev => prev.map(msg => 
-              msg.id === streamingPlaceholderId 
-                ? { ...msg, aiResponse: msg.aiResponse + dataStr }
-                : msg
-            ));
-          } else if (eventType === 'complete') {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingPlaceholderId
+                  ? {
+                      ...msg,
+                      sourceChunks: meta.sourceChunks,
+                      aiResponse: meta.prefix || "",
+                    }
+                  : msg,
+              ),
+            );
+          } else if (eventType === "chunk") {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingPlaceholderId
+                  ? { ...msg, aiResponse: msg.aiResponse + dataStr }
+                  : msg,
+              ),
+            );
+          } else if (eventType === "complete") {
             const finalSavedMsg: ChatMessage = JSON.parse(dataStr);
-            setMessages(prev => prev.map(msg => 
-              msg.id === streamingPlaceholderId 
-                ? { ...finalSavedMsg, isStreaming: false }
-                : msg
-            ));
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingPlaceholderId
+                  ? { ...finalSavedMsg, isStreaming: false }
+                  : msg,
+              ),
+            );
             // Invalidate React Query chat cache so that background transitions are clean
             queryClient.invalidateQueries({ queryKey: historyQueryKey });
-          } else if (eventType === 'error') {
-            console.error('SSE backend streaming error:', dataStr);
-            setMessages(prev => prev.map(msg => 
-              msg.id === streamingPlaceholderId 
-                ? { ...msg, aiResponse: msg.aiResponse + `\n\n❌ [Error during generation: ${dataStr}]`, isStreaming: false }
-                : msg
-            ));
+          } else if (eventType === "error") {
+            console.error("SSE backend streaming error:", dataStr);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingPlaceholderId
+                  ? {
+                      ...msg,
+                      aiResponse:
+                        msg.aiResponse +
+                        `\n\n❌ [Error during generation: ${dataStr}]`,
+                      isStreaming: false,
+                    }
+                  : msg,
+              ),
+            );
           }
         }
       }
-
     } catch (error: any) {
-      console.error('Error sending message stream:', error);
-      setMessages(prev => prev.map(msg => 
-        msg.id === streamingPlaceholderId 
-          ? { ...msg, aiResponse: `❌ Error sending message. Please make sure the service is online. Details: ${error.message}`, isStreaming: false }
-          : msg
-      ));
+      console.error("Error sending message stream:", error);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === streamingPlaceholderId
+            ? {
+                ...msg,
+                aiResponse: `❌ Error sending message. Please make sure the service is online. Details: ${error.message}`,
+                isStreaming: false,
+              }
+            : msg,
+        ),
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -279,41 +303,59 @@ function ChatWindow({
     try {
       return JSON.parse(questionsStr) as string[];
     } catch (e) {
-      console.error('Error parsing suggested questions', e);
+      console.error("Error parsing suggested questions", e);
       return [];
     }
   };
 
-  const parsedQuestions = chatMode === 'single' && document ? parseSuggestedQuestions(document.suggestedQuestions) : [];
+  const parsedQuestions =
+    chatMode === "single" && document
+      ? parseSuggestedQuestions(document.suggestedQuestions)
+      : [];
 
-  if (chatMode === 'single' && document && document.status && document.status !== 'READY') {
-    if (document.status === 'PROCESSING') {
+  if (
+    chatMode === "single" &&
+    document &&
+    document.status &&
+    document.status !== "READY"
+  ) {
+    if (document.status === "PROCESSING") {
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50/50">
           <div className="relative w-20 h-20 mb-6">
             <div className="absolute inset-0 rounded-full border-4 border-dashed border-indigo-200 animate-spin duration-1000"></div>
             <div className="absolute inset-2 rounded-full border-4 border-indigo-500/20 animate-pulse"></div>
-            <span className="absolute inset-0 flex items-center justify-center text-3xl animate-bounce">⚙️</span>
+            <span className="absolute inset-0 flex items-center justify-center text-3xl animate-bounce">
+              ⚙️
+            </span>
           </div>
-          <h3 className="text-lg font-bold text-gray-800">Apache Airflow ETL in progress</h3>
+          <h3 className="text-lg font-bold text-gray-800">
+            Apache Airflow ETL in progress
+          </h3>
           <p className="text-xs text-gray-500 mt-1 max-w-sm text-center leading-relaxed font-semibold">
-            The data pipeline is actively parsing pages, generating semantic vector embeddings with local Ollama, and indexing metadata into Qdrant.
+            The data pipeline is actively parsing pages, generating semantic
+            vector embeddings with local Ollama, and indexing metadata into
+            Qdrant.
           </p>
           <div className="mt-6 flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-gray-150 shadow-sm text-xs font-bold text-gray-600">
             <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-ping"></span>
-            DAG Run: <span className="font-mono text-indigo-600">document_etl</span>
+            DAG Run:{" "}
+            <span className="font-mono text-indigo-600">document_etl</span>
           </div>
         </div>
       );
     }
 
-    if (document.status === 'FAILED') {
+    if (document.status === "FAILED") {
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50/50">
           <div className="text-5xl mb-4">❌</div>
-          <h3 className="text-lg font-bold text-gray-800">ETL Pipeline Failed</h3>
+          <h3 className="text-lg font-bold text-gray-800">
+            ETL Pipeline Failed
+          </h3>
           <p className="text-xs text-gray-500 mt-1 max-w-sm text-center leading-relaxed font-semibold">
-            The Airflow DAG failed during document ingestion. Please check the workflow status and logs in the Airflow dashboard.
+            The Airflow DAG failed during document ingestion. Please check the
+            workflow status and logs in the Airflow dashboard.
           </p>
           <div className="mt-6">
             <a
@@ -333,31 +375,31 @@ function ChatWindow({
   return (
     <div className="flex flex-col h-full bg-white relative">
       {/* Subheader / Tab Switcher (Only in single mode) */}
-      {chatMode === 'single' && document && (
+      {chatMode === "single" && document && (
         <div className="bg-gray-50 border-b border-gray-200 px-6 py-2.5 flex items-center justify-between">
           <div className="flex bg-gray-200/80 p-0.5 rounded-lg border border-gray-200/30">
             <button
-              onClick={() => setActiveTab('chat')}
+              onClick={() => setActiveTab("chat")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 ${
-                activeTab === 'chat'
-                  ? 'bg-white text-indigo-600 shadow-sm font-bold'
-                  : 'text-gray-500 hover:text-gray-800'
+                activeTab === "chat"
+                  ? "bg-white text-indigo-600 shadow-sm font-bold"
+                  : "text-gray-500 hover:text-gray-800"
               }`}
             >
               💬 AI Chat
             </button>
             <button
-              onClick={() => setActiveTab('mindmap')}
+              onClick={() => setActiveTab("mindmap")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 ${
-                activeTab === 'mindmap'
-                  ? 'bg-white text-indigo-600 shadow-sm font-bold'
-                  : 'text-gray-500 hover:text-gray-800'
+                activeTab === "mindmap"
+                  ? "bg-white text-indigo-600 shadow-sm font-bold"
+                  : "text-gray-500 hover:text-gray-800"
               }`}
             >
               🕸️ Concept Map
             </button>
           </div>
-          
+
           <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider bg-white px-2 py-1 rounded-md border border-gray-100">
             {document.fileType} File
           </div>
@@ -365,13 +407,15 @@ function ChatWindow({
       )}
 
       {/* Render Concept Map Visualizer */}
-      {chatMode === 'single' && activeTab === 'mindmap' ? (
+      {chatMode === "single" && activeTab === "mindmap" ? (
         <ConceptMap
           documentId={documentId!}
-          documentName={document?.fileName || 'Document'}
+          documentName={document?.fileName || "Document"}
           onAskAI={(concept) => {
-            setActiveTab('chat');
-            setInput(`Explain the core relevance of "${concept}" inside the context of this document.`);
+            setActiveTab("chat");
+            setInput(
+              `Explain the core relevance of "${concept}" inside the context of this document.`,
+            );
           }}
         />
       ) : (
@@ -379,13 +423,18 @@ function ChatWindow({
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50/20">
             {messages.length === 0 ? (
-              chatMode === 'single' && document ? (
+              chatMode === "single" && document ? (
                 /* Premium Dashboard Insights (Executive Summary & Suggested Questions) */
                 <div className="max-w-2xl mx-auto space-y-6 py-4 animate-fade-in">
                   <div className="text-center mb-6">
                     <span className="text-3xl">✨</span>
-                    <h3 className="text-lg font-bold text-gray-800 mt-2">Welcome to AI Document Insights</h3>
-                    <p className="text-xs text-gray-400 mt-1">Explore parsed summaries and custom concept questions generated for this file.</p>
+                    <h3 className="text-lg font-bold text-gray-800 mt-2">
+                      Welcome to AI Document Insights
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Explore parsed summaries and custom concept questions
+                      generated for this file.
+                    </p>
                   </div>
 
                   {/* Summary Card */}
@@ -403,7 +452,10 @@ function ChatWindow({
                         <div className="h-4 bg-gray-100 rounded-md w-3/4"></div>
                         <div className="h-4 bg-gray-100 rounded-md w-5/6"></div>
                         <div className="h-4 bg-gray-100 rounded-md w-2/3"></div>
-                        <div className="text-xs text-gray-400 italic mt-2">AI is reading and parsing this document for insights...</div>
+                        <div className="text-xs text-gray-400 italic mt-2">
+                          AI is reading and parsing this document for
+                          insights...
+                        </div>
                       </div>
                     )}
                   </div>
@@ -440,10 +492,17 @@ function ChatWindow({
                 <div className="flex items-center justify-center h-full text-gray-400 bg-gray-50/10">
                   <div className="text-center p-8 max-w-md">
                     <div className="text-5xl mb-4">🔮</div>
-                    <h3 className="text-base font-bold text-gray-800 mb-1">Multi-File Synthesized RAG Chat</h3>
+                    <h3 className="text-base font-bold text-gray-800 mb-1">
+                      Multi-File Synthesized RAG Chat
+                    </h3>
                     <p className="text-xs text-gray-500 leading-relaxed">
-                      You are chatting with <strong>{documents ? documents.length : 0} documents</strong> simultaneously.
-                      Your queries will perform parallel semantic searches across all collections. The AI will synthesize the context and tag sources automatically.
+                      You are chatting with{" "}
+                      <strong>
+                        {documents ? documents.length : 0} documents
+                      </strong>{" "}
+                      simultaneously. Your queries will perform parallel
+                      semantic searches across all collections. The AI will
+                      synthesize the context and tag sources automatically.
                     </p>
                   </div>
                 </div>
@@ -454,7 +513,9 @@ function ChatWindow({
                   {/* User Message */}
                   <div className="flex justify-end">
                     <div className="max-w-xs lg:max-w-md bg-gradient-to-tr from-indigo-600 to-indigo-700 text-white p-3.5 rounded-2xl rounded-br-none shadow-md shadow-indigo-100/55">
-                      <p className="text-sm font-medium leading-relaxed">{msg.userMessage}</p>
+                      <p className="text-sm font-medium leading-relaxed">
+                        {msg.userMessage}
+                      </p>
                     </div>
                   </div>
 
@@ -464,7 +525,7 @@ function ChatWindow({
                       <div className="text-sm leading-relaxed whitespace-pre-line font-medium text-gray-700">
                         {msg.aiResponse ? (
                           <>
-                            {msg.aiResponse.includes('<think>') ? (
+                            {msg.aiResponse.includes("<think>") ? (
                               <div className="space-y-3">
                                 <details className="mb-3 group bg-gray-50/80 border border-gray-200/50 rounded-xl overflow-hidden">
                                   <summary className="cursor-pointer px-4 py-2.5 text-[10px] font-bold text-indigo-500 hover:bg-indigo-50/50 transition flex items-center gap-2 select-none">
@@ -472,14 +533,19 @@ function ChatWindow({
                                     AI Thinking Process...
                                   </summary>
                                   <div className="px-4 pb-3 pt-1 text-[11px] text-gray-500 font-mono italic border-t border-gray-100/50 bg-white/40">
-                                    {msg.aiResponse.match(/<think>([\s\S]*?)<\/think>/)?.[1]?.trim() || 
-                                     msg.aiResponse.split('</think>')[0].replace('<think>', '').trim()}
+                                    {msg.aiResponse
+                                      .match(/<think>([\s\S]*?)<\/think>/)?.[1]
+                                      ?.trim() ||
+                                      msg.aiResponse
+                                        .split("</think>")[0]
+                                        .replace("<think>", "")
+                                        .trim()}
                                   </div>
                                 </details>
                                 <div className="leading-relaxed">
-                                  {msg.aiResponse.includes('</think>') 
-                                    ? msg.aiResponse.split('</think>')[1].trim() 
-                                    : 'Generating answer...'}
+                                  {msg.aiResponse.includes("</think>")
+                                    ? msg.aiResponse.split("</think>")[1].trim()
+                                    : "Generating answer..."}
                                 </div>
                               </div>
                             ) : (
@@ -494,7 +560,7 @@ function ChatWindow({
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Sources Drawer */}
                       {msg.sourceChunks && (
                         <details className="mt-3.5 border-t border-gray-100 pt-3 group">
@@ -502,13 +568,18 @@ function ChatWindow({
                             <span>📚</span> Context Sources
                           </summary>
                           <div className="mt-2.5 space-y-2.5 max-h-48 overflow-y-auto pr-1">
-                            {msg.sourceChunks.split('---').map((chunk, i) => {
-                              const match = chunk.trim().match(/^\[(.*?)\] (.*)$/s);
+                            {msg.sourceChunks.split("---").map((chunk, i) => {
+                              const match = chunk
+                                .trim()
+                                .match(/^\[(.*?)\] (.*)$/s);
                               const docName = match ? match[1] : null;
                               const textContent = match ? match[2] : chunk;
-                              
+
                               return (
-                                <div key={i} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-left">
+                                <div
+                                  key={i}
+                                  className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-left"
+                                >
                                   {docName && (
                                     <span className="text-[9px] font-bold bg-indigo-50 border border-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-md mb-1.5 inline-block">
                                       {docName}
@@ -540,24 +611,26 @@ function ChatWindow({
                 <button
                   onClick={() => setIsDeepThinking(!isDeepThinking)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all duration-200 border ${
-                    isDeepThinking 
-                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100' 
-                      : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600'
+                    isDeepThinking
+                      ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100"
+                      : "bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-600"
                   }`}
                 >
-                  <span className={isDeepThinking ? 'animate-pulse' : ''}>🧠</span>
-                  DeepThinking {isDeepThinking ? 'ON' : 'OFF'}
+                  <span className={isDeepThinking ? "animate-pulse" : ""}>
+                    🧠
+                  </span>
+                  DeepThinking {isDeepThinking ? "ON" : "OFF"}
                 </button>
                 <button
                   onClick={() => setIsWebSearch(!isWebSearch)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all duration-200 border ${
-                    isWebSearch 
-                      ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100' 
-                      : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600'
+                    isWebSearch
+                      ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100"
+                      : "bg-white border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600"
                   }`}
                 >
                   <span>🌐</span>
-                  Web Research {isWebSearch ? 'ON' : 'OFF'}
+                  Web Research {isWebSearch ? "ON" : "OFF"}
                 </button>
               </div>
 
@@ -567,7 +640,7 @@ function ChatWindow({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={
-                    chatMode === 'multi'
+                    chatMode === "multi"
                       ? "Ask a question synthesizing across selected documents..."
                       : "Ask a question about the document... (Shift+Enter for new line)"
                   }

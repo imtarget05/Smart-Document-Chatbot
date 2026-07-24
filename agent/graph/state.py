@@ -22,16 +22,28 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     long_term_history: List[Dict[str, Any]]
 
+    # ── Multi-lingual ─────────────────────────────────────────────────────
+    detected_language: str  # "vi" | "en" | "mixed"
+    language_instruction: str
+
     # ── Retrieval state (Phase 1 – enhanced RAG) ──────────────────────────
     retrieved_chunks: List[Dict[str, Any]]
     confidence_score: float
     hybrid_search_enabled: bool
 
     # ── Orchestration (Phase 2) ───────────────────────────────────────────
-    agent_plan: str          # natural-language plan from orchestrator
-    agent_type: str          # "rag" | "report" | "compare" | "research" | "action" | "engineering"
+    agent_plan: str  # natural-language plan from orchestrator
+    agent_type: (
+        str  # "rag" | "report" | "compare" | "research" | "action" | "engineering"
+    )
     intent_override: Optional[str]
     use_web_search: bool
+
+    # ── Context summary ──────────────────────────────────────────────────
+    context_summary: str  # compressed summary of old turns
+
+    # ── A/B testing (retrieval strategy variants, issue #70) ─────────────
+    ab_config: Dict[str, Any]
 
     # ── Outputs ───────────────────────────────────────────────────────────
     final_answer: str

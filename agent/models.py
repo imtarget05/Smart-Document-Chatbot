@@ -23,17 +23,19 @@ class ReportRequest(BaseModel):
     title: str
     content: str
     user_id: str
-    format: str = "pdf"   # "pdf" | "excel"
+    format: str = "pdf"  # "pdf" | "excel"
 
 
 class ActionRequest(BaseModel):
-    action_type: str      # "send_email" | "create_jira" | "create_notion" | "trigger_webhook"
+    action_type: (
+        str  # "send_email" | "create_jira" | "create_notion" | "trigger_webhook"
+    )
     user_id: str
     payload: Dict[str, Any]
 
 
 class ConnectorIngestRequest(BaseModel):
-    source: str           # "google_drive" | "gmail" | "slack" | "sharepoint"
+    source: str  # "google_drive" | "gmail" | "slack" | "sharepoint"
     user_id: str
     params: Dict[str, Any] = {}
 
@@ -45,17 +47,18 @@ class SourceCitation(BaseModel):
     document_name: str
     chunk_text: str
     score: float
-    source_type: str = "document"   # "document" | "web" | "connector"
+    source_type: str = "document"  # "document" | "web" | "connector"
 
 
 class AgentStreamEvent(BaseModel):
-    event: str      # "plan" | "token" | "source" | "error" | "complete"
+    event: str  # "plan" | "token" | "source" | "error" | "complete"
     data: Any
+
 
 class AgentResponse(BaseModel):
     session_id: str
     answer: str
-    agent_type: str                         # which sub-agent produced the answer
+    agent_type: str  # which sub-agent produced the answer
     sources: List[Dict[str, Any]] = []
     confidence_score: float = 0.0
     action_result: Optional[Dict[str, Any]] = None

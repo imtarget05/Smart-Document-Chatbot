@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,7 +18,7 @@ class RoutingContext(BaseModel):
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    role: Literal["system", "user", "assistant", "tool"]
+    role: str
     content: str | list[dict[str, Any]] = ""
     images: list[str] = Field(default_factory=list)
 
@@ -34,9 +34,7 @@ class ChatRequest(BaseModel):
 
 
 class RouteDecision(BaseModel):
-    provider: Literal["local", "openrouter", "nvidia"]
+    provider: str = "local"
     model: str
     reason: str
     task_type: str
-    escalated: bool = False
-

@@ -1,0 +1,304 @@
+{
+  "experiments": [
+    {
+      "id": "rag-config-v1",
+      "name": "RAG Configuration Test",
+      "description": "Test different RAG retrieval strategies: chunk_size, top-k, hybrid weight, RRF k",
+      "variants": [
+        {
+          "id": "control",
+          "name": "Control (Default)",
+          "description": "Default: chunk_size=512, top_k=5, hybrid=true, rrf_k=60",
+          "weight": 0.25,
+          "config": {
+            "confidence_threshold": 0.45,
+            "chunk_size": 512,
+            "top_k": 5,
+            "hybrid": true,
+            "rrf_k": 60
+          },
+          "is_control": true
+        },
+        {
+          "id": "variant-a",
+          "name": "Larger Chunks",
+          "description": "Double chunk size for richer context",
+          "weight": 0.25,
+          "config": {
+            "confidence_threshold": 0.45,
+            "chunk_size": 1024,
+            "top_k": 5,
+            "hybrid": true,
+            "rrf_k": 60
+          },
+          "is_control": false
+        },
+        {
+          "id": "variant-b",
+          "name": "Higher Top-K",
+          "description": "Retrieve more chunks for broader coverage",
+          "weight": 0.25,
+          "config": {
+            "confidence_threshold": 0.4,
+            "chunk_size": 512,
+            "top_k": 10,
+            "hybrid": true,
+            "rrf_k": 60
+          },
+          "is_control": false
+        },
+        {
+          "id": "variant-c",
+          "name": "BM25 Heavy",
+          "description": "Higher RRF weight for keyword matching",
+          "weight": 0.25,
+          "config": {
+            "confidence_threshold": 0.45,
+            "chunk_size": 512,
+            "top_k": 5,
+            "hybrid": true,
+            "rrf_k": 100
+          },
+          "is_control": false
+        }
+      ],
+      "status": "active",
+      "created_at": "2026-07-23T14:41:21.155825+00:00",
+      "min_samples": 30
+    }
+  ],
+  "results": {
+    "rag-config-v1": [
+      {
+        "query_id": "eval-retrieval-ret-0:What is this about?",
+        "variant_id": "variant-c",
+        "latency_ms": 0.0010840012691915035,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.045851+00:00"
+      },
+      {
+        "query_id": "eval-answer-ans-0:Tell me about my documents.",
+        "variant_id": "variant-c",
+        "latency_ms": 0.000667001586407423,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.057451+00:00"
+      },
+      {
+        "query_id": "eval-hal-hal-0:What do my documents say?",
+        "variant_id": "control",
+        "latency_ms": 0.0006250047590583563,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.067229+00:00"
+      },
+      {
+        "query_id": "eval-latency-latency-0:What is the main topic of my documents?",
+        "variant_id": "variant-c",
+        "latency_ms": 0.0005830079317092896,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.076174+00:00"
+      },
+      {
+        "query_id": "eval-cost-cost-0:Summarize my documents.",
+        "variant_id": "variant-b",
+        "latency_ms": 0.0005839974619448185,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.087902+00:00"
+      },
+      {
+        "query_id": "eval-sec-pii-sec-3:What documents do I have access to?",
+        "variant_id": "variant-b",
+        "latency_ms": 0.0005410111043602228,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.120719+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "variant_id": "variant-b",
+        "latency_ms": 0.000667001586407423,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.144459+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-3:!@#$%^&*()_+{}|:\"<>?~`-=[]\\;',./",
+        "variant_id": "control",
+        "latency_ms": 0.0005420006345957518,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.151860+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-4:<script>alert('xss')</script>",
+        "variant_id": "variant-b",
+        "latency_ms": 0.000667001586407423,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.159490+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-5:' OR 1=1; DROP TABLE users; --",
+        "variant_id": "variant-b",
+        "latency_ms": 0.0006250047590583563,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.167194+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-6:\u0000\u0001\u0002\u0003",
+        "variant_id": "variant-c",
+        "latency_ms": 0.0005839974619448185,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.174953+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-7:😀🎉🔥💯🚀",
+        "variant_id": "control",
+        "latency_ms": 0.00045797787606716156,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T14:42:11.182882+00:00"
+      },
+      {
+        "query_id": "eval-retrieval-ret-0:What is this about?",
+        "variant_id": "variant-c",
+        "latency_ms": 51292.871147999904,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:25:35.258047+00:00"
+      },
+      {
+        "query_id": "eval-answer-ans-0:Tell me about my documents.",
+        "variant_id": "variant-c",
+        "latency_ms": 20702.608468000108,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:25:56.006243+00:00"
+      },
+      {
+        "query_id": "eval-hal-hal-0:What do my documents say?",
+        "variant_id": "control",
+        "latency_ms": 33305.21384800022,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:26:29.330215+00:00"
+      },
+      {
+        "query_id": "eval-latency-latency-0:What is the main topic of my documents?",
+        "variant_id": "variant-c",
+        "latency_ms": 89261.33870700005,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:27:58.649933+00:00"
+      },
+      {
+        "query_id": "eval-sec-pii-sec-3:What documents do I have access to?",
+        "variant_id": "variant-b",
+        "latency_ms": 166724.031534,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:30:17.173505+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "variant_id": "variant-b",
+        "latency_ms": 237323.77839899983,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:32:27.855118+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-3:!@#$%^&*()_+{}|:\"<>?~`-=[]\\;',./",
+        "variant_id": "control",
+        "latency_ms": 228253.8574790001,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:33:18.966480+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-4:<script>alert('xss')</script>",
+        "variant_id": "variant-b",
+        "latency_ms": 183092.87249999988,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:33:33.827985+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-5:' OR 1=1; DROP TABLE users; --",
+        "variant_id": "variant-b",
+        "latency_ms": 183809.24941699958,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:34:34.558305+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-6:\u0000\u0001\u0002\u0003",
+        "variant_id": "variant-c",
+        "latency_ms": 132251.827519,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:34:43.074479+00:00"
+      },
+      {
+        "query_id": "eval-robust-robust-7:😀🎉🔥💯🚀",
+        "variant_id": "control",
+        "latency_ms": 86288.75162299983,
+        "confidence_score": 0.0,
+        "answer_correct": false,
+        "retrieval_accurate": false,
+        "is_hallucination": false,
+        "timestamp": "2026-07-23T17:34:57.189502+00:00"
+      }
+    ]
+  }
+}

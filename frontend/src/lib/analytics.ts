@@ -1,22 +1,35 @@
 /**
- * GA4 & GTM Analytics Integration
- * 
- * Cho JD1: Thực Tập Sinh IT Biết Dùng AI
+ * GA4 & GTM Analytics Integration (issue #39)
+ *
  * - Google Analytics 4 event tracking
  * - Google Tag Manager dataLayer integration
  * - Omnichannel tracking (Facebook, TikTok, LinkedIn)
  * - PageSpeed monitoring
  * - User interaction tracking
+ *
+ * NOTE: The placeholder IDs 'G-XXXXXXXXXX' / 'GTM-XXXXXXX' have been removed.
+ * Analytics is only initialized when real IDs are provided via env vars.
  */
 
-import { trackEvent as posthogTrack } from './posthog';
+import { trackEvent as posthogTrack } from "./posthog";
 
 // ============================================================================
 // Environment
 // ============================================================================
 
-const GA_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID || 'G-XXXXXXXXXX';
-const GTM_CONTAINER_ID = import.meta.env.VITE_GTM_CONTAINER_ID || 'GTM-XXXXXXX';
+// No placeholder IDs. Analytics is disabled unless real IDs are provided.
+const GA_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID as
+  string | undefined;
+const GTM_CONTAINER_ID = import.meta.env.VITE_GTM_CONTAINER_ID as
+  string | undefined;
+
+const _isPlaceholder = (id?: string): boolean => {
+  if (!id) return true;
+  return id.includes("XXXX") || id.includes("XXXXXXXX");
+};
+
+const GA_ENABLED = !!GA_MEASUREMENT_ID && !_isPlaceholder(GA_MEASUREMENT_ID);
+const GTM_ENABLED = !!GTM_CONTAINER_ID && !_isPlaceholder(GTM_CONTAINER_ID);
 
 // ============================================================================
 // Type Declarations for Global Objects
@@ -36,12 +49,20 @@ declare global {
 // ============================================================================
 
 export function initGTM() {
-  if (typeof window === 'undefined' || import.meta.env.DEV) return;
+  if (typeof window === "undefined" || import.meta.env.DEV) return;
+  if (!GTM_ENABLED) {
+    if (import.meta.env.DEV) {
+      console.info(
+        "[Analytics] GTM not initialized - VITE_GTM_CONTAINER_ID not set or is placeholder.",
+      );
+    }
+    return;
+  }
 
   window.dataLayer = window.dataLayer || [];
 
   // GTM Script
-  const script = document.createElement('script');
+  const script = document.createElement("script");
   script.innerHTML = `
     (function(w,d,s,l,i){
       w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});
@@ -54,17 +75,17 @@ export function initGTM() {
   document.head.appendChild(script);
 
   // GTM noscript iframe
-  const noscript = document.createElement('noscript');
-  const iframe = document.createElement('iframe');
+  const noscript = document.createElement("noscript");
+  const iframe = document.createElement("iframe");
   iframe.src = `https://www.googletagmanager.com/ns.html?id=${GTM_CONTAINER_ID}`;
-  iframe.height = '0';
-  iframe.width = '0';
-  iframe.style.display = 'none';
-  iframe.style.visibility = 'hidden';
+  iframe.height = "0";
+  iframe.width = "0";
+  iframe.style.display = "none";
+  iframe.style.visibility = "hidden";
   noscript.appendChild(iframe);
   document.body.appendChild(noscript);
 
-  console.log('[Analytics] GTM initialized:', GTM_CONTAINER_ID);
+  console.info("[Analytics] GTM initialized:", GTM_CONTAINER_ID);
 }
 
 // ============================================================================
@@ -72,15 +93,19 @@ export function initGTM() {
 // ============================================================================
 
 export function trackPageView(pageTitle: string, pagePath: string) {
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('config', GA_MEASUREMENT_ID, {
+  if (
+    GA_ENABLED &&
+    typeof window !== "undefined" &&
+    typeof window.gtag === "function"
+  ) {
+    window.gtag("config", GA_MEASUREMENT_ID, {
       page_title: pageTitle,
       page_path: pagePath,
     });
   }
 
   // Also push to PostHog for redundancy
-  posthogTrack('page_view', { page_title: pageTitle, page_path: pagePath });
+  posthogTrack("page_view", { page_title: pageTitle, page_path: pagePath });
 }
 
 // ============================================================================
@@ -89,18 +114,24 @@ export function trackPageView(pageTitle: string, pagePath: string) {
 
 export function trackEvent(
   eventName: string,
-  eventParams?: Record<string, any>
+  eventParams?: Record<string, any>,
 ) {
   // Push to GA4
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', eventName, eventParams);
+  if (
+    GA_ENABLED &&
+    typeof window !== "undefined" &&
+    typeof window.gtag === "function"
+  ) {
+    window.gtag("event", eventName, eventParams);
   }
 
   // Push to dataLayer for GTM
-  pushToDataLayer({
-    event: eventName,
-    ...eventParams,
-  });
+  if (GTM_ENABLED) {
+    pushToDataLayer({
+      event: eventName,
+      ...eventParams,
+    });
+  }
 
   // Push to PostHog for internal analytics
   posthogTrack(eventName, eventParams);
@@ -111,21 +142,21 @@ export function trackEvent(
 // ============================================================================
 
 export function pushToDataLayer(data: Record<string, any>) {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push(data);
   }
 }
 
 // ============================================================================
-// Chat-Specific Events (Quan trọng nhất cho AI Chatbot)
+// Chat-Specific Events (Quan trong nhat cho AI Chatbot)
 // ============================================================================
 
 export function trackChatQuery(query: string, documentCount: number) {
-  trackEvent('chat_query', {
+  trackEvent("chat_query", {
     query_length: query.length,
     document_count: documentCount,
-    search_type: 'rag',
+    search_type: "rag",
   });
 }
 
@@ -135,7 +166,7 @@ export function trackAIResponse(
   strategyUsed: string,
   tokenCount?: number,
 ) {
-  trackEvent('ai_response', {
+  trackEvent("ai_response", {
     response_time_ms: responseTimeMs,
     confidence_score: confidenceScore,
     rag_strategy: strategyUsed,
@@ -143,8 +174,12 @@ export function trackAIResponse(
   });
 }
 
-export function trackDocumentUpload(fileType: string, fileSize: number, status: 'success' | 'failed' = 'success') {
-  trackEvent('document_upload', {
+export function trackDocumentUpload(
+  fileType: string,
+  fileSize: number,
+  status: "success" | "failed" = "success",
+) {
+  trackEvent("document_upload", {
     file_type: fileType,
     file_size_bytes: fileSize,
     upload_status: status,
@@ -152,7 +187,7 @@ export function trackDocumentUpload(fileType: string, fileSize: number, status: 
 }
 
 export function trackDocumentDelete(documentId: number) {
-  trackEvent('document_delete', {
+  trackEvent("document_delete", {
     document_id: documentId,
   });
 }
@@ -161,24 +196,28 @@ export function trackDocumentDelete(documentId: number) {
 // User Interaction Events
 // ============================================================================
 
-export function trackLogin(method: string = 'email') {
-  trackEvent('login', { method });
+export function trackLogin(method: string = "email") {
+  trackEvent("login", { method });
 }
 
 export function trackLogout() {
-  trackEvent('logout');
+  trackEvent("logout");
 }
 
-export function trackError(errorType: string, errorMessage: string, componentName?: string) {
-  trackEvent('app_error', {
+export function trackError(
+  errorType: string,
+  errorMessage: string,
+  componentName?: string,
+) {
+  trackEvent("app_error", {
     error_type: errorType,
     error_message: errorMessage.substring(0, 200),
-    component: componentName || 'unknown',
+    component: componentName || "unknown",
   });
 }
 
 export function trackFeatureUsed(featureName: string, action: string) {
-  trackEvent('feature_used', {
+  trackEvent("feature_used", {
     feature: featureName,
     action,
   });
@@ -188,8 +227,12 @@ export function trackFeatureUsed(featureName: string, action: string) {
 // Performance Monitoring
 // ============================================================================
 
-export function trackPerformance(metricName: string, value: number, unit: string = 'ms') {
-  trackEvent('performance_metric', {
+export function trackPerformance(
+  metricName: string,
+  value: number,
+  unit: string = "ms",
+) {
+  trackEvent("performance_metric", {
     metric_name: metricName,
     metric_value: value,
     metric_unit: unit,
@@ -197,8 +240,12 @@ export function trackPerformance(metricName: string, value: number, unit: string
 }
 
 // Web Vitals tracking
-export function trackWebVital(name: string, value: number, rating: 'good' | 'needs-improvement' | 'poor') {
-  trackEvent('web_vital', {
+export function trackWebVital(
+  name: string,
+  value: number,
+  rating: "good" | "needs-improvement" | "poor",
+) {
+  trackEvent("web_vital", {
     vital_name: name,
     vital_value: value,
     vital_rating: rating,
@@ -209,14 +256,24 @@ export function trackWebVital(name: string, value: number, rating: 'good' | 'nee
 // Omnichannel Tracking
 // ============================================================================
 
-export function trackFacebookPixelEvent(eventName: string, params?: Record<string, any>) {
-  if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
-    window.fbq('track', eventName, params);
+export function trackFacebookPixelEvent(
+  eventName: string,
+  params?: Record<string, any>,
+) {
+  if (typeof window !== "undefined" && typeof window.fbq === "function") {
+    window.fbq("track", eventName, params);
   }
 }
 
-export function trackTikTokEvent(eventName: string, params?: Record<string, any>) {
-  if (typeof window !== 'undefined' && window.ttq && typeof window.ttq.track === 'function') {
+export function trackTikTokEvent(
+  eventName: string,
+  params?: Record<string, any>,
+) {
+  if (
+    typeof window !== "undefined" &&
+    window.ttq &&
+    typeof window.ttq.track === "function"
+  ) {
     window.ttq.track(eventName, params);
   }
 }
@@ -226,7 +283,7 @@ export function trackTikTokEvent(eventName: string, params?: Record<string, any>
 // ============================================================================
 
 export function trackUserSession(sessionId: string, durationSec: number) {
-  trackEvent('session_ended', {
+  trackEvent("session_ended", {
     session_id: sessionId,
     duration_seconds: durationSec,
   });
@@ -239,7 +296,15 @@ export default {
   trackChatQuery,
   trackAIResponse,
   trackDocumentUpload,
+  trackDocumentDelete,
   trackLogin,
+  trackLogout,
   trackError,
+  trackFeatureUsed,
+  trackPerformance,
+  trackWebVital,
+  trackFacebookPixelEvent,
+  trackTikTokEvent,
+  trackUserSession,
   pushToDataLayer,
 };

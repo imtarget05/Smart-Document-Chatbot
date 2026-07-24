@@ -1,113 +1,135 @@
+"""
+Context summarizer — compresses long conversation history to stay within token limits.
+When history exceeds threshold, summarizes older turns while keeping recent ones intact.
+"""
+
 import logging
-from typing import Any, Dict, List, Optional
-
-from langchain_core.messages import HumanMessage
-
-from llm_factory import LLMFactory
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
-SUMMARIZE_TURNS_THRESHOLD = 16
+SUMMARIZE_PROMPT = """You are a conversation summarizer. Condense the following conversation history into a concise summary (max 3 sentences) that preserves ALL important information needed for future responses.
+
+Rules:
+- Keep user preferences, facts, goals, project details, technical decisions.
+- Remove greetings, pleasantries, repeated information.
+- Be specific — include names, numbers, dates if mentioned.
+- Output ONLY the summary, no preamble.
+
+Conversation to summarize:
+{conversation_text}
+"""
 
 
 class ContextSummarizer:
     """
-    LLM-based context summarization for long-running conversations.
+    Compresses conversation history when token count exceeds threshold.
 
-    When a session exceeds SUMMARIZE_TURNS_THRESHOLD, older turns are
-    condensed into a short summary so the active context window stays
-    within token limits while preserving essential information.
+    Strategy:
+    - Keep last K turns intact (recent = important)
+    - Summarize everything before that into a single short paragraph
+    - Store the summary per session in memory
     """
 
-    def __init__(self, llm_factory=LLMFactory):
-        self._llm = llm_factory.get_reasoning_model(temperature=0.3)
+    def __init__(
+        self, llm_router=None, max_turns_before_summary: int = 8, max_tokens: int = 2000
+    ):
+        self._llm = llm_router
+        self.max_turns_before_summary = max_turns_before_summary
+        self.max_tokens = max_tokens
+        # Per-session cached summaries: {session_id: "summary text"}
+        self._summaries: Dict[str, str] = {}
 
-    async def summarize(
-        self,
-        turns: List[Dict[str, Any]],
-        existing_summary: Optional[str] = None,
-    ) -> str:
-        """
-        Generate a concise summary of conversation turns.
+    def estimate_tokens(self, history: List[Dict[str, str]]) -> int:
+        """Rough token estimate: ~4 chars per token."""
+        total_chars = sum(len(m.get("content", "")) + 50 for m in history)
+        return total_chars // 4
 
-        Parameters
-        ----------
-        turns : list of {"role": str, "content": str, ...}
-            Conversation turns to summarize.
-        existing_summary : str, optional
-            A previous summary to incorporate (incremental update).
-
-        Returns
-        -------
-        str
-            Markdown summary (3-5 sentences).
-        """
-        if not turns:
-            return existing_summary or ""
-
-        text = self._format_turns(turns[:SUMMARIZE_TURNS_THRESHOLD])
-        prompt = self._build_summary_prompt(text, existing_summary)
-        try:
-            response = await self._llm.ainvoke([HumanMessage(content=prompt)])
-            return response.content.strip()
-        except Exception as exc:
-            logger.warning("Context summarization failed: %s", exc)
-            return existing_summary or text[:500]
-
-    async def summarize_session(
-        self,
-        turns: List[Dict[str, Any]],
-        existing_summary: Optional[str] = None,
-    ) -> str:
-        """
-        Full-session summarization with explicit user goals and key decisions.
-        """
-        if not turns:
-            return existing_summary or ""
-
-        text = self._format_turns(turns[-SUMMARIZE_TURNS_THRESHOLD:])
-        instruction = (
-            "Summarize the conversation above. Include:\n"
-            "1. The user's main goal / topic\n"
-            "2. Key questions and answers\n"
-            "3. Important decisions or conclusions\n"
-            "4. Any unresolved follow-ups\n\n"
-            "Keep it concise (3-6 sentences)."
-        )
-        if existing_summary:
-            instruction = (
-                f"Existing summary:\n{existing_summary}\n\n"
-                f"Continue with new turns and update the summary:\n{instruction}"
-            )
-        prompt = f"{instruction}\n\nConversation:\n{text}\n\nSummary:"
-        try:
-            response = await self._llm.ainvoke([HumanMessage(content=prompt)])
-            return response.content.strip()
-        except Exception as exc:
-            logger.warning("Session summarization failed: %s", exc)
-            return existing_summary or text[:500]
-
-    @staticmethod
-    def _format_turns(turns: List[Dict[str, Any]]) -> str:
-        lines = []
-        for t in turns:
-            role = t.get("role", "unknown")
-            content = t.get("content", "")
-            lines.append(f"{role.capitalize()}: {content}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def _build_summary_prompt(
-        text: str, existing_summary: Optional[str] = None
-    ) -> str:
-        if existing_summary:
-            return (
-                f"Previous summary:\n{existing_summary}\n\n"
-                f"New conversation turns:\n{text}\n\n"
-                f"Update the summary to include the new turns. Keep it to 3-5 sentences.\n\nUpdated summary:"
-            )
+    def needs_summary(self, history: List[Dict[str, str]]) -> bool:
+        """Check if history exceeds token threshold."""
         return (
-            f"Summarize the following conversation in 3-5 sentences. "
-            f"Capture the user's goal, key questions, and answers.\n\n"
-            f"Conversation:\n{text}\n\nSummary:"
+            self.estimate_tokens(history) > self.max_tokens
+            or len(history) > self.max_turns_before_summary * 2
         )
+
+    def get_summary(self, session_id: str) -> str:
+        """Get cached summary for a session."""
+        return self._summaries.get(session_id, "")
+
+    async def compress(
+        self, session_id: str, history: List[Dict[str, str]]
+    ) -> List[Dict[str, str]]:
+        """
+        Compress conversation history:
+        - Keep last max_turns_before_summary turns intact
+        - Summarize everything before that
+        - Return compressed history with summary prepended
+
+        Returns:
+            List of messages: [{"role": "system", "content": "summary..."}, ...recent turns]
+        """
+        if not self.needs_summary(history):
+            return history
+
+        n = self.max_turns_before_summary
+        old_turns = history[:-n] if len(history) > n else []
+        recent_turns = history[-n:] if len(history) > n else history
+
+        if not old_turns:
+            return history
+
+        # Build conversation text for summarization
+        lines = []
+        for m in old_turns:
+            role = m.get("role", "user").capitalize()
+            content = m.get("content", "")
+            lines.append(f"{role}: {content[:500]}")
+        conversation_text = "\n".join(lines)
+
+        # Generate summary
+        summary = await self._generate_summary(conversation_text)
+
+        # Cache summary
+        if summary:
+            self._summaries[session_id] = summary
+
+        # Build compressed history
+        compressed = [
+            {"role": "system", "content": f"[Conversation Summary] {summary}"}
+        ]
+        compressed.extend(recent_turns)
+
+        logger.info(
+            "ContextSummarizer: compressed %d turns → summary + %d turns (saved ~%d tokens)",
+            len(old_turns),
+            len(recent_turns),
+            len(conversation_text) // 4 - len(summary) // 4,
+        )
+
+        return compressed
+
+    async def _generate_summary(self, conversation_text: str) -> str:
+        """Call LLM to generate summary."""
+        # First check if we already have a summary for this content
+        if len(conversation_text) < 100:
+            return conversation_text[:200]
+
+        if not self._llm:
+            # Simple truncation fallback
+            return f"Previous conversation: {conversation_text[:200]}..."
+
+        prompt = SUMMARIZE_PROMPT.format(conversation_text=conversation_text[:4000])
+        try:
+            from langchain_core.messages import HumanMessage
+
+            response = await self._llm.ainvoke([HumanMessage(content=prompt)])
+            summary = response.content.strip()
+            return summary[:500]
+        except Exception as exc:
+            logger.warning(
+                "ContextSummarizer: LLM call failed (%s), using truncation", exc
+            )
+            return f"Previous conversation: {conversation_text[:200]}..."
+
+    def clear_session(self, session_id: str):
+        self._summaries.pop(session_id, None)

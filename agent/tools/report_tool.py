@@ -20,10 +20,13 @@ class PdfReportBuilder:
             from reportlab.lib.units import cm
             from reportlab.lib import colors
             from reportlab.platypus import (
-                SimpleDocTemplate, Paragraph, Spacer, HRFlowable,
+                SimpleDocTemplate,
+                Paragraph,
+                Spacer,
+                HRFlowable,
             )
 
-            doc    = SimpleDocTemplate(
+            doc = SimpleDocTemplate(
                 output_path,
                 pagesize=A4,
                 topMargin=2 * cm,
@@ -43,12 +46,19 @@ class PdfReportBuilder:
                 textColor=colors.HexColor("#1a1a2e"),
             )
             story.append(Paragraph(title, title_style))
-            story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#4a90d9")))
+            story.append(
+                HRFlowable(width="100%", thickness=1, color=colors.HexColor("#4a90d9"))
+            )
             story.append(Spacer(1, 0.4 * cm))
 
             # Parse content lines
-            h2_style = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=13, spaceAfter=6, spaceBefore=12)
-            h3_style = ParagraphStyle("H3", parent=styles["Heading3"], fontSize=11, spaceAfter=4, spaceBefore=8)
+            h2_style = ParagraphStyle(
+                "H2",
+                parent=styles["Heading2"],
+                fontSize=13,
+                spaceAfter=6,
+                spaceBefore=12,
+            )
             body_style = styles["BodyText"]
             body_style.leading = 16
 
@@ -75,5 +85,5 @@ class PdfReportBuilder:
             # Fallback: plain text file if ReportLab not available
             txt_path = output_path.replace(".pdf", ".txt")
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(f"{title}\n{'='*len(title)}\n\n{content}")
+                f.write(f"{title}\n{'=' * len(title)}\n\n{content}")
             logger.warning("ReportLab not available – wrote plain text to %s", txt_path)

@@ -1,43 +1,46 @@
-import { useState } from 'react';
-import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import { useState } from "react";
+import { useAuth, API_BASE_URL } from "../context/AuthContext";
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authUsername, setAuthUsername] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authError, setAuthError] = useState('');
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authUsername.trim() || !authPassword.trim()) {
-      setAuthError('Please fill in all fields');
+      setAuthError("Please fill in all fields");
       return;
     }
-    setAuthError('');
+    setAuthError("");
     setAuthLoading(true);
 
     try {
-      const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: authUsername, password: authPassword }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: authUsername,
+          password: authPassword,
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || 'Authentication failed');
+        throw new Error(errorText || "Authentication failed");
       }
 
       const data = await response.json();
       login(data.token, data.username, data.role);
 
-      setAuthUsername('');
-      setAuthPassword('');
+      setAuthUsername("");
+      setAuthPassword("");
     } catch (err: any) {
-      setAuthError(err.message || 'Something went wrong');
+      setAuthError(err.message || "Something went wrong");
     } finally {
       setAuthLoading(false);
     }
@@ -48,27 +51,37 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl text-white">
         <div className="text-center mb-8">
           <span className="text-4xl">🔮</span>
-          <h2 className="text-2xl font-bold mt-3 bg-gradient-to-r from-indigo-200 to-white bg-clip-text text-transparent">Smart Doc Chatbot</h2>
-          <p className="text-xs text-indigo-200/60 mt-1.5 font-semibold">Enterprise Agentic CRAG Platform</p>
+          <h2 className="text-2xl font-bold mt-3 bg-gradient-to-r from-indigo-200 to-white bg-clip-text text-transparent">
+            Smart Doc Chatbot
+          </h2>
+          <p className="text-xs text-indigo-200/60 mt-1.5 font-semibold">
+            Enterprise Agentic CRAG Platform
+          </p>
         </div>
 
         <div className="flex bg-white/5 p-1 rounded-2xl mb-6 border border-white/5">
           <button
-            onClick={() => { setAuthMode('login'); setAuthError(''); }}
+            onClick={() => {
+              setAuthMode("login");
+              setAuthError("");
+            }}
             className={`flex-1 text-center py-2.5 text-xs font-bold rounded-xl transition-all duration-300 ${
-              authMode === 'login'
-                ? 'bg-white text-indigo-950 shadow-md'
-                : 'text-white/60 hover:text-white'
+              authMode === "login"
+                ? "bg-white text-indigo-950 shadow-md"
+                : "text-white/60 hover:text-white"
             }`}
           >
             Sign In
           </button>
           <button
-            onClick={() => { setAuthMode('register'); setAuthError(''); }}
+            onClick={() => {
+              setAuthMode("register");
+              setAuthError("");
+            }}
             className={`flex-1 text-center py-2.5 text-xs font-bold rounded-xl transition-all duration-300 ${
-              authMode === 'register'
-                ? 'bg-white text-indigo-950 shadow-md'
-                : 'text-white/60 hover:text-white'
+              authMode === "register"
+                ? "bg-white text-indigo-950 shadow-md"
+                : "text-white/60 hover:text-white"
             }`}
           >
             Create Account
@@ -77,7 +90,9 @@ export default function LoginPage() {
 
         <form onSubmit={handleAuthSubmit} className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 mb-1.5">Username</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 mb-1.5">
+              Username
+            </label>
             <input
               type="text"
               value={authUsername}
@@ -89,7 +104,9 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 mb-1.5">Password</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 mb-1.5">
+              Password
+            </label>
             <input
               type="password"
               value={authPassword}
@@ -113,7 +130,11 @@ export default function LoginPage() {
           >
             {authLoading ? (
               <span className="w-4 h-4 border-2 border-indigo-950 border-t-transparent rounded-full animate-spin"></span>
-            ) : authMode === 'login' ? 'Sign In' : 'Create Account'}
+            ) : authMode === "login" ? (
+              "Sign In"
+            ) : (
+              "Create Account"
+            )}
           </button>
         </form>
       </div>

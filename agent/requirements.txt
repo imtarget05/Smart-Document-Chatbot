@@ -46,6 +46,9 @@ psycopg2-binary==2.9.9
 # Redis (rate limiting + short-term memory persistence)
 redis==5.0.8
 
+# Prometheus metrics
+prometheus-client==0.20.0
+
 # HTTP client
 httpx==0.27.0
 

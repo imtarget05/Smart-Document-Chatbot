@@ -18,7 +18,6 @@ Usage:
 import argparse
 import json
 import os
-import sys
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -31,9 +30,14 @@ def load_questions(path: str) -> List[Dict[str, Any]]:
         return json.load(f)
 
 
-def ask_question_with_model(base_url: str, token: str, session_id: str,
-                            document_id: int, question: str,
-                            model_override: str = None) -> Dict[str, Any]:
+def ask_question_with_model(
+    base_url: str,
+    token: str,
+    session_id: str,
+    document_id: int,
+    question: str,
+    model_override: str = None,
+) -> Dict[str, Any]:
     """Send a chat request, optionally overriding the model."""
     headers = {
         "Content-Type": "application/json",
@@ -49,8 +53,9 @@ def ask_question_with_model(base_url: str, token: str, session_id: str,
 
     start = time.time()
     try:
-        resp = requests.post(f"{base_url}/chat/ask", json=payload,
-                             headers=headers, timeout=120)
+        resp = requests.post(
+            f"{base_url}/chat/ask", json=payload, headers=headers, timeout=120
+        )
         latency_ms = round((time.time() - start) * 1000)
 
         if resp.status_code != 200:
@@ -100,9 +105,12 @@ def evaluate_answer(result: Dict, question: Dict) -> Dict[str, Any]:
     source_hits = [k for k in source_keywords if k in sources]
     retrieval_accurate = len(source_hits) > 0 if sources else False
 
-    is_hallucination = (not retrieval_accurate and answer_correct
-                        and "không tìm thấy" not in answer
-                        and result.get("confidence") != "low")
+    is_hallucination = (
+        not retrieval_accurate
+        and answer_correct
+        and "không tìm thấy" not in answer
+        and result.get("confidence") != "low"
+    )
 
     return {
         "question_id": question["id"],
@@ -123,8 +131,12 @@ def run_comparison_for_model(args, questions, model_name, model_override=None):
 
     for q in questions:
         result = ask_question_with_model(
-            args.base_url, args.token, session_id,
-            args.document_id, q["question"], model_override
+            args.base_url,
+            args.token,
+            session_id,
+            args.document_id,
+            q["question"],
+            model_override,
         )
         evaluation = evaluate_answer(result, q)
         details.append(evaluation)
@@ -142,7 +154,9 @@ def run_comparison_for_model(args, questions, model_name, model_override=None):
         "accuracy": round(len(correct) / max(len(successful), 1), 4),
         "hallucination_rate": round(len(hallucinations) / max(len(successful), 1), 4),
         "avg_latency_ms": round(sum(latencies) / max(len(latencies), 1)),
-        "p95_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0),
+        "p95_latency_ms": round(
+            sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0
+        ),
         "details": details,
     }
 
@@ -176,21 +190,26 @@ def main():
     parser.add_argument("--document-id", type=int, required=True)
     parser.add_argument("--questions", default="eval/questions.json")
     parser.add_argument("--output", default="eval/results/model_comparison.json")
-    parser.add_argument("--models", nargs="+",
-                        default=["local", "gpt-4o", "claude"],
-                        help="Model names to compare")
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        default=["local", "gpt-4o", "claude"],
+        help="Model names to compare",
+    )
     args = parser.parse_args()
 
     questions = load_questions(args.questions)
-    print(f"🔬 Model Comparison: {len(args.models)} models × {len(questions)} questions")
+    print(
+        f"🔬 Model Comparison: {len(args.models)} models × {len(questions)} questions"
+    )
     print(f"   Models: {', '.join(args.models)}")
     print()
 
     all_results = []
     for model in args.models:
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"🤖 Evaluating: {model}")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
 
         override = None if model == "local" else model
         result = run_comparison_for_model(args, questions, model, override)
@@ -203,16 +222,18 @@ def main():
 
     report = generate_report(all_results)
 
-    print(f"\n\n{'='*60}")
-    print(f"📊 COMPARISON REPORT")
-    print(f"{'='*60}")
+    print(f"\n\n{'=' * 60}")
+    print("📊 COMPARISON REPORT")
+    print(f"{'=' * 60}")
     print(f"  🏆 Winner: {report['winner']}")
     print()
     for model, metrics in report["comparison"].items():
-        print(f"  {model:15s} — Acc: {metrics['accuracy']:.2%}  "
-              f"Hallucination: {metrics['hallucination_rate']:.2%}  "
-              f"Latency: {metrics['avg_latency_ms']}ms")
-    print(f"{'='*60}")
+        print(
+            f"  {model:15s} — Acc: {metrics['accuracy']:.2%}  "
+            f"Hallucination: {metrics['hallucination_rate']:.2%}  "
+            f"Latency: {metrics['avg_latency_ms']}ms"
+        )
+    print(f"{'=' * 60}")
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:

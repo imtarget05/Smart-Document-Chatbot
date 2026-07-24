@@ -54,6 +54,7 @@ public class EmbeddingService {
 
             // Step 2: Generate embeddings and upsert in batches
             int batchSize = 20;
+            int totalUpserted = 0;
             for (int i = 0; i < chunks.size(); i += batchSize) {
                 int end = Math.min(i + batchSize, chunks.size());
                 List<String> batchChunks = chunks.subList(i, end);
@@ -62,6 +63,18 @@ public class EmbeddingService {
 
                 if (embeddings.isEmpty() || embeddings.size() != batchChunks.size()) {
                     log.warn("Embedding generation failed or returned mismatched count for batch {}-{}", i, end - 1);
+                    continue;
+                }
+
+                boolean hasEmpty = false;
+                for (List<Float> emb : embeddings) {
+                    if (emb.isEmpty()) {
+                        hasEmpty = true;
+                        break;
+                    }
+                }
+                if (hasEmpty) {
+                    log.warn("Embedding generation returned empty vectors for some texts in batch {}-{}", i, end - 1);
                     continue;
                 }
 
@@ -83,11 +96,17 @@ public class EmbeddingService {
                 }
 
                 upsertPoints(collectionId, points);
+                totalUpserted += batchChunks.size();
                 log.debug("Upserted batch {}-{} for collection {}", i, end - 1, collectionId);
             }
 
-            log.info("Successfully stored {} chunks for document '{}' in collection '{}'",
-                    chunks.size(), documentName, collectionId);
+            if (totalUpserted > 0) {
+                log.info("Successfully stored {} chunks for document '{}' in collection '{}'",
+                        totalUpserted, documentName, collectionId);
+            } else {
+                log.warn("No chunks were stored for document '{}' in collection '{}' (embedding generation failed for all batches)",
+                        documentName, collectionId);
+            }
 
         } catch (Exception e) {
             log.error("Error storing embeddings for document '{}': {}", documentName, e.getMessage(), e);
@@ -110,6 +129,7 @@ public class EmbeddingService {
 
             // Step 2: Generate embeddings and upsert in batches
             int batchSize = 20;
+            int totalUpserted = 0;
             for (int i = 0; i < chunks.size(); i += batchSize) {
                 int end = Math.min(i + batchSize, chunks.size());
                 List<DocumentParser.HierarchicalChunk> batchChunks = chunks.subList(i, end);
@@ -123,6 +143,18 @@ public class EmbeddingService {
 
                 if (embeddings.isEmpty() || embeddings.size() != batchChunks.size()) {
                     log.warn("Embedding generation failed or returned mismatched count for hierarchical batch {}-{}", i, end - 1);
+                    continue;
+                }
+
+                boolean hasEmpty = false;
+                for (List<Float> emb : embeddings) {
+                    if (emb.isEmpty()) {
+                        hasEmpty = true;
+                        break;
+                    }
+                }
+                if (hasEmpty) {
+                    log.warn("Embedding generation returned empty vectors for some texts in hierarchical batch {}-{}", i, end - 1);
                     continue;
                 }
 
@@ -145,11 +177,17 @@ public class EmbeddingService {
                 }
 
                 upsertPoints(collectionId, points);
+                totalUpserted += batchChunks.size();
                 log.debug("Upserted hierarchical batch {}-{} for collection {}", i, end - 1, collectionId);
             }
 
-            log.info("Successfully stored {} hierarchical chunks for document '{}' in collection '{}'",
-                    chunks.size(), documentName, collectionId);
+            if (totalUpserted > 0) {
+                log.info("Successfully stored {} hierarchical chunks for document '{}' in collection '{}'",
+                        totalUpserted, documentName, collectionId);
+            } else {
+                log.warn("No hierarchical chunks were stored for document '{}' in collection '{}' (embedding generation failed for all batches)",
+                        documentName, collectionId);
+            }
 
         } catch (Exception e) {
             log.error("Error storing hierarchical embeddings for document '{}': {}", documentName, e.getMessage(), e);
@@ -306,12 +344,21 @@ public class EmbeddingService {
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-        restTemplate.exchange(
+        ResponseEntity<String> response = restTemplate.exchange(
                 qdrantBaseUrl + "/collections/" + collectionId + "/points",
                 HttpMethod.PUT,
                 entity,
                 String.class
         );
+
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            if (response.getBody().contains("error") || response.getBody().contains("declined")) {
+                log.warn("Qdrant upsert reported issue for collection '{}': {}", collectionId, response.getBody());
+            }
+        } else {
+            log.warn("Qdrant upsert returned non-success for collection '{}': {} {}", collectionId,
+                    response.getStatusCode(), response.getBody());
+        }
     }
 
     private HttpHeaders buildQdrantHeaders() {
@@ -346,7 +393,11 @@ public class EmbeddingService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
+            int maxChars = 8000;
             for (String text : texts) {
+                if (text.length() > maxChars) {
+                    text = text.substring(0, maxChars);
+                }
                 Map<String, Object> requestBody = new HashMap<>();
                 requestBody.put("model", llmConfig.getEmbeddingModel());
                 requestBody.put("prompt", text);

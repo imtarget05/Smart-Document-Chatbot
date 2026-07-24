@@ -21,11 +21,15 @@ SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 
 class GoogleDriveConnector:
-    async def ingest(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def ingest(
+        self, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         documents = await self.fetch_documents(user_id=user_id, params=params)
         return await ConnectorIngestionPipeline().ingest_documents(user_id, documents)
 
-    async def fetch_documents(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def fetch_documents(
+        self, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         params:
           folder_id (optional) – Drive folder ID to pull from
@@ -42,13 +46,16 @@ class GoogleDriveConnector:
             logger.error("Google Drive auth failed: %s", exc)
             return []
 
-        folder_id  = params.get("folder_id")
-        max_files  = int(params.get("max_files", 10))
-        mime_types = params.get("mime_types", [
-            "text/plain",
-            "application/pdf",
-            "application/vnd.google-apps.document",
-        ])
+        folder_id = params.get("folder_id")
+        max_files = int(params.get("max_files", 10))
+        mime_types = params.get(
+            "mime_types",
+            [
+                "text/plain",
+                "application/pdf",
+                "application/vnd.google-apps.document",
+            ],
+        )
 
         # Build query
         q_parts = ["trashed = false"]
@@ -60,6 +67,7 @@ class GoogleDriveConnector:
         query = " and ".join(q_parts)
 
         import asyncio
+
         loop = asyncio.get_event_loop()
 
         def _list_files():
@@ -75,17 +83,21 @@ class GoogleDriveConnector:
         for f in files[:max_files]:
             text = await self._download_text(service, f)
             if text:
-                documents.append({
-                    "source": "google_drive",
-                    "external_id": f["id"],
-                    "title": f["name"],
-                    "text": text,
-                    "metadata": {
-                        "mime_type": f.get("mimeType", ""),
-                    },
-                })
+                documents.append(
+                    {
+                        "source": "google_drive",
+                        "external_id": f["id"],
+                        "title": f["name"],
+                        "text": text,
+                        "metadata": {
+                            "mime_type": f.get("mimeType", ""),
+                        },
+                    }
+                )
 
-        logger.info("Google Drive: pulled %d files for user %s", len(documents), user_id)
+        logger.info(
+            "Google Drive: pulled %d files for user %s", len(documents), user_id
+        )
         return documents
 
     def _build_service(self):
@@ -113,13 +125,16 @@ class GoogleDriveConnector:
 
     async def _download_text(self, service, file_info: Dict) -> str:
         import asyncio
+
         loop = asyncio.get_event_loop()
-        fid  = file_info["id"]
+        fid = file_info["id"]
         mime = file_info.get("mimeType", "")
 
         def _export():
             if mime == "application/vnd.google-apps.document":
-                return service.files().export(fileId=fid, mimeType="text/plain").execute()
+                return (
+                    service.files().export(fileId=fid, mimeType="text/plain").execute()
+                )
             else:
                 return service.files().get_media(fileId=fid).execute()
 

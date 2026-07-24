@@ -17,11 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 class SharePointConnector:
-    async def ingest(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def ingest(
+        self, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         documents = await self.fetch_documents(user_id=user_id, params=params)
         return await ConnectorIngestionPipeline().ingest_documents(user_id, documents)
 
-    async def fetch_documents(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def fetch_documents(
+        self, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         params:
           mock (optional) - true to use supplied/mock documents
@@ -33,25 +37,38 @@ class SharePointConnector:
             return [self._from_mock_doc(doc) for doc in params["documents"]]
 
         mock_param = params.get("mock")
-        use_mock = getattr(settings, "sharepoint_mock_enabled", True) if mock_param is None else bool(mock_param)
+        use_mock = (
+            getattr(settings, "sharepoint_mock_enabled", True)
+            if mock_param is None
+            else bool(mock_param)
+        )
         if use_mock:
             logger.info("SharePoint mock ingestion enabled for user %s", user_id)
             return [self._demo_test_report()]
 
         token = getattr(settings, "microsoft_graph_token", "")
         site_id = params.get("site_id") or getattr(settings, "sharepoint_site_id", "")
-        drive_id = params.get("drive_id") or getattr(settings, "sharepoint_drive_id", "")
+        drive_id = params.get("drive_id") or getattr(
+            settings, "sharepoint_drive_id", ""
+        )
         if not token or not site_id or not drive_id:
             logger.warning("SharePoint Graph not configured; no documents pulled")
             return []
 
         folder_item_id = params.get("folder_item_id", "root")
         max_files = int(params.get("max_files", 10))
-        return await self._fetch_graph_documents(token, site_id, drive_id, folder_item_id, max_files)
+        return await self._fetch_graph_documents(
+            token, site_id, drive_id, folder_item_id, max_files
+        )
 
     @staticmethod
     def _from_mock_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
-        title = str(doc.get("title") or doc.get("name") or doc.get("id") or "SharePoint document")
+        title = str(
+            doc.get("title")
+            or doc.get("name")
+            or doc.get("id")
+            or "SharePoint document"
+        )
         return {
             "source": "sharepoint",
             "external_id": str(doc.get("id") or title),
@@ -107,7 +124,9 @@ class SharePointConnector:
 
         documents: List[Dict[str, Any]] = []
         async with httpx.AsyncClient(timeout=30) as client:
-            list_resp = await client.get(list_url, headers=headers, params={"$top": max_files})
+            list_resp = await client.get(
+                list_url, headers=headers, params={"$top": max_files}
+            )
             list_resp.raise_for_status()
             for item in list_resp.json().get("value", [])[:max_files]:
                 if "file" not in item:
@@ -120,15 +139,17 @@ class SharePointConnector:
                 text = content_resp.content.decode("utf-8", errors="ignore")
                 if not text.strip():
                     continue
-                documents.append({
-                    "source": "sharepoint",
-                    "external_id": item.get("id", item.get("name", "")),
-                    "title": item.get("name", "SharePoint document"),
-                    "text": text,
-                    "metadata": {
-                        "web_url": item.get("webUrl", ""),
-                        "mime_type": item.get("file", {}).get("mimeType", ""),
-                    },
-                })
+                documents.append(
+                    {
+                        "source": "sharepoint",
+                        "external_id": item.get("id", item.get("name", "")),
+                        "title": item.get("name", "SharePoint document"),
+                        "text": text,
+                        "metadata": {
+                            "web_url": item.get("webUrl", ""),
+                            "mime_type": item.get("file", {}).get("mimeType", ""),
+                        },
+                    }
+                )
         logger.info("SharePoint Graph pulled %d documents", len(documents))
         return documents

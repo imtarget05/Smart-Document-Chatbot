@@ -105,14 +105,14 @@ def evaluate_result(result: Dict[str, Any], question: Dict[str, Any]) -> Dict[st
 
     expected_intent = question.get("expected_intent")
     intent_correct = (
-        result.get("agent_type") == expected_intent
-        if expected_intent
-        else None
+        result.get("agent_type") == expected_intent if expected_intent else None
     )
 
     answer_keywords = [k.lower() for k in question.get("expected_answer_contains", [])]
     answer_hits = [k for k in answer_keywords if k in answer]
-    answer_complete = len(answer_hits) == len(answer_keywords) if answer_keywords else None
+    answer_complete = (
+        len(answer_hits) == len(answer_keywords) if answer_keywords else None
+    )
 
     source_keywords = [k.lower() for k in question.get("expected_source_keywords", [])]
     source_hits = [k for k in source_keywords if k in source_text]
@@ -162,23 +162,21 @@ def percentile(values: List[int], pct: float) -> int:
     return ordered[idx]
 
 
-def compute_confusion_matrix(
-    items: List[Dict[str, Any]], key: str
-) -> Dict[str, int]:
+def compute_confusion_matrix(items: List[Dict[str, Any]], key: str) -> Dict[str, int]:
     """
     Compute confusion matrix for a binary metric.
-    
+
     Returns: {"tp": N, "fp": N, "fn": N, "tn": N, "total": N, "accuracy": float}
     """
     tp = sum(1 for item in items if item.get(key) is True)
     fp = sum(1 for item in items if item.get(key) is False)
     fn = fp  # For binary metrics where false = negative prediction
     tn = tp  # Symmetric for balanced interpretation
-    
+
     values = [item[key] for item in items if item.get(key) is not None]
     total = len(values)
     correct = sum(1 for v in values if v)
-    
+
     return {
         "tp": tp,
         "fp": fp,
@@ -205,7 +203,9 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     details = []
 
     print(f"Running agent evaluation: {len(questions)} cases")
-    print(f"Target: {args.base_url} ({'direct-agent' if args.direct_agent else 'spring-proxy'})")
+    print(
+        f"Target: {args.base_url} ({'direct-agent' if args.direct_agent else 'spring-proxy'})"
+    )
     print(f"Session: {session_id}")
 
     for idx, question in enumerate(questions, 1):
@@ -218,7 +218,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
 
     successful = [item for item in details if item["status"] == "success"]
     latencies = [item["latency_ms"] for item in successful]
-    
+
     confusion_matrices = {
         "intent_routing": compute_confusion_matrix(successful, "intent_correct"),
         "retrieval": compute_confusion_matrix(successful, "retrieval_accurate"),
@@ -248,11 +248,19 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate /agent/invoke quality and routing")
+    parser = argparse.ArgumentParser(
+        description="Evaluate /agent/invoke quality and routing"
+    )
     parser.add_argument("--base-url", default="http://localhost:8080/api")
     parser.add_argument("--token", default="", help="JWT for Spring Boot proxy mode")
-    parser.add_argument("--internal-token", default="", help="X-Internal-Token for direct agent mode")
-    parser.add_argument("--direct-agent", action="store_true", help="Call FastAPI agent service directly")
+    parser.add_argument(
+        "--internal-token", default="", help="X-Internal-Token for direct agent mode"
+    )
+    parser.add_argument(
+        "--direct-agent",
+        action="store_true",
+        help="Call FastAPI agent service directly",
+    )
     parser.add_argument("--user-id", default="agent-eval")
     parser.add_argument("--document-ids", nargs="*", default=[])
     parser.add_argument("--questions", default="eval/agent_questions.json")
@@ -295,4 +303,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,23 @@
+resilience4j:
+  circuitbreaker:
+    instances:
+      llmService:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 3s
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - java.lang.Exception
+  timelimiter:
+    instances:
+      llmService:
+        timeoutDuration: 5s
+        cancelRunningFuture: true
+  metrics:
+    enabled: true

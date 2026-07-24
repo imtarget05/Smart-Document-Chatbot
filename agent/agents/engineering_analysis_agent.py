@@ -42,7 +42,9 @@ class EngineeringAnalysisAgent:
     async def run(self, state: AgentState) -> AgentState:
         query = state["query"]
         document_ids = state.get("document_ids") or []
-        logger.info("EngineeringAnalysisAgent query=%s docs=%s", query[:80], document_ids)
+        logger.info(
+            "EngineeringAnalysisAgent query=%s docs=%s", query[:80], document_ids
+        )
 
         if not document_ids:
             state["final_answer"] = (
@@ -68,15 +70,19 @@ class EngineeringAnalysisAgent:
             f"[{c.get('document_name', 'document')}]\n{c.get('text', '')}"
             for c in chunks[:12]
         )
-        response = await self._llm.ainvoke([
-            SystemMessage(content=_SYSTEM_PROMPT),
-            HumanMessage(content=f"User request: {query}\n\nEvidence:\n{evidence}"),
-        ])
+        response = await self._llm.ainvoke(
+            [
+                SystemMessage(content=_SYSTEM_PROMPT),
+                HumanMessage(content=f"User request: {query}\n\nEvidence:\n{evidence}"),
+            ]
+        )
 
         state["final_answer"] = response.content.strip()
         state["sources"] = self._sources(chunks)
         state["agent_type"] = "engineering"
-        state["confidence_score"] = max((c.get("score", 0.0) for c in chunks), default=0.0)
+        state["confidence_score"] = max(
+            (c.get("score", 0.0) for c in chunks), default=0.0
+        )
         return state
 
     async def _retrieve_engineering_evidence(
@@ -92,7 +98,9 @@ class EngineeringAnalysisAgent:
         for doc_id in document_ids:
             try:
                 all_chunks.extend(
-                    await self._search.hybrid_search(search_query, doc_id, top_k=8, use_bm25=True)
+                    await self._search.hybrid_search(
+                        search_query, doc_id, top_k=8, use_bm25=True
+                    )
                 )
             except Exception as exc:
                 logger.warning("Engineering retrieval failed for %s: %s", doc_id, exc)
@@ -100,7 +108,10 @@ class EngineeringAnalysisAgent:
         deduped: Dict[str, Dict] = {}
         for chunk in all_chunks:
             key = chunk.get("text", "").strip()[:240]
-            if key and (key not in deduped or deduped[key].get("score", 0) < chunk.get("score", 0)):
+            if key and (
+                key not in deduped
+                or deduped[key].get("score", 0) < chunk.get("score", 0)
+            ):
                 deduped[key] = chunk
         return sorted(deduped.values(), key=lambda c: c.get("score", 0), reverse=True)
 

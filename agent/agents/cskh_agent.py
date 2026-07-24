@@ -11,7 +11,7 @@ Business domain: Retail - Footwear e-commerce (Smart Shoes Vietnam)
 import json
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Dict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -102,29 +102,35 @@ class CSKHAgent:
         logger.info("CSKH Agent: query=%s", query[:100])
 
         try:
-            response = await self._llm.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=query),
-            ])
+            response = await self._llm.ainvoke(
+                [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=query),
+                ]
+            )
             answer = response.content.strip()
         except Exception as exc:
             logger.error("CSKH Agent error: %s", exc)
             answer = "Xin lỗi anh/chị, hiện tại em đang gặp sự cố kỹ thuật. Anh/chị vui lòng gọi hotline 1900 1234 để được hỗ trợ trực tiếp ạ."
 
         state["final_answer"] = answer
-        state["sources"] = [{
-            "source_type": "products_catalog",
-            "document_name": "Smart Shoes Vietnam Product Catalog",
-        }]
+        state["sources"] = [
+            {
+                "source_type": "products_catalog",
+                "document_name": "Smart Shoes Vietnam Product Catalog",
+            }
+        ]
         state["agent_type"] = "cskh"
         return state
 
 
 # ---- Convenience function for direct usage ----
 
+
 async def ask_cskh(query: str) -> str:
     """Ask the CSKH agent a question (for testing/API usage)."""
     from graph.state import AgentState
+
     agent = CSKHAgent()
     state = AgentState(query=query, session_id="cskh-test")
     result = await agent.run(state)

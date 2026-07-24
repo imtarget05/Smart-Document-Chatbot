@@ -51,7 +51,9 @@ class ConnectorIngestionPipeline:
         doc: RawConnectorDocument,
     ) -> Dict[str, Any]:
         source = str(doc.get("source") or "connector")
-        external_id = str(doc.get("external_id") or doc.get("id") or doc.get("title") or "item")
+        external_id = str(
+            doc.get("external_id") or doc.get("id") or doc.get("title") or "item"
+        )
         title = str(doc.get("title") or doc.get("document_name") or external_id)
         text = self._normalize_text(str(doc.get("text") or ""))
         metadata = dict(doc.get("metadata") or {})
@@ -98,16 +100,20 @@ class ConnectorIngestionPipeline:
                 metadata=metadata,
             )
         except Exception as exc:
-            logger.exception("Connector ingestion failed for %s:%s", source, external_id)
+            logger.exception(
+                "Connector ingestion failed for %s:%s", source, external_id
+            )
             base_result["status"] = "failed"
             base_result["reason"] = str(exc)
             return base_result
 
-        base_result.update({
-            "status": "indexed",
-            "chunk_count": len(chunks),
-            "collection_id": collection_id,
-        })
+        base_result.update(
+            {
+                "status": "indexed",
+                "chunk_count": len(chunks),
+                "collection_id": collection_id,
+            }
+        )
         logger.info(
             "Indexed connector document source=%s external_id=%s collection=%s chunks=%d",
             source,
@@ -141,7 +147,7 @@ class ConnectorIngestionPipeline:
                     current = ""
                 start = 0
                 while start < len(paragraph):
-                    piece = paragraph[start:start + chunk_size].strip()
+                    piece = paragraph[start : start + chunk_size].strip()
                     if piece:
                         chunks.append(piece)
                     if start + chunk_size >= len(paragraph):
@@ -162,7 +168,9 @@ class ConnectorIngestionPipeline:
 
         return [chunk for chunk in chunks if chunk]
 
-    async def _embed_chunks(self, client: httpx.AsyncClient, chunks: List[str]) -> List[List[float]]:
+    async def _embed_chunks(
+        self, client: httpx.AsyncClient, chunks: List[str]
+    ) -> List[List[float]]:
         embeddings: List[List[float]] = []
         for chunk in chunks:
             resp = await client.post(
@@ -222,14 +230,16 @@ class ConnectorIngestionPipeline:
         for start in range(0, len(points), batch_size):
             resp = await client.put(
                 f"{self._qdrant_url}/collections/{collection_id}/points",
-                json={"points": points[start:start + batch_size]},
+                json={"points": points[start : start + batch_size]},
                 headers=headers,
             )
             resp.raise_for_status()
 
     @staticmethod
     def _collection_id(user_id: str, source: str, external_id: str) -> str:
-        digest = hashlib.sha1(f"{user_id}:{source}:{external_id}".encode("utf-8")).hexdigest()[:12]
+        digest = hashlib.sha1(
+            f"{user_id}:{source}:{external_id}".encode("utf-8")
+        ).hexdigest()[:12]
         return f"conn_{_safe_collection_part(source, 24)}_{digest}"
 
     @staticmethod

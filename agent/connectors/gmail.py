@@ -19,16 +19,20 @@ logger = logging.getLogger(__name__)
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/drive.readonly",   # shared auth
+    "https://www.googleapis.com/auth/drive.readonly",  # shared auth
 ]
 
 
 class GmailConnector:
-    async def ingest(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def ingest(
+        self, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         documents = await self.fetch_documents(user_id=user_id, params=params)
         return await ConnectorIngestionPipeline().ingest_documents(user_id, documents)
 
-    async def fetch_documents(self, user_id: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def fetch_documents(
+        self, user_id: str, params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         params:
           gmail_query   – Gmail search query (e.g. "from:boss@co.com subject:report")
@@ -39,6 +43,7 @@ class GmailConnector:
             return []
 
         import asyncio
+
         loop = asyncio.get_event_loop()
 
         try:
@@ -48,7 +53,7 @@ class GmailConnector:
             return []
 
         gmail_query = params.get("gmail_query", "")
-        max_emails  = int(params.get("max_emails", 20))
+        max_emails = int(params.get("max_emails", 20))
 
         def _list_messages():
             return (
@@ -65,16 +70,18 @@ class GmailConnector:
         for msg_ref in messages[:max_emails]:
             text, subject = await self._get_email_text(service, msg_ref["id"], loop)
             if text:
-                documents.append({
-                    "source": "gmail",
-                    "external_id": msg_ref["id"],
-                    "title": subject or f"Gmail message {msg_ref['id']}",
-                    "text": text,
-                    "metadata": {
-                        "subject": subject,
-                        "gmail_query": gmail_query,
-                    },
-                })
+                documents.append(
+                    {
+                        "source": "gmail",
+                        "external_id": msg_ref["id"],
+                        "title": subject or f"Gmail message {msg_ref['id']}",
+                        "text": text,
+                        "metadata": {
+                            "subject": subject,
+                            "gmail_query": gmail_query,
+                        },
+                    }
+                )
 
         logger.info("Gmail: pulled %d emails for user %s", len(documents), user_id)
         return documents
@@ -86,7 +93,7 @@ class GmailConnector:
         from google.auth.transport.requests import Request
         from googleapiclient.discovery import build
 
-        creds      = None
+        creds = None
         token_path = settings.google_token_json or "token.json"
         creds_path = settings.google_credentials_json
 
@@ -96,7 +103,7 @@ class GmailConnector:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow  = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+                flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
                 creds = flow.run_local_server(port=0)
             with open(token_path, "w") as token:
                 token.write(creds.to_json())
@@ -104,13 +111,18 @@ class GmailConnector:
 
     async def _get_email_text(self, service, msg_id: str, loop) -> tuple:
         def _fetch():
-            return service.users().messages().get(userId="me", id=msg_id, format="full").execute()
+            return (
+                service.users()
+                .messages()
+                .get(userId="me", id=msg_id, format="full")
+                .execute()
+            )
 
         try:
-            msg     = await loop.run_in_executor(None, _fetch)
+            msg = await loop.run_in_executor(None, _fetch)
             headers = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
             subject = headers.get("Subject", "")
-            body    = self._extract_body(msg["payload"])
+            body = self._extract_body(msg["payload"])
             return body, subject
         except Exception as exc:
             logger.warning("Failed to fetch email %s: %s", msg_id, exc)
@@ -122,7 +134,9 @@ class GmailConnector:
                 if part.get("mimeType") == "text/plain":
                     data = part.get("body", {}).get("data", "")
                     if data:
-                        return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+                        return base64.urlsafe_b64decode(data).decode(
+                            "utf-8", errors="ignore"
+                        )
         body_data = payload.get("body", {}).get("data", "")
         if body_data:
             return base64.urlsafe_b64decode(body_data).decode("utf-8", errors="ignore")

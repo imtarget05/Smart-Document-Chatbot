@@ -42,12 +42,17 @@ QUALITY_THRESHOLD = {
 class ModelVersion:
     """Represents a single model version with metadata."""
 
-    def __init__(self, version: str, model_name: str, stage: str = "None",
-                 metrics: Optional[Dict[str, float]] = None,
-                 config: Optional[Dict[str, Any]] = None,
-                 created_at: Optional[str] = None,
-                 mlflow_run_id: Optional[str] = None,
-                 description: str = ""):
+    def __init__(
+        self,
+        version: str,
+        model_name: str,
+        stage: str = "None",
+        metrics: Optional[Dict[str, float]] = None,
+        config: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+        mlflow_run_id: Optional[str] = None,
+        description: str = "",
+    ):
         self.version = version
         self.model_name = model_name
         self.stage = stage
@@ -103,29 +108,41 @@ class ModelRegistry:
             if metric in metrics:
                 if metric == "hallucination_rate":
                     if metrics[metric] > threshold:
-                        failures.append(f"{metric}: {metrics[metric]:.2%} > {threshold:.2%}")
+                        failures.append(
+                            f"{metric}: {metrics[metric]:.2%} > {threshold:.2%}"
+                        )
                 else:
                     if metrics[metric] < threshold:
-                        failures.append(f"{metric}: {metrics[metric]:.2%} < {threshold:.2%}")
+                        failures.append(
+                            f"{metric}: {metrics[metric]:.2%} < {threshold:.2%}"
+                        )
         return len(failures) == 0, failures
 
-    def register_model(self, model_name: str, version: str,
-                       metrics: Optional[Dict[str, float]] = None,
-                       config: Optional[Dict[str, Any]] = None,
-                       mlflow_run_id: Optional[str] = None,
-                       description: str = "",
-                       force: bool = False) -> Optional[ModelVersion]:
+    def register_model(
+        self,
+        model_name: str,
+        version: str,
+        metrics: Optional[Dict[str, float]] = None,
+        config: Optional[Dict[str, Any]] = None,
+        mlflow_run_id: Optional[str] = None,
+        description: str = "",
+        force: bool = False,
+    ) -> Optional[ModelVersion]:
         """Register a new model version. Returns None if quality gate fails."""
         if metrics and not force:
             passed, failures = self.passes_quality_gate(metrics)
             if not passed:
-                logger.warning(f"Quality gate FAILED for {model_name} v{version}: {failures}")
+                logger.warning(
+                    f"Quality gate FAILED for {model_name} v{version}: {failures}"
+                )
                 return None
 
         versions = self._load_versions(model_name)
         existing_versions = [v["version"] for v in versions]
         if version in existing_versions:
-            logger.warning(f"Model {model_name} v{version} already exists. Use force=True to overwrite.")
+            logger.warning(
+                f"Model {model_name} v{version} already exists. Use force=True to overwrite."
+            )
             if not force:
                 return None
             versions = [v for v in versions if v["version"] != version]
@@ -154,14 +171,20 @@ class ModelRegistry:
             if v["version"] == version:
                 v["stage"] = stage
                 found = True
-            elif v["model_name"] == model_name and v.get("stage") == stage and stage == "Production":
+            elif (
+                v["model_name"] == model_name
+                and v.get("stage") == stage
+                and stage == "Production"
+            ):
                 v["stage"] = "Archived"
         if found:
             self._save_versions(model_name, versions)
             logger.info(f"Model promoted: {model_name} v{version} → {stage}")
         return found
 
-    def get_model(self, model_name: str, stage: str = "Production") -> Optional[ModelVersion]:
+    def get_model(
+        self, model_name: str, stage: str = "Production"
+    ) -> Optional[ModelVersion]:
         """Get the current model version for a given stage."""
         versions = self._load_versions(model_name)
         for v in reversed(versions):
@@ -186,8 +209,10 @@ class ModelRegistry:
             "v2": v2_data,
             "metric_diff": {
                 k: v2_data["metrics"].get(k, 0) - v1_data["metrics"].get(k, 0)
-                for k in set(list(v1_data["metrics"].keys()) + list(v2_data["metrics"].keys()))
-            }
+                for k in set(
+                    list(v1_data["metrics"].keys()) + list(v2_data["metrics"].keys())
+                )
+            },
         }
 
 

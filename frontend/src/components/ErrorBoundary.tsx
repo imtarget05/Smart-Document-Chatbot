@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
@@ -11,11 +11,11 @@ interface State {
 }
 
 class ErrorBoundary extends Component<Props, State> {
-  public declare props: Readonly<Props>;
+  declare public props: Readonly<Props>;
 
   public state: State = {
     hasError: false,
-    error: null
+    error: null,
   };
 
   public static getDerivedStateFromError(error: Error): State {
@@ -23,7 +23,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 
   public handleReset = () => {
@@ -40,7 +40,9 @@ class ErrorBoundary extends Component<Props, State> {
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50/40 font-sans h-full min-h-[300px]">
           <div className="w-full max-w-md bg-white border border-gray-200 rounded-3xl p-6 shadow-xl text-center">
             <span className="text-4xl">⚠️</span>
-            <h3 className="text-lg font-bold text-gray-800 mt-3">Something went wrong</h3>
+            <h3 className="text-lg font-bold text-gray-800 mt-3">
+              Something went wrong
+            </h3>
             <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto leading-relaxed">
               An unexpected error occurred in this visual component.
             </p>

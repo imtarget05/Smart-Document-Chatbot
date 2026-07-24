@@ -4,7 +4,7 @@ export interface Document {
   fileSize: number;
   fileType: string;
   chunkCount: number;
-  status: 'PROCESSING' | 'READY' | 'FAILED';
+  status: "PROCESSING" | "READY" | "FAILED";
   summary?: string;
   suggestedQuestions?: string;
   vectorCollectionId?: string;

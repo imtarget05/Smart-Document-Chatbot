@@ -12,7 +12,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from llm_factory import LLMFactory
 
 from graph.state import AgentState
-from settings import settings
 from tools.qdrant_tool import QdrantHybridSearch
 
 logger = logging.getLogger(__name__)
@@ -30,18 +29,24 @@ Be precise and cite sources."""
 
 class ComparatorAgent:
     def __init__(self):
-        self._llm    = LLMFactory.get_reasoning_model(temperature=0.1)
+        self._llm = LLMFactory.get_reasoning_model(temperature=0.1)
         self._search = QdrantHybridSearch()
 
     async def run(self, state: AgentState) -> AgentState:
-        query        = state["query"]
+        query = state["query"]
         document_ids = state.get("document_ids") or []
 
-        logger.info("Comparator Agent: comparing %d docs for query=%s", len(document_ids), query[:80])
+        logger.info(
+            "Comparator Agent: comparing %d docs for query=%s",
+            len(document_ids),
+            query[:80],
+        )
 
         if len(document_ids) < 2:
-            state["final_answer"] = "⚠️ Comparator requires at least 2 documents. Please select more documents."
-            state["agent_type"]   = "compare"
+            state["final_answer"] = (
+                "⚠️ Comparator requires at least 2 documents. Please select more documents."
+            )
+            state["agent_type"] = "compare"
             return state
 
         # Retrieve content from each document in parallel
@@ -61,23 +66,32 @@ class ComparatorAgent:
                 doc_blocks.append(f"[Document {doc_id}]\n(Retrieval failed)")
                 continue
             chunks = res
-            text   = "\n".join(c.get("text", "") for c in chunks[:5])
-            name   = chunks[0].get("document_name", f"Document {doc_id}") if chunks else f"Document {doc_id}"
+            text = "\n".join(c.get("text", "") for c in chunks[:5])
+            name = (
+                chunks[0].get("document_name", f"Document {doc_id}")
+                if chunks
+                else f"Document {doc_id}"
+            )
             doc_blocks.append(f"[{name}]\n{text}")
-            all_sources.extend({
-                "document_name": c.get("document_name", name),
-                "chunk_text":    c.get("text", "")[:200],
-                "score":         c.get("score", 0.0),
-                "source_type":   "document",
-            } for c in chunks[:3])
+            all_sources.extend(
+                {
+                    "document_name": c.get("document_name", name),
+                    "chunk_text": c.get("text", "")[:200],
+                    "score": c.get("score", 0.0),
+                    "source_type": "document",
+                }
+                for c in chunks[:3]
+            )
 
-        context  = "\n\n=====\n\n".join(doc_blocks)
-        response = await self._llm.ainvoke([
-            SystemMessage(content=_SYSTEM_PROMPT),
-            HumanMessage(content=f"Query: {query}\n\nDocuments:\n{context}"),
-        ])
+        context = "\n\n=====\n\n".join(doc_blocks)
+        response = await self._llm.ainvoke(
+            [
+                SystemMessage(content=_SYSTEM_PROMPT),
+                HumanMessage(content=f"Query: {query}\n\nDocuments:\n{context}"),
+            ]
+        )
 
         state["final_answer"] = response.content.strip()
-        state["sources"]      = all_sources
-        state["agent_type"]   = "compare"
+        state["sources"] = all_sources
+        state["agent_type"] = "compare"
         return state

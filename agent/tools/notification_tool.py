@@ -24,10 +24,10 @@ class EmailNotifier:
             import aiosmtplib
             from email.message import EmailMessage
 
-            msg              = EmailMessage()
-            msg["From"]      = settings.smtp_username
-            msg["To"]        = to
-            msg["Subject"]   = subject
+            msg = EmailMessage()
+            msg["From"] = settings.smtp_username
+            msg["To"] = to
+            msg["Subject"] = subject
             msg.set_content(body)
 
             await aiosmtplib.send(
