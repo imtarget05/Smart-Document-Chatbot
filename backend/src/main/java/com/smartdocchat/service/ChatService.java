@@ -1,7 +1,5 @@
 package com.smartdocchat.service;
 
-import com.smartdocchat.dto.ChatResponse;
-import com.smartdocchat.dto.SourceCitation;
 import com.smartdocchat.entity.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,189 +10,64 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * ChatService (ChatOrchestrator) — coordinates the RAG/Agentic chat flow by
- * delegating to specialised services.
- *
- * <p>CRAG retrieval logic has been extracted to {@link AgenticRetrievalService}
- * to eliminate the previous code duplication between the sync and streaming
- * paths. Both paths now call the same {@code AgenticRetrievalService.retrieve()}
- * method and only diverge in how the LLM response is delivered (blocking vs. SSE).
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ChatService {
 
-    private final AgenticRetrievalService agenticRetrievalService;
+    private final DocumentService documentService;
     private final MessageHandler messageHandler;
     private final HistoryService historyService;
-    private final MlflowTracker mlflowTracker;
-    private final RagMetrics ragMetrics;
-
-    // -----------------------------------------------------------------------
-    // Synchronous path
-    // -----------------------------------------------------------------------
 
     public ChatMessage processQuery(
-            String ownerUsername, String sessionId,
-            Long documentId, List<Long> documentIds,
-            String userMessage, boolean forceDeepThinking, boolean forceWebSearch
+            String ownerUsername, String sessionId, Long documentId, String userMessage
     ) {
-        ragMetrics.request("sync");
-        List<Long> finalDocIds = resolveDocIds(documentId, documentIds);
+        // Retrieve relevant chunks from the document
+        List<String> relevantChunks = retrieveRelevantChunks(ownerUsername, documentId, userMessage);
 
-        // ── Retrieval (shared CRAG logic) ────────────────────────────────────
-        AgenticRetrievalService.RetrievalResult retrieval =
-                agenticRetrievalService.retrieve(
-                        ownerUsername, finalDocIds, userMessage, forceWebSearch, forceDeepThinking);
+        // Build prompt & call LLM
+        String prompt = messageHandler.buildPrompt(userMessage, relevantChunks);
+        String aiResponse = messageHandler.callLLM(prompt);
 
-        ragMetrics.confidence(retrieval.maxScore());
-        if (retrieval.usedAgenticLoop()) {
-            ragMetrics.fallback(retrieval.strategy().equals("direct") ? "corrective_retrieval" : retrieval.strategy());
-        }
+        // Build source chunks string for display
+        String sourceChunks = relevantChunks.isEmpty() ? null : String.join("\n---\n", relevantChunks);
 
-        // ── Build context & prompt ───────────────────────────────────────────
-        String sourceChunks;
-        String aiResponse;
-        List<SourceCitation> citations = Collections.emptyList();
-        long startTime = System.currentTimeMillis();
-
-        if (!retrieval.chunks().isEmpty()) {
-            List<String> contextList = agenticRetrievalService.buildContextList(
-                    retrieval.chunks(), retrieval.chunkFileNames());
-            citations = historyService.buildCitations(
-                    retrieval.chunks(), retrieval.chunkFileNames(), retrieval.chunkDocumentIds());
-            sourceChunks = String.join("\n---\n", contextList);
-            String prompt = decoratePrompt(messageHandler.buildPrompt(userMessage, contextList), forceDeepThinking, "");
-            aiResponse = messageHandler.callLLM(prompt);
-        } else if ("web_search".equals(retrieval.strategy())) {
-            List<String> webContexts = messageHandler.searchWeb(userMessage);
-            if (!webContexts.isEmpty()) {
-                ragMetrics.fallback("web_search");
-                sourceChunks = String.join("\n---\n", webContexts);
-                String prompt = decoratePrompt(messageHandler.buildPrompt(userMessage, webContexts), forceDeepThinking, "");
-                aiResponse = "🌐 [Web Research Mode Activated]\n\n" + messageHandler.callLLM(prompt);
-            } else {
-                ragMetrics.fallback("general_knowledge");
-                aiResponse = "⚠️ [General Knowledge Mode]\n\n" + messageHandler.callLLM(
-                        (forceDeepThinking ? "DIRECTIVE: Perform DEEP THINKING. " : "")
-                                + "Use internal knowledge.\n\nUser Question: " + userMessage);
-                sourceChunks = "";
-            }
-        } else {
-            // general_knowledge
-            ragMetrics.fallback("general_knowledge");
-            aiResponse = "⚠️ [General Knowledge Mode]\n\n" + messageHandler.callLLM(
-                    (forceDeepThinking ? "DIRECTIVE: Perform DEEP THINKING. " : "")
-                            + "Use internal knowledge.\n\nUser Question: " + userMessage);
-            sourceChunks = "";
-        }
-
-        mlflowTracker.logChatExchange(userMessage, aiResponse, System.currentTimeMillis() - startTime);
-
-        // ── Persist ──────────────────────────────────────────────────────────
+        // Persist
         ChatMessage chatMessage = ChatMessage.builder()
                 .sessionId(sessionId)
                 .ownerUsername(ownerUsername)
-                .documentId(documentId != null ? documentId : (finalDocIds.isEmpty() ? null : finalDocIds.get(0)))
-                .documentIds(joinIds(finalDocIds))
+                .documentId(documentId)
                 .userMessage(userMessage)
                 .aiResponse(aiResponse)
-                .sourceChunks(sourceChunks.isEmpty() ? null : sourceChunks)
+                .sourceChunks(sourceChunks)
                 .build();
 
-        ChatMessage saved = historyService.save(chatMessage);
-        historyService.convertToResponse(
-                saved, retrieval.strategy(), retrieval.maxScore(),
-                System.currentTimeMillis() - startTime, null, citations);
-        return saved;
+        return historyService.save(chatMessage);
     }
 
-    // -----------------------------------------------------------------------
-    // Streaming path (SSE)
-    // -----------------------------------------------------------------------
-
     public SseEmitter processQueryStream(
-            String ownerUsername, String sessionId,
-            Long documentId, List<Long> documentIds,
-            String userMessage, boolean forceDeepThinking, boolean forceWebSearch
+            String ownerUsername, String sessionId, Long documentId, String userMessage
     ) {
         SseEmitter emitter = new SseEmitter(180_000L);
-        ragMetrics.request("stream");
 
         CompletableFuture.runAsync(() -> {
             try {
-                List<Long> finalDocIds = resolveDocIds(documentId, documentIds);
+                // Retrieve relevant chunks
+                List<String> relevantChunks = retrieveRelevantChunks(ownerUsername, documentId, userMessage);
+                String sourceChunks = relevantChunks.isEmpty() ? null : String.join("\n---\n", relevantChunks);
 
-                // ── Retrieval (shared CRAG logic) ────────────────────────────
-                AgenticRetrievalService.RetrievalResult retrieval =
-                        agenticRetrievalService.retrieve(
-                                ownerUsername, finalDocIds, userMessage, forceWebSearch, forceDeepThinking);
+                // Build prompt
+                String prompt = messageHandler.buildPrompt(userMessage, relevantChunks);
 
-                ragMetrics.confidence(retrieval.maxScore());
-                if (retrieval.usedAgenticLoop()) {
-                    ragMetrics.fallback(retrieval.strategy().equals("direct") ? "corrective_retrieval" : retrieval.strategy());
-                }
-
-                // ── Build prompt & metadata ──────────────────────────────────
-                String prompt;
-                String sourceChunks;
-                List<SourceCitation> citations = Collections.emptyList();
-                String prefix = "";
-
-                if (!retrieval.chunks().isEmpty()) {
-                    List<String> contextList = agenticRetrievalService.buildContextList(
-                            retrieval.chunks(), retrieval.chunkFileNames());
-                    citations = historyService.buildCitations(
-                            retrieval.chunks(), retrieval.chunkFileNames(), retrieval.chunkDocumentIds());
-                    sourceChunks = String.join("\n---\n", contextList);
-                    prompt = decoratePrompt(messageHandler.buildPrompt(userMessage, contextList), forceDeepThinking, "");
-                    if (retrieval.usedAgenticLoop()) {
-                        prefix = (forceDeepThinking ? "🧠 [DeepThinking Mode]" : "🤖 [Agentic Optimization]") + "\n\n";
-                    }
-                } else if ("web_search".equals(retrieval.strategy())) {
-                    log.info("Stream: performing web search fallback");
-                    List<String> webContexts = messageHandler.searchWeb(userMessage);
-                    if (!webContexts.isEmpty()) {
-                        ragMetrics.fallback("web_search");
-                        sourceChunks = String.join("\n---\n", webContexts);
-                        prompt = decoratePrompt(messageHandler.buildPrompt(userMessage, webContexts), forceDeepThinking, "");
-                        prefix = "🌐 [Web Research Mode Activated]\n\n";
-                    } else {
-                        ragMetrics.fallback("general_knowledge");
-                        prompt = (forceDeepThinking ? "DIRECTIVE: DEEP THINKING. " : "")
-                                + "Use internal knowledge.\n\nUser Question: " + userMessage;
-                        prefix = "⚠️ [General Knowledge Mode]\n\n";
-                        sourceChunks = "";
-                    }
-                } else {
-                    ragMetrics.fallback("general_knowledge");
-                    prompt = (forceDeepThinking ? "DIRECTIVE: DEEP THINKING. " : "")
-                            + "Use internal knowledge.\n\nUser Question: " + userMessage;
-                    prefix = "⚠️ [General Knowledge Mode]\n\n";
-                    sourceChunks = "";
-                }
-
-                // ── Metadata SSE event ────────────────────────────────────────
+                // Send metadata event
                 Map<String, Object> metaEvent = new HashMap<>();
-                metaEvent.put("sourceChunks", sourceChunks.isEmpty() ? null : sourceChunks);
-                metaEvent.put("prefix", prefix);
-                metaEvent.put("documentId", documentId != null ? documentId : (finalDocIds.isEmpty() ? null : finalDocIds.get(0)));
-                metaEvent.put("documentIds", finalDocIds);
+                metaEvent.put("sourceChunks", sourceChunks);
+                metaEvent.put("documentId", documentId);
                 emitter.send(SseEmitter.event().name("metadata").data(metaEvent));
 
-                if (!prefix.isEmpty()) {
-                    emitter.send(SseEmitter.event().name("chunk").data(prefix));
-                }
-
-                // ── Stream LLM tokens ─────────────────────────────────────────
-                StringBuilder aiResponseBuilder = new StringBuilder(prefix);
-                final String finalPrompt = prompt;
-                final String finalSourceChunks = sourceChunks;
-                final long startTime = System.currentTimeMillis();
-
-                messageHandler.streamLLM(finalPrompt, token -> {
+                // Stream LLM tokens
+                StringBuilder aiResponseBuilder = new StringBuilder();
+                messageHandler.streamLLM(prompt, token -> {
                     aiResponseBuilder.append(token);
                     try {
                         emitter.send(SseEmitter.event().name("chunk").data(token));
@@ -204,48 +77,35 @@ public class ChatService {
                 });
 
                 String fullResponse = aiResponseBuilder.toString();
-                long latencyMs = System.currentTimeMillis() - startTime;
-                mlflowTracker.logChatExchange(userMessage, fullResponse, latencyMs);
 
-                // ── Persist ───────────────────────────────────────────────────
+                // Persist
                 ChatMessage chatMessage = ChatMessage.builder()
                         .sessionId(sessionId)
                         .ownerUsername(ownerUsername)
-                        .documentId(documentId != null ? documentId : (finalDocIds.isEmpty() ? null : finalDocIds.get(0)))
-                        .documentIds(joinIds(finalDocIds))
+                        .documentId(documentId)
                         .userMessage(userMessage)
                         .aiResponse(fullResponse)
-                        .sourceChunks(finalSourceChunks.isEmpty() ? null : finalSourceChunks)
+                        .sourceChunks(sourceChunks)
                         .build();
                 ChatMessage saved = historyService.save(chatMessage);
 
-                // ── Final SSE complete event ───────────────────────────────────
-                ChatResponse responseDto = historyService.convertToResponse(
-                        saved, retrieval.strategy(), retrieval.maxScore(), latencyMs, null, citations);
-                emitter.send(SseEmitter.event().name("complete").data(responseDto));
+                // Final complete event
+                emitter.send(SseEmitter.event().name("complete").data(saved));
                 emitter.complete();
-
-                mlflowTracker.logStructuredRequest(userMessage, retrieval.chunks().size(),
-                        retrieval.maxScore(), retrieval.strategy(), latencyMs, "success");
 
             } catch (Exception e) {
                 log.error("Error in streaming task: {}", e.getMessage(), e);
-                ragMetrics.streamError();
                 try {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
                     emitter.completeWithError(e);
                 } catch (Exception ex) {
-                    // Ignored — client already disconnected
+                    // Ignored
                 }
             }
         });
 
         return emitter;
     }
-
-    // -----------------------------------------------------------------------
-    // History / Session API — delegated to HistoryService
-    // -----------------------------------------------------------------------
 
     public List<ChatMessage> getChatHistory(String ownerUsername, String sessionId) {
         return historyService.getChatHistory(ownerUsername, sessionId);
@@ -263,30 +123,52 @@ public class ChatService {
         return historyService.getUniqueSessions(ownerUsername);
     }
 
-    // -----------------------------------------------------------------------
-    // Private helpers
-    // -----------------------------------------------------------------------
-
-    private List<Long> resolveDocIds(Long documentId, List<Long> documentIds) {
-        List<Long> result = new ArrayList<>();
-        if (documentIds != null && !documentIds.isEmpty()) {
-            result.addAll(documentIds);
-        } else if (documentId != null) {
-            result.add(documentId);
+    private List<String> retrieveRelevantChunks(String ownerUsername, Long documentId, String query) {
+        if (documentId == null) {
+            return Collections.emptyList();
         }
+
+        List<String> allChunks = documentService.getDocumentChunks(documentId, ownerUsername);
+        if (allChunks.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Simple keyword-based retrieval: score chunks by keyword overlap
+        String[] queryWords = query.toLowerCase().split("\\W+");
+        List<Map.Entry<String, Integer>> scored = new ArrayList<>();
+
+        for (String chunk : allChunks) {
+            String lower = chunk.toLowerCase();
+            int score = 0;
+            for (String word : queryWords) {
+                if (word.length() < 3) continue;
+                int idx = 0;
+                while ((idx = lower.indexOf(word, idx)) >= 0) {
+                    score++;
+                    idx += word.length();
+                }
+            }
+            scored.add(Map.entry(chunk, score));
+        }
+
+        scored.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+        int topK = Math.min(3, scored.size());
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < topK; i++) {
+            if (scored.get(i).getValue() > 0) {
+                result.add(scored.get(i).getKey());
+            }
+        }
+
+        // If no keyword matches, return first 2 chunks as fallback
+        if (result.isEmpty() && !allChunks.isEmpty()) {
+            result.add(allChunks.get(0));
+            if (allChunks.size() > 1) {
+                result.add(allChunks.get(1));
+            }
+        }
+
         return result;
-    }
-
-    /** Prepend a mode-specific directive to the prompt when deep-thinking is active. */
-    private String decoratePrompt(String prompt, boolean forceDeepThinking, String prefix) {
-        if (!forceDeepThinking) return prompt;
-        return "DIRECTIVE: Analyze the context with extreme depth. Perform multi-step reasoning before answering.\n\n" + prompt;
-    }
-
-    private String joinIds(List<Long> ids) {
-        if (ids == null || ids.isEmpty()) return null;
-        List<String> parts = new ArrayList<>();
-        for (Long id : ids) parts.add(id.toString());
-        return String.join(",", parts);
     }
 }

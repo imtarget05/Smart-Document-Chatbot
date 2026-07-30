@@ -39,25 +39,11 @@ public class Document {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "vector_collection_id")
-    private String vectorCollectionId;
-
     @Column(name = "chunk_count")
     private Integer chunkCount;
 
     @Column(columnDefinition = "TEXT")
-    private String summary;
-
-    @Column(name = "suggested_questions", columnDefinition = "TEXT")
-    private String suggestedQuestions;
-
-    @Column(name = "concept_map", columnDefinition = "TEXT")
-    private String conceptMap;
-
-    @Column(nullable = false)
-    @Builder.Default
-    private String status = "READY";
-
+    private String chunks;
 
     @PrePersist
     public void prePersist() {

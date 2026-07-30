@@ -20,20 +20,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Use relative path in development so Vite proxy handles requests.
+// In production, set VITE_API_URL to the full backend URL.
 const API_BASE_URL =
-  (import.meta.env.VITE_API_URL as string) || "http://localhost:8080/api";
+  (import.meta.env.VITE_API_URL as string) || "/api";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Note: JWT is now stored in httpOnly cookie (set by backend).
-  // We keep username/role in memory only – NOT localStorage – to mitigate XSS.
   const [token, setToken] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
 
   const login = useCallback(
     (newToken: string, newUsername: string, newRole: string) => {
-      // Do NOT store JWT in localStorage – backend sets httpOnly cookie.
-      // Only keep non-sensitive identity info in memory for UI rendering.
       setToken(newToken);
       setUsername(newUsername);
       setRole(newRole);
@@ -42,7 +40,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    // Clear in-memory state. httpOnly cookie is cleared by backend /auth/logout.
     setToken(null);
     setUsername(null);
     setRole(null);

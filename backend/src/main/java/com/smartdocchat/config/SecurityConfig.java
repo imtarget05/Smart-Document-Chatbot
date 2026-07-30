@@ -29,91 +29,51 @@ import java.util.Arrays;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final RateLimitingFilter rateLimitingFilter;
-    private final InternalServiceAuthenticationFilter internalServiceAuthenticationFilter;
 
-    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}")
+    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:8080,http://127.0.0.1:3000}")
     private String allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // CSRF: For a stateless JWT API that uses the Authorization header (not cookies)
-        // for authentication, CSRF is not strictly required. However, because CORS is
-        // configured with allowCredentials=true (so the browser sends cookies such as
-        // the XSRF-TOKEN cookie), we enable CSRF protection with a cookie-based token
-        // repository and expose the token via the X-XSRF-TOKEN header. This protects
-        // any state-changing browser-initiated requests while remaining compatible
-        // with pure Bearer-token API clients (which are unaffected by CSRF).
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfTokenRepository.setCookiePath("/");
         csrfTokenRepository.setCookieName("XSRF-TOKEN");
         csrfTokenRepository.setHeaderName("X-XSRF-TOKEN");
 
         CsrfTokenRequestAttributeHandler csrfRequestHandler = new CsrfTokenRequestAttributeHandler();
-        csrfRequestHandler.setCsrfRequestAttributeName(null); // use default token attribute name
+        csrfRequestHandler.setCsrfRequestAttributeName(null);
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository)
                 .csrfTokenRequestHandler(csrfRequestHandler)
-                // Stateless API endpoints that authenticate via Bearer JWT are
-                // inherently immune to CSRF; exempt them to avoid breaking non-browser
-                // clients. Browser-facing endpoints still require the XSRF-TOKEN.
                 .ignoringRequestMatchers(
                     "/auth/**",
-                    "/admin/**",
                     "/documents/**",
                     "/chat/**",
-                    "/agent/**",
                     "/api/**",
                     "/actuator/**",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
-                    "/swagger-ui.html",
-                    "/system/**"
+                    "/swagger-ui.html"
                 )
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public authentication endpoints
                 .requestMatchers("/auth/**").permitAll()
-                // Public Swagger/OpenAPI docs
                 .requestMatchers(
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html"
                 ).permitAll()
-                // Only non-sensitive health endpoints are public.
-                .requestMatchers("/actuator/health/**", "/actuator/info", "/system/health").permitAll()
-                .requestMatchers("/actuator/prometheus").hasRole("SERVICE")
-                .requestMatchers("/documents/*/etl-complete", "/documents/*/etl-fail").hasRole("SERVICE")
-
-                // ========== RBAC: Role-based access ==========
-                // Admin only: user management and audit logs
-                .requestMatchers("/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/audit/**").hasRole("ADMIN")
-
-                // Engineer+Admin: data sources and ingestion
-                .requestMatchers("/api/datasources/**").hasAnyRole("ENGINEER", "ADMIN")
-                .requestMatchers("/api/ingestion/**").hasAnyRole("ENGINEER", "ADMIN")
-
-                // Engineer+Admin: 8D cases and evaluation
-                .requestMatchers("/api/8d-cases/**").hasAnyRole("ENGINEER", "ADMIN")
-                .requestMatchers("/api/evaluations/**").hasAnyRole("ENGINEER", "ADMIN")
-
-                // Authenticated users: documents and chat
+                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                 .requestMatchers(HttpMethod.GET, "/documents/**").authenticated()
-                .requestMatchers(HttpMethod.DELETE, "/documents/**").hasAnyRole("ENGINEER", "ADMIN")
-                .requestMatchers(HttpMethod.PATCH, "/documents/**").hasAnyRole("ENGINEER", "ADMIN")
-
-                // All other backend APIs require authentication
+                .requestMatchers(HttpMethod.DELETE, "/documents/**").authenticated()
                 .anyRequest().authenticated()
             );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        http.addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class);
-        http.addFilterBefore(rateLimitingFilter, InternalServiceAuthenticationFilter.class);
 
         return http.build();
     }

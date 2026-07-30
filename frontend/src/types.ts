@@ -4,11 +4,17 @@ export interface Document {
   fileSize: number;
   fileType: string;
   chunkCount: number;
-  status: "PROCESSING" | "READY" | "FAILED";
-  summary?: string;
-  suggestedQuestions?: string;
-  vectorCollectionId?: string;
   createdAt: string;
+}
+
+export interface ChatMessage {
+  id?: number;
+  sessionId: string;
+  userMessage: string;
+  aiResponse: string;
+  sourceChunks?: string | null;
+  documentId?: number | null;
+  isStreaming?: boolean;
 }
 
 export interface ChatSession {
