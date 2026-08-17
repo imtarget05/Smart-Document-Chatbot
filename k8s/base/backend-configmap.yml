@@ -18,7 +18,7 @@ data:
   SUPABASE_BUCKET: "documents"
   # LLM Router
   LLM_BASE_URL: "http://llm-router:8000"
-  LLM_CHAT_MODEL: "llama3.2:3b"
+  LLM_CHAT_MODEL: "qwen2.5:7b"
   LLM_EMBEDDING_MODEL: "nomic-embed-text"
   LLM_TEMPERATURE: "0.3"
   CORS_ALLOWED_ORIGINS: "https://CHANGE_ME_FRONTEND_HOST"

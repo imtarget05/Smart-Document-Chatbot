@@ -46,6 +46,11 @@ __pycache__/
 uploads/
 /uploads
 
+# Local test-upload documents (PDF/DOCX/TXT fixtures)
+/Document/*.pdf
+/Document/*.docx
+/Document/*.txt
+
 # Ignore IDE specific files
 *.iml
 .gradle/

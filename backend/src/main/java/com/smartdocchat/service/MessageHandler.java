@@ -24,6 +24,9 @@ public class MessageHandler {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private static final String DEFAULT_SYSTEM_PROMPT =
+            "You are a helpful document assistant. Answer questions accurately based on the provided context.";
+
     public String buildPrompt(String userQuestion, List<String> relevantChunks) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("You are a helpful assistant that answers questions based on the provided document context. ");
@@ -42,13 +45,40 @@ public class MessageHandler {
         return prompt.toString();
     }
 
+    /** Prompt for the deep-reasoning fallback: no document context is available. */
+    public String buildGeneralKnowledgePrompt(String userQuestion) {
+        return "The retrieved documents do not contain enough relevant information. "
+                + "Use your internal knowledge to answer as accurately as possible.\n\n"
+                + "User Question: " + userQuestion;
+    }
+
+    /** Prompt for the web-search fallback: answers grounded in the returned snippets. */
+    public String buildWebSearchPrompt(String userQuestion, List<String> snippets) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Based on the following web search results, answer the question. ")
+                .append("Include the source context where relevant.\n\nWeb search results:\n");
+        for (int i = 0; i < snippets.size(); i++) {
+            prompt.append("[").append(i + 1).append("] ").append(snippets.get(i)).append("\n\n");
+        }
+        prompt.append("User Question: ").append(userQuestion);
+        return prompt.toString();
+    }
+
+    // ------------------------------------------------------------------
+    // LLM calls
+    // ------------------------------------------------------------------
+
     public String callLLM(String prompt) {
+        return callLLM(DEFAULT_SYSTEM_PROMPT, prompt);
+    }
+
+    public String callLLM(String systemPrompt, String userPrompt) {
         String result = null;
         int maxAttempts = llmConfig.getMaxAttempts();
         long backoff = llmConfig.getRetryBackoffMs();
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            result = callLLMOnce(prompt);
+            result = callLLMOnce(systemPrompt, userPrompt);
             if (!result.startsWith("Sorry, the language model is temporarily unavailable.")
                     && !result.startsWith("Sorry, I could not generate a response.")) {
                 return result;
@@ -67,11 +97,17 @@ public class MessageHandler {
 
     @SuppressWarnings("unchecked")
     public String callLLMOnce(String prompt) {
+        return callLLMOnce(DEFAULT_SYSTEM_PROMPT, prompt);
+    }
+
+    @SuppressWarnings("unchecked")
+    public String callLLMOnce(String systemPrompt, String userPrompt) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(buildChatRequest(prompt, false), headers);
+            HttpEntity<Map<String, Object>> entity =
+                    new HttpEntity<>(buildChatRequest(systemPrompt, userPrompt, false), headers);
             log.info("Calling local LLM model: {}", llmConfig.getChatModel());
 
             ResponseEntity<Map> response = restTemplate.exchange(
@@ -98,9 +134,13 @@ public class MessageHandler {
     }
 
     public void streamLLM(String prompt, Consumer<String> onToken) {
+        streamLLM(DEFAULT_SYSTEM_PROMPT, prompt, onToken);
+    }
+
+    public void streamLLM(String systemPrompt, String userPrompt, Consumer<String> onToken) {
         restTemplate.execute(llmConfig.getChatUrl(), HttpMethod.POST, request -> {
             request.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-            objectMapper.writeValue(request.getBody(), buildChatRequest(prompt, true));
+            objectMapper.writeValue(request.getBody(), buildChatRequest(systemPrompt, userPrompt, true));
         }, response -> {
             if (!response.getStatusCode().is2xxSuccessful()) {
                 throw new IllegalStateException("Ollama stream request failed: " + response.getStatusCode());
@@ -120,13 +160,12 @@ public class MessageHandler {
         });
     }
 
-    private Map<String, Object> buildChatRequest(String prompt, boolean stream) {
+    private Map<String, Object> buildChatRequest(String systemPrompt, String userPrompt, boolean stream) {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", llmConfig.getChatModel());
         requestBody.put("messages", List.of(
-                Map.of("role", "system",
-                        "content", "You are a helpful document assistant. Answer questions accurately based on the provided context."),
-                Map.of("role", "user", "content", prompt)));
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)));
         requestBody.put("options",
                 Map.of("temperature", llmConfig.getTemperature(), "num_predict", 2048));
         requestBody.put("stream", stream);

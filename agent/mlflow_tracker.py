@@ -9,7 +9,7 @@ Usage:
     from agent.mlflow_tracker import tracker
 
     tracker.start_run(run_name="eval-run-001")
-    tracker.log_params({"model": "llama3.2:3b", "chunk_size": 512})
+    tracker.log_params({"model": "qwen2.5:7b", "chunk_size": 512})
     tracker.log_metrics({"retrieval_accuracy": 0.85, "avg_latency_ms": 1420})
     tracker.end_run()
 """

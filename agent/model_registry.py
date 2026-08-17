@@ -31,6 +31,12 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+# Directory that stores local registry records (JSON) when MLflow is not used.
+# The default is relative to the agent working directory (Docker WORKDIR=/app),
+# which maps to `agent/model_registry/` inside the repo. It is a DATA directory
+# and intentionally shares the base name with this module (`model_registry.py`);
+# on import, the module always wins, so `from agent.model_registry import registry`
+# resolves to this file. Override with the MODEL_REGISTRY_DIR env var if needed.
 REGISTRY_DIR = os.getenv("MODEL_REGISTRY_DIR", "model_registry")
 QUALITY_THRESHOLD = {
     "retrieval_accuracy": 0.75,

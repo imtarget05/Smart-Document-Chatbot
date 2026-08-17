@@ -81,10 +81,10 @@ services:
       - sh
       - -c
       - |
-        echo "Pulling chat model: ${OLLAMA_CHAT_MODEL:-llama3.2:3b} ..."
+        echo "Pulling chat model: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b} ..."
         curl -sf -X POST http://ollama:11434/api/pull \
           -H 'Content-Type: application/json' \
-          -d "{\"name\": \"${OLLAMA_CHAT_MODEL:-llama3.2:3b}\"}"
+          -d "{\"name\": \"${OLLAMA_CHAT_MODEL:-qwen2.5:7b}\"}"
         echo "Pulling embedding model: nomic-embed-text ..."
         curl -sf -X POST http://ollama:11434/api/pull \
           -H 'Content-Type: application/json' \
@@ -100,8 +100,8 @@ services:
     container_name: sdc-llm-router-dev
     environment:
       LOCAL_LLM_BASE_URL: http://ollama:11434
-      LOCAL_CHAT_MODEL_SIMPLE: ${LOCAL_CHAT_MODEL_SIMPLE:-llama3.2:3b}
-      LOCAL_CHAT_MODEL_COMPLEX: ${LOCAL_CHAT_MODEL_COMPLEX:-qwen2.5:3b}
+      LOCAL_CHAT_MODEL_SIMPLE: ${LOCAL_CHAT_MODEL_SIMPLE:-qwen2.5:7b}
+      LOCAL_CHAT_MODEL_COMPLEX: ${LOCAL_CHAT_MODEL_COMPLEX:-qwen2.5:7b}
       LOCAL_EMBED_MODEL: ${LOCAL_EMBED_MODEL:-nomic-embed-text}
       LOCAL_LLM_TIMEOUT_SECONDS: ${LOCAL_LLM_TIMEOUT_SECONDS:-180}
       ROUTER_CONFIDENCE_THRESHOLD: ${ROUTER_CONFIDENCE_THRESHOLD:-0.7}
@@ -122,7 +122,7 @@ services:
       APP_ENV: local
       INTERNAL_SERVICE_TOKEN: local-development-service-token-change-me
       LLM_BASE_URL: http://llm-router:8000
-      LLM_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
+      LLM_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
       LLM_EMBEDDING_MODEL: nomic-embed-text
       # Qdrant — points to local container by default (no auth in local dev)
       QDRANT_HOST: qdrant

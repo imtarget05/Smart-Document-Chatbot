@@ -19,6 +19,7 @@ Additional infrastructure includes:
 - Ollama / LLM router for local model inference
 - PostgreSQL for document and chat metadata
 - Airflow for document ingestion ETL
+- n8n for workflow automation (self-hosted Docker Compose, dev + production)
 - Prometheus + Grafana for monitoring and observability
 
 ## 4. Key Features
@@ -55,9 +56,11 @@ The project is already quite advanced in terms of implementation. It has:
 
 - a working frontend interface
 - backend APIs for upload, chat, history, and document management
-- agent orchestration logic
+- agent orchestration logic (LangGraph multi-agent)
 - vector search integration
-- monitoring and infrastructure setup
+- monitoring and infrastructure setup (Docker Compose, Kubernetes, GitOps)
+- CI/CD automation (GitHub Actions: build, test, SonarCloud, Docker, Trivy, compliance)
+- n8n workflow automation (self-hosted via Docker Compose)
 
 However, some parts are still incomplete or not fully production-ready, especially around:
 
@@ -74,10 +77,10 @@ However, some parts are still incomplete or not fully production-ready, especial
 - Includes observability and deployment-related infrastructure
 
 ## 7. Gaps / Remaining Work
-- n8n is not present in the repository
+- n8n infrastructure is present (Docker Compose services `n8n` + `n8n-postgres`, documented in README), but the **deep integration** with the Action Agent (calling n8n webhooks via an `n8n_config.py` helper, swapping self-host / cloud via `N8N_BASE_URL`) is still on the roadmap (see `plan.md` Phase 2)
 - Some roadmap features are documented but not fully implemented
 - The agent runtime depends on installed Python dependencies and external services such as Qdrant and LLM providers
-- Some enterprise features still need further development
+- Some enterprise features still need further development (e.g. full RBAC matrix, generic REST/SQL connectors)
 
 ## 8. Conclusion
 This project is a solid prototype and a strong portfolio-grade implementation of an AI-powered document chatbot. It already demonstrates the core concepts of RAG, agent orchestration, streaming responses, and monitoring, while still having room for further hardening and feature expansion.

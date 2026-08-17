@@ -16,7 +16,7 @@ OLLAMA_URL = os.getenv(
     "LLM_BASE_URL", os.getenv("AIRFLOW_OLLAMA_URL", "http://llm-router:8000")
 )
 OLLAMA_CHAT_MODEL = os.getenv(
-    "LLM_CHAT_MODEL", os.getenv("OLLAMA_CHAT_MODEL", "llama3.2:3b")
+    "LLM_CHAT_MODEL", os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
 )
 OLLAMA_EMBEDDING_MODEL = os.getenv(
     "LLM_EMBEDDING_MODEL", os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")

@@ -11,7 +11,7 @@ Improvements over the basic Java implementation:
   4. Citation tracking:        every answer carries structured source citations
   5. Corrective CRAG loop:     query reformulation + parallel re-retrieval on low confidence
      NOTE (issue #18): CONFIDENCE_THRESHOLD is now configurable via CRAG_CONFIDENCE_THRESHOLD
-     env var. Default 0.45 is empirical; benchmark with A/B testing before production tuning.
+     env var. Default 0.6 is empirical; benchmark with A/B testing before production tuning.
 """
 
 import asyncio
@@ -34,7 +34,7 @@ from tools.qdrant_tool import QdrantHybridSearch
 logger = logging.getLogger(__name__)
 
 # CRAG confidence threshold - configurable via env var (issue #18)
-CONFIDENCE_THRESHOLD = float(os.getenv("CRAG_CONFIDENCE_THRESHOLD", "0.45"))
+CONFIDENCE_THRESHOLD = float(os.getenv("CRAG_CONFIDENCE_THRESHOLD", "0.6"))
 TOP_K = 5
 LTM_EXTRACT_INTERVAL = 5  # Extract long-term facts every N turns
 

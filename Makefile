@@ -80,7 +80,7 @@ monitoring-up: ## Start monitoring stack (Prometheus + Grafana + Loki)
 	docker compose -f docker/docker-compose.yml -f docker/docker-compose.monitoring.yml up -d
 	@echo "Monitoring started!"
 	@echo "  Prometheus: http://localhost:9090"
-	@echo "  Grafana:    http://localhost:3001 (admin/admin)"
+	@echo "  Grafana:    http://localhost:3000 (admin/admin)"
 
 monitoring-down: ## Stop monitoring stack
 	docker compose -f docker/docker-compose.yml -f docker/docker-compose.monitoring.yml down
@@ -93,13 +93,15 @@ logs: ## Show all service logs (follow)
 	docker compose -f docker/docker-compose.yml logs -f
 
 logs-backend: ## Show backend logs
-	docker compose -f docker/docker-compose.yml logs -f backend
+	docker compose -f docker/docker-compose.yml logs -f smart-document
 
 logs-frontend: ## Show frontend logs
 	docker compose -f docker/docker-compose.yml logs -f frontend
 
-logs-db: ## Show database logs
-	docker compose -f docker/docker-compose.yml logs -f postgres
+# NOTE: the production stack uses managed PostgreSQL (Neon) — there is no local
+# "postgres" container in docker-compose.yml. DB commands target the dev stack.
+logs-db: ## Show dev database logs
+	docker compose -f docker/docker-compose.dev.yml logs -f postgres
 
 # ========================
 # Testing
@@ -129,20 +131,20 @@ lint-frontend: ## Lint frontend code
 # Database
 # ========================
 
-db-backup: ## Backup PostgreSQL database
+db-backup: ## Backup dev PostgreSQL database
 	@mkdir -p backups
-	docker compose -f docker/docker-compose.yml exec -T postgres \
+	docker compose -f docker/docker-compose.dev.yml exec -T postgres \
 		pg_dump -U postgres smart_doc_chatbot > backups/db-$$(date +%Y%m%d-%H%M%S).sql
 	@echo "Database backup created in backups/"
 
-db-restore: ## Restore database from latest backup (usage: make db-restore FILE=backups/db-xxx.sql)
+db-restore: ## Restore dev database from latest backup (usage: make db-restore FILE=backups/db-xxx.sql)
 	@if [ -z "$(FILE)" ]; then echo "Usage: make db-restore FILE=backups/db-xxx.sql"; exit 1; fi
-	docker compose -f docker/docker-compose.yml exec -T postgres \
+	docker compose -f docker/docker-compose.dev.yml exec -T postgres \
 		psql -U postgres smart_doc_chatbot < $(FILE)
 	@echo "Database restored from $(FILE)"
 
-db-shell: ## Open PostgreSQL shell
-	docker compose -f docker/docker-compose.yml exec postgres psql -U postgres smart_doc_chatbot
+db-shell: ## Open dev PostgreSQL shell
+	docker compose -f docker/docker-compose.dev.yml exec postgres psql -U postgres smart_doc_chatbot
 
 # ========================
 # Cleanup

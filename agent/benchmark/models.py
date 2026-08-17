@@ -23,8 +23,8 @@ MODEL_CATALOG: Dict[str, ModelPricing] = {
 }
 
 EMBEDDING_MODEL = "nomic-embed-text"
-SIMPLE_CHAT_MODEL = "llama3.2:3b"
-COMPLEX_CHAT_MODEL = "qwen2.5:32b-instruct"
+SIMPLE_CHAT_MODEL = "qwen2.5:7b"
+COMPLEX_CHAT_MODEL = "qwen2.5:7b"
 
 
 def estimate_tokens(text: str) -> int:

@@ -42,7 +42,7 @@ docker compose -f docker-compose.yml up -d
 *   **Vite + React + TypeScript 5 (Strict Mode)**: Hệ thống Frontend được tái cấu trúc từ CRA sang **Vite**, tăng tốc độ khởi động và HMR gấp 10-20 lần. Toàn bộ mã nguồn sử dụng **TypeScript** an toàn cao, biên dịch 100% không lỗi.
 *   **TanStack Query (React Query v5)**: Quản lý cache dữ liệu tài liệu và lịch sử chat tối ưu, tự động invalidation khi upload/delete thông qua `useQuery` và `useMutation`, loại bỏ hoàn toàn việc fetch dữ liệu thủ công qua `useEffect`.
 *   **Kiến trúc Agentic CRAG (Corrective RAG) Loop**:
-    *   *Confidence Evaluation*: Đánh giá điểm tin cậy ngữ cảnh trích xuất từ Qdrant (ngưỡng 0.45).
+    *   *Confidence Evaluation*: Đánh giá điểm tin cậy ngữ cảnh trích xuất từ Qdrant (ngưỡng 0.6).
     *   *Query Reformulation*: Khi độ tin cậy thấp, kích hoạt tác nhân (Agent) tự động phân rã và viết lại câu hỏi thành các biến thể tối ưu hơn thông qua mô hình DeepSeek.
     *   *Parallel Retrieval & Reranking*: Truy vấn song song (Multi-threading) trên các vector collection và xếp hạng lại tài liệu.
     *   *Web Search Fallback*: Tự động bổ sung ngữ cảnh trực tuyến bằng API Tavily khi tài liệu không đủ dữ liệu.
@@ -113,37 +113,43 @@ Flow AI chính được chuẩn hóa trong [`docs/agent_architecture.md`](docs/a
 
 ```
 Smart-Document-Chatbot/
-├── backend/
+├── backend/                            # Java Spring Boot 3 API (context-path /api)
 │   ├── src/main/java/com/smartdocchat/
-│   │   ├── controller/               # REST Endpoints (Chat Controller hỗ trợ SSE)
-│   │   ├── service/                  # Core RAG, Agentic CRAG Loop & Embedding Services
-│   │   ├── entity/                   # ORM Entity (PostgreSQL mapping)
-│   │   ├── dto/                      # Data Transfer Objects (ChatRequest/Response)
-│   │   └── config/                   # CORS, Web MVC Configurations
-│   ├── src/main/resources/
-│   │   └── application.yml           # Cấu hình DB, LLM Model & Web Search
-│   └── pom.xml                       # Quản lý dependency Maven
-├── frontend/
+│   │   ├── controller/                 # REST endpoints (ChatController hỗ trợ SSE streaming)
+│   │   ├── service/                    # Chat, document, storage, LLM handling
+│   │   ├── repository/                 # Spring Data JPA repositories
+│   │   ├── entity/                     # JPA entities (User, Document, ChatMessage)
+│   │   ├── dto/                        # Request/Response DTOs
+│   │   ├── config/                     # Security, JWT filter, OpenAPI
+│   │   ├── exception/                  # Global exception handler
+│   │   └── util/                       # Helpers (LlmConfig, JWT, ...)
+│   ├── src/main/resources/             # application.yml, profiles, logback, Flyway db/
+│   └── pom.xml                         # Maven dependency management
+├── frontend/                           # React 18 + Vite 5 + TypeScript + TanStack Query
 │   ├── src/
-│   │   ├── components/               # ChatWindow, ConceptMap, DocumentList, DocumentUpload
-│   │   ├── App.tsx                   # Main component tích hợp React Query
-│   │   ├── index.tsx                 # Điểm đầu vào chính, khởi tạo QueryClient
-│   │   └── vite-env.d.ts             # Định nghĩa kiểu cho các biến môi trường của Vite
-│   ├── index.html                    # HTML Template chính (được dịch chuyển lên thư mục gốc)
-│   ├── vite.config.ts                # Cấu hình Vite & Server CORS Proxy
-│   └── package.json                  # Script và package dependency (TypeScript, TanStack Query)
-├── llm-router/                        # FastAPI routing, provider adapters, fallback và cost logs
-├── airflow/
-│   └── dags/
-│       └── document_etl.py           # Pipeline ETL Apache Airflow ingestion
-├── eval/                              # 📊 RAG Evaluation Pipeline
-│   ├── questions.json                # Bộ câu hỏi test (20 câu, 3 mức độ)
-│   ├── eval.py                       # Script đánh giá tự động
-│   └── results/                      # Kết quả evaluation JSON
-├── data/                              # 🗂️ Intermediate Data Artifacts
-│   └── sample_chunks.json            # Mẫu chunks để debug pipeline
-└── docker/
-    └── docker-compose.yml            # Khởi động Qdrant, PostgreSQL, Airflow, MLflow
+│   │   ├── pages/                      # LoginPage, ChatPage
+│   │   ├── context/                    # AuthContext (JWT)
+│   │   ├── components/                 # ErrorBoundary
+│   │   ├── App.tsx, index.tsx, types.ts
+│   ├── e2e/                            # Playwright smoke tests
+│   └── package.json, vite.config.ts
+├── agent/                              # Python FastAPI + LangGraph (multi-agent CRAG)
+│   ├── agents/                         # 6 specialist agents + orchestrator
+│   ├── graph/                          # LangGraph StateGraph workflow
+│   ├── tools/                          # Qdrant hybrid search, Tavily web search, report, notification
+│   ├── memory/                         # Short/long-term memory, context summarizer, VI-EN language handler
+│   ├── connectors/                     # Gmail, Google Drive, SharePoint, Slack
+│   ├── streaming/                      # SSE event helpers
+│   ├── benchmark/, eval_framework/, mcp/, a2a/, security/, improvement/
+│   └── main.py                         # FastAPI entrypoint (port 9000)
+├── llm-router/                         # FastAPI router → local Ollama (chat + embeddings)
+├── airflow/dags/document_etl.py        # Ingestion ETL DAG
+├── eval/                               # RAG evaluation scripts + question sets
+├── docker/                             # docker-compose (prod/dev/monitoring/mlops) + Dockerfiles
+│   └── docker-compose.yml              # Ollama, LLM router, backend, frontend, agent, n8n, Prometheus, Grafana
+├── k8s/                                # Kubernetes manifests (base, overlays, ArgoCD GitOps)
+├── docs/                               # Architecture, API, observability, ADR
+└── data/                               # Sample data artifacts
 ```
 
 ---
@@ -162,7 +168,7 @@ Smart-Document-Chatbot/
 [User Question]
        │
        ▼
-[Initial Retrieval (Qdrant)] ──► Max Cosine Similarity Score >= 0.45?
+[Initial Retrieval (Qdrant)] ──► Max Cosine Similarity Score >= 0.6?
        │                                     │
        ├──(YES: High Confidence)             ├──(NO: Low Confidence)
        │                                     │
@@ -173,7 +179,7 @@ Smart-Document-Chatbot/
        │                            [Parallel Re-retrieval]
        │                                     │
        │                                     ▼
-       │                            [Deduplication & Reranking] ──► Score >= 0.45?
+       │                            [Deduplication & Reranking] ──► Score >= 0.6?
        │                                     │                           │
        │                                     ├──(YES)                    ├──(NO)
        │                                     │                           │
@@ -310,7 +316,7 @@ Mỗi response từ `/chat/ask` và SSE `complete` event đều trả về cấu
 
 | Field | Ý nghĩa |
 | :--- | :--- |
-| `confidence` | `high` (≥0.70), `medium` (≥0.45), `low` (<0.45) |
+| `confidence` | `high` (≥0.70), `medium` (≥0.6), `low` (<0.6) |
 | `ragStrategy` | `direct` / `corrective` / `web_search` / `general_knowledge` |
 | `sources` | Danh sách structured citation kèm similarity score |
 

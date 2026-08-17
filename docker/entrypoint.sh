@@ -29,7 +29,7 @@ until curl -s http://localhost:11434/api/tags > /dev/null; do
 done
 
 echo "Pulling models..."
-ollama pull llama3.2:3b
+ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 
 echo "Stopping temporary Ollama process..."

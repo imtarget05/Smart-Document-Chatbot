@@ -26,13 +26,7 @@ public class ChatController {
     @PostMapping("/ask")
     public ResponseEntity<ChatResponse> askQuestion(@Valid @RequestBody ChatRequest request, Principal principal) {
         try {
-            ChatMessage message = chatService.processQuery(
-                    principal.getName(),
-                    request.getSessionId(),
-                    request.getDocumentId(),
-                    request.getMessage()
-            );
-            return ResponseEntity.ok(convertToResponse(message));
+            return ResponseEntity.ok(chatService.processQuery(principal.getName(), request));
         } catch (Exception e) {
             log.error("Error processing chat request", e);
             return ResponseEntity.status(500).build();
@@ -42,12 +36,7 @@ public class ChatController {
     @PostMapping(value = "/ask-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter askQuestionStream(@Valid @RequestBody ChatRequest request, Principal principal) {
         try {
-            return chatService.processQueryStream(
-                    principal.getName(),
-                    request.getSessionId(),
-                    request.getDocumentId(),
-                    request.getMessage()
-            );
+            return chatService.processQueryStream(principal.getName(), request);
         } catch (Exception e) {
             log.error("Error starting chat stream", e);
             SseEmitter errorEmitter = new SseEmitter();

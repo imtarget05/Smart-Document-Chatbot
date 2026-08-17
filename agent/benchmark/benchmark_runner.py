@@ -154,8 +154,8 @@ class BenchmarkRunner:
 
         latency_summary = latency_profiler.get_summary().to_dict() if self.results else None
         hardware = {
-            "simple": get_hardware_cost_estimate("llama3.2:3b"),
-            "complex": get_hardware_cost_estimate("qwen2.5:32b-instruct"),
+            "simple": get_hardware_cost_estimate("qwen2.5:7b"),
+            "complex": get_hardware_cost_estimate("qwen2.5:7b"),
             "embedding": get_hardware_cost_estimate("nomic-embed-text"),
         }
 
@@ -201,7 +201,7 @@ class BenchmarkRunner:
         latency_profiler.record(query.id, spans)
         cost_tracker.track(
             query_id=query.id,
-            model=query.expected_model or "llama3.2:3b",
+            model=query.expected_model or "qwen2.5:7b",
             input_text=query.query,
             output_text=output.get("final_answer", "") or output.get("answer", ""),
         )
@@ -219,7 +219,7 @@ class BenchmarkRunner:
             query_text=query.query,
             latency_ms=latency,
             cost_usd=per_query_cost,
-            model_used=query.expected_model or "llama3.2:3b",
+            model_used=query.expected_model or "qwen2.5:7b",
             confidence=confidence,
             spans_count=len(spans),
             passed=passed,

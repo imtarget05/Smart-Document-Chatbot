@@ -1,5 +1,8 @@
 package com.smartdocchat.service;
 
+import com.smartdocchat.config.CragConfig;
+import com.smartdocchat.dto.ChatRequest;
+import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -7,7 +10,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -15,58 +23,77 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class ChatService {
 
-    private final DocumentService documentService;
     private final MessageHandler messageHandler;
     private final HistoryService historyService;
+    private final CragConfig cragConfig;
+    private final RetrievalService retrievalService;
+    private final QueryReformulator queryReformulator;
+    private final WebSearchService webSearchService;
 
-    public ChatMessage processQuery(
-            String ownerUsername, String sessionId, Long documentId, String userMessage
+    /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
+    private record CragResult(
+            List<RetrievalService.RetrievalResult> results,
+            List<String> webSnippets,
+            double confidenceScore,
+            String strategy
     ) {
-        // Retrieve relevant chunks from the document
-        List<String> relevantChunks = retrieveRelevantChunks(ownerUsername, documentId, userMessage);
+        CragResult() {
+            this(Collections.emptyList(), Collections.emptyList(), 0.0, "direct");
+        }
 
-        // Build prompt & call LLM
-        String prompt = messageHandler.buildPrompt(userMessage, relevantChunks);
-        String aiResponse = messageHandler.callLLM(prompt);
-
-        // Build source chunks string for display
-        String sourceChunks = relevantChunks.isEmpty() ? null : String.join("\n---\n", relevantChunks);
-
-        // Persist
-        ChatMessage chatMessage = ChatMessage.builder()
-                .sessionId(sessionId)
-                .ownerUsername(ownerUsername)
-                .documentId(documentId)
-                .userMessage(userMessage)
-                .aiResponse(aiResponse)
-                .sourceChunks(sourceChunks)
-                .build();
-
-        return historyService.save(chatMessage);
+        /** Context fed to the prompt: chunks for retrieval, snippets for web search. */
+        List<String> contextChunks() {
+            return "web_search".equals(strategy)
+                    ? webSnippets
+                    : results.stream().map(RetrievalService.RetrievalResult::chunk).toList();
+        }
     }
 
-    public SseEmitter processQueryStream(
-            String ownerUsername, String sessionId, Long documentId, String userMessage
-    ) {
+    // ------------------------------------------------------------------
+    // Classic (sync) chat
+    // ------------------------------------------------------------------
+
+    public ChatResponse processQuery(String ownerUsername, ChatRequest request) {
+        String userMessage = request.getMessage();
+        CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+
+        String aiResponse = strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
+        ChatMessage saved = historyService.save(ChatMessage.builder()
+                .sessionId(request.getSessionId())
+                .ownerUsername(ownerUsername)
+                .documentId(request.getDocumentId())
+                .userMessage(userMessage)
+                .aiResponse(aiResponse)
+                .sourceChunks(buildSourceChunks(crag))
+                .build());
+        return toResponse(saved, crag);
+    }
+
+    public SseEmitter processQueryStream(String ownerUsername, ChatRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L);
 
         CompletableFuture.runAsync(() -> {
             try {
-                // Retrieve relevant chunks
-                List<String> relevantChunks = retrieveRelevantChunks(ownerUsername, documentId, userMessage);
-                String sourceChunks = relevantChunks.isEmpty() ? null : String.join("\n---\n", relevantChunks);
+                CragResult crag = runCrag(ownerUsername, request.getDocumentId(), request.getMessage(), request.isWebSearch());
 
-                // Build prompt
-                String prompt = messageHandler.buildPrompt(userMessage, relevantChunks);
-
-                // Send metadata event
-                Map<String, Object> metaEvent = new HashMap<>();
-                metaEvent.put("sourceChunks", sourceChunks);
-                metaEvent.put("documentId", documentId);
+                // Send metadata (sources + strategy) up front, before the token stream.
+                Map<String, Object> metaEvent = new LinkedHashMap<>();
+                metaEvent.put("sourceChunks", buildSourceChunks(crag));
+                metaEvent.put("documentId", request.getDocumentId());
+                metaEvent.put("confidenceScore", round(crag.confidenceScore()));
+                metaEvent.put("confidence", confidenceLabel(crag.confidenceScore()));
+                metaEvent.put("ragStrategy", crag.strategy());
                 emitter.send(SseEmitter.event().name("metadata").data(metaEvent));
 
-                // Stream LLM tokens
+                String prefix = strategyPrefix(crag);
+                String prompt = buildPromptForStrategy(request.getMessage(), crag);
                 StringBuilder aiResponseBuilder = new StringBuilder();
+
+                if (!prefix.isEmpty()) {
+                    aiResponseBuilder.append(prefix);
+                    emitter.send(SseEmitter.event().name("chunk").data(prefix));
+                }
+
                 messageHandler.streamLLM(prompt, token -> {
                     aiResponseBuilder.append(token);
                     try {
@@ -76,21 +103,16 @@ public class ChatService {
                     }
                 });
 
-                String fullResponse = aiResponseBuilder.toString();
-
-                // Persist
-                ChatMessage chatMessage = ChatMessage.builder()
-                        .sessionId(sessionId)
+                ChatMessage saved = historyService.save(ChatMessage.builder()
+                        .sessionId(request.getSessionId())
                         .ownerUsername(ownerUsername)
-                        .documentId(documentId)
-                        .userMessage(userMessage)
-                        .aiResponse(fullResponse)
-                        .sourceChunks(sourceChunks)
-                        .build();
-                ChatMessage saved = historyService.save(chatMessage);
+                        .documentId(request.getDocumentId())
+                        .userMessage(request.getMessage())
+                        .aiResponse(aiResponseBuilder.toString())
+                        .sourceChunks(buildSourceChunks(crag))
+                        .build());
 
-                // Final complete event
-                emitter.send(SseEmitter.event().name("complete").data(saved));
+                emitter.send(SseEmitter.event().name("complete").data(toResponse(saved, crag)));
                 emitter.complete();
 
             } catch (Exception e) {
@@ -123,52 +145,129 @@ public class ChatService {
         return historyService.getUniqueSessions(ownerUsername);
     }
 
-    private List<String> retrieveRelevantChunks(String ownerUsername, Long documentId, String query) {
-        if (documentId == null) {
-            return Collections.emptyList();
+    // ------------------------------------------------------------------
+    // Corrective RAG (CRAG) orchestration
+    // ------------------------------------------------------------------
+
+    private CragResult runCrag(String ownerUsername, Long documentId, String query, boolean webSearchRequested) {
+        List<RetrievalService.RetrievalResult> results =
+                retrievalService.retrieve(ownerUsername, documentId, query, cragConfig.getTopK());
+        double confidence = results.isEmpty() ? 0.0 : results.get(0).score();
+        String strategy = "direct";
+
+        if (confidence >= cragConfig.getConfidenceThreshold()) {
+            return new CragResult(results, List.of(), confidence, strategy);
         }
 
-        List<String> allChunks = documentService.getDocumentChunks(documentId, ownerUsername);
-        if (allChunks.isEmpty()) {
-            return Collections.emptyList();
-        }
+        // Corrective loop: reformulate (if possible) and re-retrieve.
+        List<String> variants = queryReformulator.reformulate(query, cragConfig.getMaxReformulations());
+        Map<String, RetrievalService.RetrievalResult> merged = new LinkedHashMap<>();
+        results.forEach(r -> merged.put(r.chunk(), r));
+        double bestScore = confidence;
+        strategy = "corrective";
 
-        // Simple keyword-based retrieval: score chunks by keyword overlap
-        String[] queryWords = query.toLowerCase().split("\\W+");
-        List<Map.Entry<String, Integer>> scored = new ArrayList<>();
-
-        for (String chunk : allChunks) {
-            String lower = chunk.toLowerCase();
-            int score = 0;
-            for (String word : queryWords) {
-                if (word.length() < 3) continue;
-                int idx = 0;
-                while ((idx = lower.indexOf(word, idx)) >= 0) {
-                    score++;
-                    idx += word.length();
-                }
-            }
-            scored.add(Map.entry(chunk, score));
-        }
-
-        scored.sort((a, b) -> b.getValue().compareTo(a.getValue()));
-
-        int topK = Math.min(3, scored.size());
-        List<String> result = new ArrayList<>();
-        for (int i = 0; i < topK; i++) {
-            if (scored.get(i).getValue() > 0) {
-                result.add(scored.get(i).getKey());
+        for (String variant : variants) {
+            List<RetrievalService.RetrievalResult> vResults =
+                    retrievalService.retrieve(ownerUsername, documentId, variant, cragConfig.getTopK());
+            for (RetrievalService.RetrievalResult r : vResults) {
+                bestScore = Math.max(bestScore, r.score());
+                merged.putIfAbsent(r.chunk(), r);
             }
         }
+        confidence = bestScore;
 
-        // If no keyword matches, return first 2 chunks as fallback
-        if (result.isEmpty() && !allChunks.isEmpty()) {
-            result.add(allChunks.get(0));
-            if (allChunks.size() > 1) {
-                result.add(allChunks.get(1));
-            }
+        List<RetrievalService.RetrievalResult> topMerged = keepTopK(merged.values(), cragConfig.getTopK());
+        if (confidence >= cragConfig.getConfidenceThreshold()) {
+            return new CragResult(topMerged, List.of(), confidence, strategy);
         }
 
-        return result;
+        // Still low -> web search (if configured/requested) else general knowledge.
+        boolean useWeb = webSearchRequested
+                || (webSearchService.isConfigured() && cragConfig.isWebSearchEnabled());
+        if (useWeb) {
+            Optional<List<String>> web = webSearchService.search(query);
+            if (web.isPresent()) {
+                return new CragResult(List.of(), web.get(), confidence, "web_search");
+            }
+        }
+        return new CragResult(List.of(), List.of(), confidence, "general_knowledge");
+    }
+
+    private List<RetrievalService.RetrievalResult> keepTopK(
+            java.util.Collection<RetrievalService.RetrievalResult> collection, int topK) {
+        List<RetrievalService.RetrievalResult> sorted = new ArrayList<>(collection);
+        sorted.sort((a, b) -> Double.compare(b.score(), a.score()));
+        return sorted.size() > topK ? sorted.subList(0, topK) : sorted;
+    }
+
+    private String buildPromptForStrategy(String query, CragResult crag) {
+        return switch (crag.strategy()) {
+            case "web_search" -> messageHandler.buildWebSearchPrompt(query, crag.contextChunks());
+            case "general_knowledge" -> messageHandler.buildGeneralKnowledgePrompt(query);
+            default -> messageHandler.buildPrompt(query, crag.contextChunks());
+        };
+    }
+
+    private String strategyPrefix(CragResult crag) {
+        return switch (crag.strategy()) {
+            case "web_search" -> "[Web Search]\n\n";
+            case "general_knowledge" -> "[General Knowledge]\n\n";
+            default -> "";
+        };
+    }
+
+    private String buildSourceChunks(CragResult crag) {
+        List<String> context = crag.contextChunks();
+        return context.isEmpty() ? null : String.join("\n---\n", context);
+    }
+
+    // ------------------------------------------------------------------
+    // Response mapping
+    // ------------------------------------------------------------------
+
+    private ChatResponse toResponse(ChatMessage message, CragResult crag) {
+        return ChatResponse.builder()
+                .id(message.getId())
+                .sessionId(message.getSessionId())
+                .userMessage(message.getUserMessage())
+                .aiResponse(message.getAiResponse())
+                .sourceChunks(message.getSourceChunks())
+                .documentId(message.getDocumentId())
+                .confidence(confidenceLabel(crag.confidenceScore()))
+                .confidenceScore(round(crag.confidenceScore()))
+                .ragStrategy(crag.strategy())
+                .sources(buildSources(message.getDocumentId(), crag))
+                .build();
+    }
+
+    private List<Map<String, Object>> buildSources(Long documentId, CragResult crag) {
+        List<Map<String, Object>> sources = new ArrayList<>();
+        for (RetrievalService.RetrievalResult r : crag.results()) {
+            String content = r.chunk();
+            if (content.length() > 300) {
+                content = content.substring(0, 300);
+            }
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("documentId", documentId);
+            s.put("content", content);
+            s.put("score", round(r.score()));
+            s.put("sourceType", "document");
+            sources.add(s);
+        }
+        return sources;
+    }
+
+    private String confidenceLabel(double score) {
+        if (score >= 0.70) {
+            return "high";
+        }
+        if (score >= 0.6) {
+            return "medium";
+        }
+        return "low";
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 }

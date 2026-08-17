@@ -21,7 +21,7 @@ class CostEvalCase(EvalCase):
         query: str,
         document_ids: list[str],
         max_cost_usd: float = 0.05,
-        model: str = "llama3.2:3b",
+        model: str = "qwen2.5:7b",
         importance: float = 1.0,
     ):
         super().__init__(case_id, name, importance=importance)
