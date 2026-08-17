@@ -2,18 +2,21 @@
 
 ## 1. Overview
 
-Engineering Intelligence Copilot can be self-hosted for internal engineering teams.
+Smart Document Chatbot can be self-hosted for internal engineering teams.
 
 Target deployment shape:
 
 - React frontend
-- FastAPI backend
+- Java Spring Boot backend
+- Python FastAPI agent service (LangGraph orchestration)
 - PostgreSQL
 - Qdrant
-- optional Ollama or OpenAI-compatible provider
+- Ollama via LLM router (or OpenAI-compatible provider)
+- Prometheus + Grafana (optional)
+- n8n workflow automation (optional)
 - reverse proxy (Nginx or similar)
 
-This guide describes recommended setup path even though full new-stack Docker Compose is not finished yet.
+This guide describes the recommended setup path for the full production stack in `docker/docker-compose.yml`.
 
 ---
 
@@ -35,29 +38,29 @@ This guide describes recommended setup path even though full new-stack Docker Co
 
 ## 3. Recommended Environment Variables
 
-Backend examples:
+Backend examples (see `.env.example` at repo root):
 
 ```env
-EIC_APP_NAME=Engineering Intelligence Copilot API
-EIC_ENVIRONMENT=production
-EIC_DEBUG=false
-EIC_DATABASE_URL=postgresql+psycopg://user:password@postgres:5432/engineering_copilot
-EIC_QDRANT_URL=http://qdrant:6333
-EIC_QDRANT_COLLECTION=engineering_knowledge
-EIC_LLM_PROVIDER=mock
-EIC_LLM_MODEL=llama3.1:8b
-EIC_EMBEDDING_PROVIDER=mock
-EIC_EMBEDDING_MODEL=nomic-embed-text
-EIC_JWT_SECRET_KEY=replace-with-strong-secret
-EIC_ACCESS_TOKEN_EXPIRE_MINUTES=60
+DATABASE_URL=jdbc:postgresql://postgres:5432/smart_doc_chatbot
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=replace-with-strong-secret
+POSTGRES_DB=smart_doc_chatbot
+JWT_SECRET=replace-with-random-48-char-secret
+INTERNAL_SERVICE_TOKEN=replace-with-random-48-char-secret
+QDRANT_HOST=qdrant
+QDRANT_PORT=6333
+QDRANT_API_KEY=
+OLLAMA_BASE_URL=http://ollama:11434
+LOCAL_CHAT_MODEL_SIMPLE=qwen2.5:7b
+LOCAL_CHAT_MODEL_COMPLEX=qwen2.5:7b
+LOCAL_EMBED_MODEL=nomic-embed-text
+LLM_CHAT_MODEL=qwen2.5:7b
+LLM_EMBEDDING_MODEL=nomic-embed-text
+LLM_TEMPERATURE=0.3
+AGENT_RATE_LIMIT_RPM=30
 ```
 
-Frontend examples:
-- backend API base URL
-- auth config
-- feature flags if needed
-
-Do not commit production secrets to source control.
+Do not commit production secrets to source control. Generate secrets with `openssl rand -base64 48`.
 
 ---
 
@@ -68,11 +71,13 @@ Users
   │
   ▼
 Reverse Proxy / Load Balancer
-  ├─ Frontend
-  └─ Backend API
+  ├─ Frontend (React)
+  ├─ Backend API (Spring Boot)
+  ├─ Agent Service (FastAPI)
+  └─ LLM Router (Ollama)
         ├─ PostgreSQL
         ├─ Qdrant
-        └─ LLM / Embedding Provider
+        └─ n8n (optional)
 ```
 
 Recommendation:
@@ -85,21 +90,21 @@ Recommendation:
 ## 5. Local-to-Production Path
 
 ### Stage 1 — Local Development
-- run frontend locally
-- run backend locally
-- run PostgreSQL and Qdrant in Docker
-- use mock provider or local Ollama
+- run frontend locally (`npm run dev`)
+- run backend locally (`mvn spring-boot:run`)
+- run PostgreSQL, Qdrant, and Ollama in Docker
+- use local Ollama models (qwen2.5:7b + nomic-embed-text)
 
 ### Stage 2 — Single Host
-- Docker Compose on one VM
-- reverse proxy in front
+- `docker compose up -d` with the production compose file
+- reverse proxy in front (Nginx config included under `docker/`)
 - persistent volumes
 - environment variables via `.env` or secret injection
 
 ### Stage 3 — Managed/Internal Platform
+- deploy via Kubernetes manifests under `k8s/` (ArgoCD GitOps)
 - separate DB and vector DB
-- deploy app services independently
-- attach monitoring and backup policies
+- attach monitoring (Prometheus/Grafana) and backup policies
 - enforce TLS and centralized secrets
 
 ---
@@ -165,19 +170,13 @@ Recommendations:
 
 ## 9. LLM Provider Options
 
-## Option A — Mock Provider
-Use for:
-- backend startup validation
-- demo without model dependency
-- CI or smoke tests
-
-## Option B — Ollama
+## Option A — Local Ollama
 Use for:
 - local/private deployment
 - internal testing
 - lower external dependency
 
-## Option C — OpenAI-Compatible API
+## Option B — OpenAI-Compatible API
 Use for:
 - stronger hosted models
 - managed inference
@@ -201,10 +200,11 @@ Recommended:
 - audit logs for AI operations
 - container/service monitoring
 
-Current new backend already provides:
-- `/health`
-- `/ready`
-- `/metrics` placeholder
+Current stack already provides:
+- Spring Boot Actuator health endpoint (`/api/actuator/health`)
+- Prometheus scrape target configured in `docker/monitoring/prometheus.yml`
+- Grafana dashboards
+- AOP-based audit logging for sensitive actions
 
 ---
 
@@ -245,18 +245,16 @@ See also:
 ## 13. Current Status
 
 Implemented now:
-- new backend scaffold
-- config loading
-- API v1 root router
-- health/ready/metrics endpoints
-- architecture/demo/security/interview docs
+- production Docker Compose stack (`docker/docker-compose.yml` + dev/monitoring/mlops variants)
+- Kubernetes manifests + ArgoCD GitOps under `k8s/`
+- GitHub Actions CI/CD pipeline
+- RBAC (ADMIN / ENGINEER / VIEWER) + audit logging
+- agentic CRAG pipeline with Ollama LLM router
+- RAG evaluation harness (`eval/`, `agent/benchmark`)
 
 Still pending for complete self-hosted stack:
-- production Docker Compose for new Python-first stack
-- migrations and DB models
-- auth + RBAC
-- ingestion APIs
-- retrieval and agent endpoints
-- frontend integration for new backend
+- wiring the evaluation API to the eval pipeline end-to-end
+- connector coverage beyond Gmail / Google Drive / SharePoint / Slack (REST API, SQL read-only)
+- Prometheus endpoint fully exposed via Spring Boot Actuator (scrape config exists in `docker/monitoring`)
 
-This means current guide is deployment-ready in structure, but not full production-ready in feature completeness.
+This means the repo is deployment-ready in structure, with feature completeness still expanding.

@@ -127,18 +127,17 @@ Mention these to sound production-minded:
 
 ## 7. What You Improved
 
-New work added in `engineering-intelligence-copilot/`:
-- FastAPI backend skeleton
-- centralized config
-- health / ready / metrics endpoints
-- API v1 router
-- architecture plan doc
-- interview talking points doc
+Newer work in this repo:
+- agentic CRAG loop: confidence evaluation, query reformulation, parallel re-retrieval, reranking, web-search fallback
+- multi-agent orchestration with LangGraph (orchestrator + 6 specialist agents)
+- RBAC (ADMIN / ENGINEER / VIEWER) + AOP-based audit logging
+- RAG evaluation harness (`eval/`, `agent/benchmark`) across local models
+- observability + GitOps: Docker Compose, Kubernetes/ArgoCD, Prometheus/Grafana, GitHub Actions CI/CD
 
 Why this matters:
-- gives clear migration path toward Python-first backend
-- keeps old working code intact
-- creates narrative for evolving system instead of rewriting blindly
+- shows I can evolve an existing system without breaking it
+- demonstrates production concerns beyond prompt engineering
+- keeps one coherent monorepo story instead of scattered prototypes
 
 ---
 
@@ -195,11 +194,9 @@ Why this matters:
 ## 10. Honest Tradeoffs
 
 Say this if asked what is unfinished:
-- frontend navigation still smaller than target product
-- Python-first backend migration started, not finished
-- metrics endpoint currently placeholder
-- evaluation UI not yet integrated end-to-end
-- connectors beyond file upload still planned
+- evaluation API not yet wired to the eval pipeline end-to-end
+- connector coverage beyond the current 4 (Gmail, Google Drive, SharePoint, Slack) still planned
+- monitoring works but dashboards and thresholds are still being tuned
 
 This sounds stronger than pretending everything done.
 

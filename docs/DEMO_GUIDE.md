@@ -34,15 +34,15 @@ Use when backend, frontend, Qdrant, and DB running.
 ### Option B — Interview Code Demo
 Use when stack only partially running.
 
-1. Show current repo structure
-2. Show existing Java backend + Python agent split
-3. Show new Python-first backend scaffold in `engineering-intelligence-copilot/backend/`
+1. Show current repo structure (one coherent monorepo)
+2. Show Java backend + Python agent split
+3. Show agentic CRAG loop + multi-agent orchestration under `agent/`
 4. Open:
    - `docs/ARCHITECTURE.md`
    - `docs/INTERVIEW_TALKING_POINTS.md`
    - `docs/SECURITY.md`
 5. Explain flows and tradeoffs
-6. Mention verified FastAPI entrypoint import works
+6. Mention RBAC, audit logging, evaluation harness, and CI/CD
 
 ---
 
@@ -56,19 +56,13 @@ Use this short story:
 
 ## 4. Screens / Files To Show
 
-## Existing Repo
-- Java backend for core product APIs
-- Python agent layer for orchestration
-- React frontend for upload + chat
-- Docker Compose for infra
-
-## New Work Added
-- `engineering-intelligence-copilot/backend/app/main.py`
-- `engineering-intelligence-copilot/backend/app/core/config.py`
-- `engineering-intelligence-copilot/backend/app/api/v1/router.py`
-- `engineering-intelligence-copilot/docs/ARCHITECTURE.md`
-- `engineering-intelligence-copilot/docs/INTERVIEW_TALKING_POINTS.md`
-- `engineering-intelligence-copilot/docs/SECURITY.md`
+## Core Repo
+- `backend/` — Java Spring Boot API (auth, documents, chat/SSE, RBAC, audit)
+- `agent/` — Python FastAPI + LangGraph multi-agent orchestration
+- `frontend/` — React + Vite + TypeScript
+- `llm-router/` — local Ollama routing (chat + embeddings)
+- `docker/`, `k8s/` — Docker Compose + Kubernetes (ArgoCD GitOps)
+- `docs/` — ARCHITECTURE.md, SECURITY.md, DEMO_GUIDE.md, SELF_HOSTING_GUIDE.md, INTERVIEW_TALKING_POINTS.md
 
 ---
 
@@ -93,7 +87,7 @@ Use this short story:
 “I treat retrieved text as untrusted input, enforce role-based permissions, and log sensitive actions.”
 
 ### Step 7 — Evolution
-“I started Python-first backend scaffold for long-term consolidation without breaking existing working services.”
+“I keep iterating on the running system: added an agentic CRAG loop with confidence-based fallbacks, RBAC + audit logging, and an evaluation harness — without breaking existing services.”
 
 ---
 
@@ -105,7 +99,7 @@ Use this short story:
 4. “User questions trigger retrieval, grounded prompting, and cited answers.”
 5. “More complex tasks route to specialist agents like report summary or 8D problem solving.”
 6. “I also planned for security, auditability, and evaluation instead of treating this as only prompt engineering.”
-7. “To align with Python-first target architecture, I added new FastAPI scaffold and docs for migration path.”
+7. “To evolve the product, I added agentic CRAG, RBAC, audit logging, and an evaluation harness on the existing stack instead of rewriting.”
 
 ---
 
@@ -114,8 +108,8 @@ Use this short story:
 Say this calmly:
 
 - “Core architecture and service boundaries are complete.”
-- “Current repo already has Java backend, Python agent layer, and frontend.”
-- “I also added Python-first backend skeleton to support migration.”
+- “Current repo has Java backend, Python agent layer, and React frontend.”
+- “Recent work added agentic CRAG, RBAC with audit logging, and an evaluation harness.”
 - “If live infra is unavailable, I can still walk through ingestion flow, retrieval flow, agent routing, and security model from code and docs.”
 
 Then show:
@@ -137,7 +131,7 @@ Efficient semantic retrieval with metadata filtering.
 Java good for core APIs; Python ecosystem faster for agent experimentation and LLM tooling.
 
 ### “What is unfinished?”
-Frontend feature expansion, full ingestion connectors, 8D persistence, integrated evaluation UI, full Docker Compose for new Python-first stack.
+Frontend feature expansion, full ingestion connector coverage (REST API, SQL read-only), evaluation API not yet wired to the eval pipeline end-to-end.
 
 ---
 

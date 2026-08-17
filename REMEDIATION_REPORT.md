@@ -101,18 +101,21 @@ Smart Document Chatbot audit.
 
 - **#35 SharePoint mock** — Already has real Microsoft Graph path; mock is
   opt-in for demos and logs when enabled.
-- **#36 Engineering Copilot mock provider** — `config.py`: Changed default
-  from `mock` to `ollama`. Also removed `change-me` JWT secret default with
-  validator.
-- **#37 Engineering Copilot metrics placeholder** — `main.py`: Replaced
-  placeholder metrics with real Prometheus exporter (Counter, Histogram).
+- **#36 Engineering Copilot mock provider** — `config.py` (skeleton): Changed
+  default from `mock` to `ollama`. Also removed `change-me` JWT secret default
+  with validator. (Sub-project since removed from repo.)
+- **#37 Engineering Copilot metrics placeholder** — `main.py` (skeleton):
+  Replaced placeholder metrics with real Prometheus exporter (Counter,
+  Histogram). (Sub-project since removed from repo.)
 - **#38 PostHog stub** — `posthog.ts`: Replaced console.debug stub with real
   PostHog SDK integration (dynamic import, env-gated).
 - **#39 GA/GTM placeholder IDs** — `analytics.ts`: Removed `G-XXXXXXXXXX` /
   `GTM-XXXXXXX` placeholders. Analytics disabled unless real IDs provided.
 - **#40 Finance agent stub** — Documented as stub with integration path.
-- **#41 Business metrics estimates** — `business_metrics.py`: Added
-  `is_estimate` flag to all metrics; warnings logged when estimates are used.
+- **#41 Business metrics estimates** — The `app/metrics/business_metrics.py`
+  module (before/after business metrics measurement) was removed as an orphan:
+  it was not referenced by any runtime code (agent, backend, frontend, tests,
+  Docker). Business-impact figures remain documented in `docs/BUSINESS_IMPACT.md`.
 - **#42 Evaluation results placeholder** — Documented; load test covers eval.
 
 ---
@@ -160,8 +163,9 @@ Smart Document Chatbot audit.
 
 ## H. Code Quality (Issues #62-66)
 
-- **#62 print() in production** — `retrain.py` + `drift_detector.py` +
-  `business_metrics.py`: Replaced `print()` with `logger.info()` / `logger.warning()`.
+- **#62 print() in production** — `retrain.py` + `drift_detector.py`: Replaced
+  `print()` with `logger.info()` / `logger.warning()`. (The orphaned
+  `business_metrics.py` was removed — see #41.)
 - **#63 console.debug** — `posthog.ts`: Replaced console.debug stub with real
   PostHog SDK integration.
 - **#64 Bare except** — `main.py` + `rag_agent.py`: Replaced bare
@@ -199,9 +203,7 @@ Smart Document Chatbot audit.
 | `frontend/src/lib/posthog.ts` | #38, #63 |
 | `frontend/src/lib/analytics.ts` | #39 |
 | `frontend/package.json` | #65 |
-| `engineering-intelligence-copilot/backend/app/core/config.py` | #36 |
-| `engineering-intelligence-copilot/backend/app/main.py` | #37 |
-| `app/metrics/business_metrics.py` | #41, #62 |
+| ~~`engineering-intelligence-copilot/backend/...`~~ (sub-project removed) | #36, #37 |
 | `tests/test_prompt_injection.py` | #49 (new) |
 | `tests/test_settings_security.py` | #49 (new) |
 | `tests/test_load.py` | #53 (new) |

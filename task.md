@@ -68,7 +68,7 @@ Dự án hiện có một nền tảng chatbot RAG đa tài liệu hoàn chỉnh
 - [x] **Compliance pipeline** (.github/workflows/compliance.yml)
 
 ### 8. Tài liệu
-- [x] Docs trong `engineering-intelligence-copilot/docs/`: ARCHITECTURE.md, SECURITY.md, DEMO_GUIDE.md, SELF_HOSTING_GUIDE.md, INTERVIEW_TALKING_POINTS.md
+- [x] Docs trong `docs/` root: ARCHITECTURE.md, SECURITY.md, DEMO_GUIDE.md, SELF_HOSTING_GUIDE.md, INTERVIEW_TALKING_POINTS.md
 - [x] API.md, OBSERVABILITY.md, PERFORMANCE.md, agent_architecture.md
 - [x] IMPLEMENTATION_PLAN.md, EXECUTION_PLAN.md
 - [x] README.md
@@ -76,7 +76,7 @@ Dự án hiện có một nền tảng chatbot RAG đa tài liệu hoàn chỉnh
 ## Chưa hoàn thiện / còn thiếu
 
 ### 1. Kiến trúc backend
-- [ ] Backend chính vẫn là Java Spring Boot, chưa chuyển hoàn toàn sang FastAPI Python. engineering-intelligence-copilot/ có skeleton FastAPI nhưng chưa hoàn chỉnh.
+- [ ] Backend chính vẫn là Java Spring Boot, chưa chuyển hoàn toàn sang FastAPI Python.
 - [ ] Service Python hiện tại chủ yếu là agent/orchestration layer.
 
 ### 2. Kết nối nguồn dữ liệu bên ngoài (CƠ BẢN ĐÃ CÓ)
@@ -119,5 +119,5 @@ Dự án hiện có một nền tảng chatbot RAG đa tài liệu hoàn chỉnh
   - [x] 4.3 Sidebar navigation + React Router multi-page + role-based UI
 - [x] Phase 5: CI/CD & Documentation
   - [x] 5.1 GitHub Actions CI pipeline (ci.yml, cd.yml, compliance.yml)
-  - [x] 5.2 ARCHITECTURE.md, SECURITY.md, README.md (trong engineering-intelligence-copilot/docs/)
-  - [x] 5.3 DEMO_GUIDE.md, SELF_HOSTING_GUIDE.md (trong engineering-intelligence-copilot/docs/)
+  - [x] 5.2 ARCHITECTURE.md, SECURITY.md, README.md (trong docs/ root)
+  - [x] 5.3 DEMO_GUIDE.md, SELF_HOSTING_GUIDE.md (trong docs/ root)

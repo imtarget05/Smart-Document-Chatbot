@@ -90,10 +90,10 @@ Use:
 - secret rotation procedure
 
 Minimum variables:
-- `EIC_JWT_SECRET_KEY`
-- database credentials
+- `JWT_SECRET`
+- database credentials (POSTGRES_USER / POSTGRES_PASSWORD)
 - LLM provider credentials
-- internal service token
+- `INTERNAL_SERVICE_TOKEN`
 
 ---
 

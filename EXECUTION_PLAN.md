@@ -21,8 +21,8 @@
 | 4.2 KnowledgeBase page | ❌ Incomplete | ✅ **COPONENT CÓ SẴN** | KnowledgeBasePage.tsx |
 | 4.3 Sidebar navigation + Router | ❌ Incomplete | ⚠️ **TAB-BASED, KHÔNG DÙNG ROUTER** | App.tsx dùng state tabs, không React Router |
 | 5.1 GitHub Actions CI | ❌ Incomplete | ❌ **CHƯA CÓ** | Không thấy .github/workflows |
-| 5.2 Docs (ARCHITECTURE, SECURITY, README) | ❌ Incomplete | ⚠️ **CÓ TRONG eng-intel-copilot/docs/** | Nhưng chưa ở root project |
-| 5.3 DEMO_GUIDE, SELF_HOSTING_GUIDE | ❌ Incomplete | ✅ **ĐÃ CÓ TRONG eng-intel-copilot/docs/** | Cần copy/sync ra root |
+| 5.2 Docs (ARCHITECTURE, SECURITY, README) | ❌ Incomplete | ✅ **CÓ TRONG docs/ root** | ARCHITECTURE.md, SECURITY.md đã sync về root docs/ |
+| 5.3 DEMO_GUIDE, SELF_HOSTING_GUIDE | ❌ Incomplete | ✅ **CÓ TRONG docs/ root** | DEMO_GUIDE.md, SELF_HOSTING_GUIDE.md đã sync về root docs/ |
 
 ### Kết luận: Dự án đã hoàn thiện ~70-80%, nhiều item trong task.md đánh dấu chưa xong thực chất ĐÃ CÓ nhưng ở mức sơ khai/cơ bản.
 
@@ -106,9 +106,9 @@
 - [ ] 4.1.3: Docker build + push to registry
 
 #### Step 4.2: Tài liệu root project
-- [ ] 4.2.1: Copy/sync docs từ `engineering-intelligence-copilot/docs/` ra root `docs/`
-- [ ] 4.2.2: Cập nhật `README.md` với architecture overview, quick start
-- [ ] 4.2.3: Đảm bảo `ARCHITECTURE.md`, `SECURITY.md`, `DEMO_GUIDE.md`, `SELF_HOSTING_GUIDE.md` có ở root
+- [x] 4.2.1: Copy/sync docs từ `engineering-intelligence-copilot/docs/` ra root `docs/` (đã hoàn tất; sub-project sau đó đã được gỡ khỏi repo)
+- [x] 4.2.2: Cập nhật `README.md` với architecture overview, quick start
+- [x] 4.2.3: Đảm bảo `ARCHITECTURE.md`, `SECURITY.md`, `DEMO_GUIDE.md`, `SELF_HOSTING_GUIDE.md` có ở root docs/
 
 ---
 
