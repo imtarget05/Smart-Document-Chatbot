@@ -85,6 +85,6 @@ configMapGenerator:
 
 images:
   - name: ghcr.io/OWNER/smart-doc-chatbot/backend
-    newTag: 85380d3302f841e05b70c5e1df8865e4c2193524
+    newTag: 19842eed2ebdbda499c8ac198feb1ec3d010b411
   - name: ghcr.io/OWNER/smart-doc-chatbot/frontend
-    newTag: 85380d3302f841e05b70c5e1df8865e4c2193524
+    newTag: 19842eed2ebdbda499c8ac198feb1ec3d010b411
