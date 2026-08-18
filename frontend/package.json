@@ -38,7 +38,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:e2e": "playwright test"
   },
   "eslintConfig": {
@@ -57,9 +57,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "overrides": {
-    "glob": "^10.3.10",
-    "inflight": "^2.0.1"
   }
 }

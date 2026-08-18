@@ -4,7 +4,7 @@ test('unauthenticated visitor is presented with login and registration', async (
   await page.goto('/');
 
   await expect(page.getByText('Smart Doc Chatbot')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
-  await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('button', { name: 'Create Account' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign In' }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Create Account' }).first().click();
+  await expect(page.locator('form').getByRole('button', { name: 'Create Account' })).toBeVisible();
 });

@@ -24,6 +24,11 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# Frontend test artifacts
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+
 # Ignore Python cache
 __pycache__/
 *.pyc
