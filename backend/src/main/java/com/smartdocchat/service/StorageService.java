@@ -9,6 +9,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.EnumSet;
 
 /**
  * StorageService — abstraction over file storage backends.
@@ -165,9 +167,11 @@ public class StorageService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 // Write to a temp file so existing parsers (PDFBox, POI) can read it
                 String extension = objectPath.contains(".") ? objectPath.substring(objectPath.lastIndexOf('.')) : ".tmp";
-                File tempFile = File.createTempFile("sdc_download_", extension);
+                Path tempPath = Files.createTempFile("sdc_download_", extension);
+                File tempFile = tempPath.toFile();
                 tempFile.deleteOnExit();
-                Files.write(tempFile.toPath(), response.getBody());
+                Files.setPosixFilePermissions(tempPath, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+                Files.write(tempPath, response.getBody());
                 log.info("Downloaded {} bytes from Supabase: {}", response.getBody().length, objectPath);
                 return tempFile;
             }
