@@ -63,11 +63,9 @@ class MessageHandlerTest {
     }
 
     @Test
-    void buildsFallbackPromptsAndAbstention() {
+    void buildsFallbackPrompts() {
         assertTrue(messageHandler.buildGeneralKnowledgePrompt("Q").contains("Use your internal knowledge"));
         assertTrue(messageHandler.buildWebSearchPrompt("Q", List.of("snippet")).contains("[1] snippet"));
-        assertTrue(messageHandler.buildAbstentionResponse().contains("sufficient evidence"));
-        assertTrue(messageHandler.buildInjectionBlockedResponse().contains("override the assistant's behavior"));
     }
 
     @Test

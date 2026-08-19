@@ -1,12 +1,9 @@
 package com.smartdocchat.service;
 
 import com.smartdocchat.config.CragConfig;
-import com.smartdocchat.config.PromptInjectionProperties;
 import com.smartdocchat.dto.ChatRequest;
 import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
-import com.smartdocchat.metrics.RagMetrics;
-import com.smartdocchat.security.PromptInjectionDetector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,20 +31,15 @@ class ChatServiceExtraTest {
     @Mock private RetrievalService retrievalService;
     @Mock private QueryReformulator queryReformulator;
     @Mock private WebSearchService webSearchService;
-    @Mock private PromptInjectionDetector promptInjectionDetector;
-    @Mock private RagMetrics ragMetrics;
 
-    private PromptInjectionProperties promptInjectionProperties;
     private CragConfig cragConfig;
     private ChatService chatService;
 
     @BeforeEach
     void setUp() {
-        promptInjectionProperties = new PromptInjectionProperties();
         cragConfig = new CragConfig();
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
-                queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics);
+                queryReformulator, webSearchService);
         lenient().when(historyService.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -72,7 +64,8 @@ class ChatServiceExtraTest {
 
         assertEquals("medium", response.getConfidence());
         assertEquals(0.65, response.getConfidenceScore());
-        assertTrue(response.getSources().get(0).get("content").toString().length() <= 300);
+        assertEquals(350, response.getSourceChunks().length());
+        assertEquals(300, response.getSources().get(0).get("content").toString().length());
         assertEquals("document", response.getSources().get(0).get("sourceType"));
     }
 
@@ -97,21 +90,21 @@ class ChatServiceExtraTest {
     }
 
     @Test
-    void explicitWebSearchRequestWithEmptyResultsAbstains() {
+    void explicitWebSearchRequestWithEmptyResultsFallsBackToGeneralKnowledge() {
         when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt())).thenReturn(List.of());
         when(queryReformulator.reformulate(anyString(), anyInt())).thenReturn(List.of());
         when(webSearchService.search(anyString())).thenReturn(java.util.Optional.empty());
-        when(messageHandler.buildAbstentionResponse()).thenReturn("no evidence");
+        when(messageHandler.buildGeneralKnowledgePrompt(anyString())).thenReturn("general prompt");
+        when(messageHandler.callLLM("general prompt")).thenReturn("general answer");
 
         ChatResponse response = chatService.processQuery("alice", request("Who? maybe web?", true));
 
-        assertEquals("no_evidence", response.getRagStrategy());
-        assertEquals("no evidence", response.getAiResponse());
+        assertEquals("general_knowledge", response.getRagStrategy());
+        assertEquals("[General Knowledge]\n\ngeneral answer", response.getAiResponse());
     }
 
     @Test
     void generalKnowledgeFallbackPrefixesResponse() {
-        cragConfig.setAbstainEnabled(false);
         when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt())).thenReturn(List.of());
         when(queryReformulator.reformulate(anyString(), anyInt())).thenReturn(List.of());
         when(messageHandler.buildGeneralKnowledgePrompt(anyString())).thenReturn("general prompt");
