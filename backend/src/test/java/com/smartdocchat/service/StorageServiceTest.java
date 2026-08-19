@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,10 +121,11 @@ class StorageServiceTest {
         ReflectionTestUtils.setField(storageService, "supabaseUrl", "https://xyz.supabase.co");
         ReflectionTestUtils.setField(storageService, "supabaseBucket", "documents");
 
-        storageService.delete("documents/uuid.pdf");
         doThrow(new RuntimeException("gone")).when(restTemplate)
-                .exchange(eq("https://xyz.supabase.co/storage/v1/object/documents2?prefixes=uuid.pdf"),
-                        eq(HttpMethod.DELETE), any(), eq(String.class));
+                .exchange(any(String.class), eq(HttpMethod.DELETE), any(), eq(String.class));
         storageService.delete("documents2/uuid.pdf");
+
+        verify(restTemplate).exchange(eq("https://xyz.supabase.co/storage/v1/object/documents?prefixes=uuid.pdf"),
+                eq(HttpMethod.DELETE), any(), eq(String.class));
     }
 }

@@ -203,6 +203,9 @@ jobs:
           -Dsonar.organization=imtarget05
           -Dsonar.host.url=https://sonarcloud.io
           -Dsonar.projectBaseDir=${{ github.workspace }}/backend
+          -Dsonar.sources=src/main/java
+          -Dsonar.exclusions=**/dto/**,**/entity/**,**/config/**
+          -Dsonar.coverage.exclusions=**/dto/**,**/entity/**,**/config/**,**/*Application.java
           -Dsonar.token=${{ secrets.SONAR_TOKEN }}
 
   sonarcloud-frontend:
