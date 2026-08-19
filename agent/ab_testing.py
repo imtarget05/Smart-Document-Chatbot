@@ -218,7 +218,7 @@ class ABTestManager:
         if not exp or exp.status != "active":
             return None
 
-        hash_val = int(hashlib.md5(query_id.encode()).hexdigest(), 16) % 1000 / 1000.0
+        hash_val = int(hashlib.sha256(query_id.encode()).hexdigest(), 16) % 1000 / 1000.0
         cumulative = 0.0
         for variant in exp.variants:
             cumulative += variant.weight
