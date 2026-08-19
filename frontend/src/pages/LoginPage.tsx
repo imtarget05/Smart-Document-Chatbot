@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth, API_BASE_URL } from "../context/AuthContext";
+import { csrfHeaders } from "../csrf";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -22,7 +23,7 @@ export default function LoginPage() {
       const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrfHeaders() },
         body: JSON.stringify({
           username: authUsername,
           password: authPassword,

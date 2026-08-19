@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
 import { useAuth, API_BASE_URL } from "../context/AuthContext";
+import { csrfHeaders } from "../csrf";
 import type { Document, ChatMessage as ChatMessageType } from "../types";
 
 export default function ChatPage() {
@@ -105,6 +106,7 @@ export default function ChatPage() {
         method: "POST",
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...csrfHeaders(),
         },
         body: formData,
       });
@@ -166,6 +168,7 @@ export default function ChatPage() {
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...csrfHeaders(),
         },
         body: JSON.stringify(payload),
       });
