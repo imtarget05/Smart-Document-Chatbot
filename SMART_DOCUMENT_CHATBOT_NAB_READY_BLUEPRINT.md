@@ -1616,7 +1616,7 @@ docs/adr/
 ├── ADR-003-crag.md
 ├── ADR-004-qdrant.md
 ├── ADR-005-llm-routing.md
-├── ADR-006-airflow.md
+├── ADR-006-cloudflare-workers-ai.md
 ├── ADR-007-kubernetes-gitops.md
 ├── ADR-008-ai-evaluation.md
 └── ADR-009-prompt-injection-defense.md

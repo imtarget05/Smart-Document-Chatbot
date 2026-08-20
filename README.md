@@ -4,10 +4,10 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![TanStack Query](https://img.shields.io/badge/TanStack_Query-5.x-FF4154?logo=reactquery&logoColor=white)](https://tanstack.com/query)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.2.x-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-black)](https://ollama.com/)
+[![Cloudflare Workers AI](https://img.shields.io/badge/Cloudflare_Workers_AI-LLM-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers-ai/)
 [![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-red?logo=qdrant&logoColor=white)](https://qdrant.tech/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Airflow](https://img.shields.io/badge/Apache_Airflow-ETL-017CEE?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
+[![Cloudflare R2](https://img.shields.io/badge/Cloudflare_R2-Storage-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/r2/)
 
 Dự án mẫu mực kết hợp giữa **Kỹ nghệ Phần mềm truyền thống (Software Engineering)** chất lượng cao và **Kỹ nghệ Trí tuệ Nhân tạo hiện đại (AI Engineering)** theo xu thế công nghệ năm 2025. Hệ thống là một nền tảng **Agentic Corrective RAG (CRAG)** đa tài liệu (Multi-document) mạnh mẽ, hỗ trợ phân tích định dạng tệp thông minh, suy luận sâu và stream kết quả thời gian thực token-by-token.
 
@@ -52,7 +52,8 @@ docker compose -f docker-compose.yml up -d
 *   **Multi-Document Synthesis**: Hỗ trợ lựa chọn linh hoạt giữa chế độ hỏi đáp trên một tài liệu đơn lẻ (Single File Mode) hoặc tổng hợp ngữ cảnh chéo trên nhiều tài liệu cùng lúc (Multi-File Chat Mode).
 *   **Trích dẫn Nguồn ngữ cảnh (Citations)**: Hiển thị minh bạch nguồn gốc thông tin trích xuất (metadata tệp, nội dung đoạn văn gốc, điểm số tương đồng) giúp kiểm chứng tính chính xác của phản hồi.
 *   **Prompt-Injection Defense**: Kiểm tra heuristic trên câu hỏi người dùng trước mọi lời gọi LLM; các yêu cầu cố gắng ghi đè chỉ thị / lộ system prompt / trích xuất bí mật bị chặn (xem `backend/.../security/PromptInjectionDetector.java`).
-*   **Apache Airflow Ingestion ETL** *(Prototype)*: DAG `document_etl.py` phân tách trang, làm sạch nội dung, sinh embeddings và nạp index vào Qdrant. **Lưu ý:** đường upload chính của sản phẩm (Spring Boot) xử lý inline (parse → chunk → lưu PostgreSQL), Airflow là pipeline ETL độc lập kích hoạt thủ công bằng conf — chưa nối vào luồng upload mặc định.
+*   **Cloudflare Workers AI**: LLM primary (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) và embedding (`@cf/baai/bge-base-en-v1.5`) chạy qua LLM Router (Ollama-compatible API), fallback local Ollama khi Cloudflare không khả dụng.
+*   **Cloudflare R2 Storage**: Lưu trữ tài liệu gốc (S3-compatible) thay thế Supabase Storage.
 
 ---
 
@@ -107,11 +108,11 @@ Dịch vụ Python Agent (LangGraph multi-agent) chạy độc lập trên cổn
 | Layer | Công nghệ | Vai trò & Lý do chọn lựa |
 | :--- | :--- | :--- |
 | **Backend Core** | Spring Boot 3.2.x | RESTful API, auth JWT, owner isolation, CRAG orchestration, SSE streaming, Graceful Shutdown. |
-| **AI LLM Runtime** | FastAPI LLM Router → Ollama cục bộ (`qwen2.5:7b`, `nomic-embed-text`) | Router phân phối tác vụ đơn giản/phức tạp giữa 2 model cục bộ. **Chỉ local — không còn route cloud** (OpenAI/Anthropic/Gemini đã gỡ bỏ, xem `llm-router/README.md`). |
-| **Embedding Engine** | Ollama | Sinh embedding `nomic-embed-text` 768 chiều — dùng trong Agent Service (Qdrant) và Airflow DAG. |
-| **Vector DB** | Qdrant (REST API) | Retrieval vector cho Agent Service (collection riêng theo user+doc) và Airflow ingestion — **không nằm trong luồng chat Java** (Java dùng lexical scoring trên chunks PostgreSQL). |
+| **AI LLM Runtime** | FastAPI LLM Router → Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) | Router phân phối tác vụ đơn giản/phức tạp giữa 2 model Workers AI, fallback local Ollama khi Cloudflare không khả dụng. |
+| **Embedding Engine** | Cloudflare Workers AI (`@cf/baai/bge-base-en-v1.5`) | Sinh embedding 768 chiều — fallback `nomic-embed-text` local (Ollama). |
+| **File Storage** | Cloudflare R2 (S3-compatible) | Lưu trữ tài liệu gốc upload, thay thế Supabase Storage. |
+| **Vector DB** | Qdrant (REST API) | Retrieval vector cho Agent Service (collection riêng theo user+doc) — **không nằm trong luồng chat Java** (Java dùng lexical scoring trên chunks PostgreSQL). |
 | **Relational DB** | PostgreSQL 15 | Metadata tệp, chunks, lịch sử hội thoại chuẩn hóa ACID, Flyway migrations. |
-| **Data Pipelines** | Apache Airflow *(Prototype)* | DAG ETL độc lập (parse → embed → index Qdrant), kích hoạt thủ công; chưa nối vào upload path. |
 | **Frontend Platform** | Vite 5 + React 18 | Build tool hiện đại, HMR nhanh, TypeScript strict. |
 | **State & Caching** | TanStack Query v5 | Quản lý server-state, cache-busting, retry, loading skeleton. |
 | **Telemetry** | Prometheus / Actuator / structured logs (JSON) | Metrics RAG, health probes, logs có `requestId`; MLflow tùy chọn cho eval. |
@@ -152,14 +153,12 @@ Smart-Document-Chatbot/
 │   ├── benchmark/, eval_framework/, security/, improvement/
 │   ├── mcp/, a2a/, adk_*               # CUSTOM implementations lấy cảm hứng từ MCP/A2A/ADK (không phải SDK chính thức)
 │   └── main.py                         # FastAPI entrypoint (port 9000)
-├── llm-router/                         # FastAPI router → local Ollama (chat + embeddings)
-├── airflow/dags/document_etl.py        # Ingestion ETL DAG
+├── llm-router/                         # FastAPI router → Cloudflare Workers AI (chat + embeddings, Ollama fallback)
 ├── eval/                               # RAG evaluation scripts + question sets
-├── docker/                             # docker-compose (prod/dev/monitoring/mlops) + Dockerfiles
-│   └── docker-compose.yml              # Ollama, LLM router, backend, frontend, agent, n8n, Prometheus, Grafana
+├── docker/                             # docker-compose (prod/dev/monitoring) + Dockerfiles
+│   └── docker-compose.yml              # LLM router, backend, frontend, agent, n8n, Prometheus, Grafana
 ├── k8s/                                # Kubernetes manifests (base, overlays, ArgoCD GitOps)
-├── docs/                               # Architecture, API, observability, ADR
-└── data/                               # Sample data artifacts
+└── docs/                               # Architecture, API, observability, ADR
 ```
 
 ---
@@ -170,8 +169,7 @@ Smart-Document-Chatbot/
 1. **Upload**: Tải tài liệu định dạng `.pdf`, `.docx` hoặc `.txt` (kiểm tra loại nội dung ở backend).
 2. **Parsing**: Apache PDFBox / POI phân tách cấu trúc văn bản.
 3. **Chunking**: Cắt nhỏ văn bản thành các phân đoạn (kích thước 500 ký tự).
-4. **Lưu trữ**: Metadata + chunks (JSON) lưu vào **PostgreSQL**; owner isolation theo `owner_username`.
-5. *(Đường ETL thay thế)*: Airflow DAG `document_etl.py` parse → embed (`nomic-embed-text`) → index vào **Qdrant** (kích hoạt thủ công).
+4. **Lưu trữ**: Tài liệu gốc lưu vào **Cloudflare R2**; metadata + chunks (JSON) lưu vào **PostgreSQL**; owner isolation theo `owner_username`.
 
 ### Quy trình Trả lời Streaming & CRAG
 ```
