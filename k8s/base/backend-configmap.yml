@@ -13,9 +13,10 @@ data:
   QDRANT_PORT: "6333"
   QDRANT_USE_HTTPS: "true"
   QDRANT_COLLECTION: "documents"
-  # Supabase Storage
-  STORAGE_PROVIDER: "supabase"
-  SUPABASE_BUCKET: "documents"
+  # Cloudflare R2 Storage (creds in backend-secrets)
+  STORAGE_PROVIDER: "r2"
+  R2_ACCOUNT_ID: "CHANGE_ME_R2_ACCOUNT_ID"
+  R2_BUCKET_NAME: "smart-doc-documents"
   # LLM Router
   LLM_BASE_URL: "http://llm-router:8000"
   LLM_CHAT_MODEL: "qwen2.5:7b"

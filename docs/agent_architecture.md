@@ -1,140 +1,81 @@
-# Agent Architecture and Demo Workflow
+# Agent Architecture (Python LangGraph Service)
 
-This project uses the Python LangGraph Agent Service as the primary AI workflow.
-Spring Boot remains the enterprise gateway for auth, API contracts, document
-management, rate limiting, and persistence.
+> **Trạng thái trung thực:** Python LangGraph Agent Service là một dịch vụ AI
+> **thử nghiệm chạy song song** với sản phẩm chính. Nó có đầy đủ endpoint riêng
+> (`/v1/agent/*` trên cổng 9000) và toàn bộ code hoạt động thật (LangGraph,
+> retrieval Qdrant, memory, security), **nhưng chưa được nối vào luồng chat
+> chính của sản phẩm**: Spring Boot và nginx không gọi dịch vụ này. Luồng
+> sản phẩm chính là Spring Boot CRAG trên PostgreSQL chunks (xem README).
 
-## Primary Flow
+## Vai trò hai dịch vụ
+
+| Dịch vụ | Vai trò | Trạng thái |
+|---|---|---|
+| Spring Boot (`:8080`) | Auth JWT, owner isolation, document CRUD, chat CRAG, SSE streaming, persistence | **Product path (đã nối)** |
+| Python Agent (`:9000`) | LangGraph multi-agent, RAG Qdrant, connector ingestion, report/action, evaluation | **Prototype / experimental (chưa nối)** |
+
+## Python Agent Service
+
+Flow nội bộ (khi gọi trực tiếp `/v1/agent/invoke`):
 
 ```text
-Frontend
-  -> Spring Boot API
-  -> Python Agent Service
-  -> LangGraph Orchestrator
-  -> Specialist Agent
-  -> Tools / Qdrant / LLM Router
+Request
+  -> Prompt-injection + input guardrails (block HIGH, sanitize MEDIUM)
+  -> Short/long-term memory load
+  -> LangGraph StateGraph:
+       orchestrator -> (rag | engineering | comparator | researcher | action | report | ingestion)
+  -> Tool calls: Qdrant hybrid search, Tavily web search
+  -> Output guardrails + SSE streaming
 ```
 
-Spring Boot responsibilities:
+### Các thành phần
 
-- JWT authentication and user isolation.
-- Document upload, metadata, and lifecycle management.
-- API gateway proxy for `/agent/*` with `X-Internal-Token`.
-- Classic `/chat/ask` and `/chat/ask-stream` compatibility.
+- `graph/workflow.py` — LangGraph StateGraph thật (import `langgraph`),
+  wiring orchestrator + 7 specialist agents còn lại qua conditional edges.
+- `agents/` — 9 file agent: orchestrator + 7 agents gắn vào graph
+  (rag, engineering, comparator, researcher, action, report, ingestion)
+  và `cskh_agent.py` **chưa được dùng** (orphan — không phải graph node).
+- `security/prompt_injection.py` + `guardrails.py` — bảo vệ thật, chạy trên
+  mọi entry point.
+- `memory/` — long-term (asyncpg/PostgreSQL), short-term, context summarizer,
+  VI-EN language handler — đều được dùng bởi rag_agent.
+- `connectors/` — Gmail/Google Drive/Slack dùng SDK thật; SharePoint mặc định
+  mock mode (`sharepoint_mock_enabled=true`).
+- `eval_framework/`, `benchmark/` — chạy như router `/eval/*`, `/benchmark/*`.
 
-Python Agent Service responsibilities:
+### ADK / A2A / MCP — custom implementations (KHÔNG phải SDK chính thức)
 
-- LangGraph intent routing and specialist agents.
-- RAG retrieval, report generation, comparison, research, actions, and engineering analysis.
-- Connector ingestion from Google Drive, Gmail, Slack, and SharePoint/mock SharePoint.
-- Long-term agent session memory in PostgreSQL.
+Các module này lấy cảm hứng từ khái niệm của Google ADK, A2A và MCP nhưng là
+code tự viết, **không** dùng `google.adk`, `mcp` SDK hay JSON-RPC A2A chính
+thức — không có package tương ứng trong `requirements.txt`. Chúng chỉ được gọi
+qua các endpoint demo riêng (`/v1/agent/adk/demo`, `/v1/a2a/*`, `/v1/mcp/*`)
+và không nằm trong invoke path. Khi trình bày, hãy mô tả đúng:
 
-## Connector Ingestion Flow
+> "Tôi xây lớp orchestration tùy chỉnh lấy cảm hứng từ các mẫu agent hiện đại
+> (ADK/A2A/MCP concepts), không phải triển khai chính thức các giao thức đó."
+
+### Connector Ingestion Flow (chỉ qua endpoint riêng)
 
 ```text
 Google Drive / Gmail / Slack / SharePoint
   -> Connector fetch_documents()
-  -> IngestionAgent
-  -> ConnectorIngestionPipeline
-  -> chunk text
-  -> embed with LLM Router / Ollama-compatible embeddings
-  -> upsert chunks into Qdrant
-  -> return collection_id
-  -> RAG / Engineering Agent can search that collection_id
+  -> IngestionAgent -> ConnectorIngestionPipeline
+  -> chunk -> embed (LLM Router / Ollama) -> upsert Qdrant (collection per user+doc hash)
 ```
 
-The connector endpoint is:
+Endpoint: `POST /v1/agent/connector/ingest` (trực tiếp trên agent:9000).
 
-```http
-POST /api/agent/connector/ingest
-Authorization: Bearer <jwt>
-Content-Type: application/json
-```
+### Evaluation
 
-Example SharePoint mock ingestion:
-
-```json
-{
-  "source": "sharepoint",
-  "params": {
-    "mock": true
-  }
-}
-```
-
-The response includes `collection_id`. Pass that value as a document id to
-`/api/agent/invoke`.
-
-## Engineering Report Workflow
-
-The `EngineeringAnalysisAgent` handles test reports, failure summaries,
-root-cause analysis, corrective actions, and 8D-style reports.
-
-Demo scenario:
-
-1. Ingest the mock SharePoint engineering test report.
-2. Copy the returned `collection_id`.
-3. Ask:
-
-```text
-Summarize failures and generate an 8D report.
-```
-
-4. Use `intentOverride: "engineering"` for deterministic demos, or let the
-   orchestrator route automatically.
-5. The agent retrieves evidence from Qdrant and returns a structured 8D report
-   with citations.
-
-Example invoke payload through Spring Boot:
-
-```json
-{
-  "query": "Summarize failures and generate an 8D report.",
-  "sessionId": "demo-8d",
-  "documentIds": ["conn_sharepoint_<hash>"],
-  "intentOverride": "engineering"
-}
-```
-
-## Agent Evaluation
-
-Classic RAG evaluation remains in `eval/eval.py` for `/chat/ask`.
-Agent-specific evaluation is in `eval/agent_eval.py` for `/agent/invoke`.
-
-Metrics produced:
-
-- intent routing accuracy
-- retrieval accuracy
-- answer completeness
-- hallucination rate
-- latency
-- source citation rate
-
-Run through Spring Boot:
-
-```bash
-python eval/agent_eval.py \
-  --base-url http://localhost:8080/api \
-  --token <jwt> \
-  --document-ids <collection_id>
-```
-
-Run directly against the Python agent service:
-
-```bash
-python eval/agent_eval.py \
-  --base-url http://localhost:9000 \
-  --direct-agent \
-  --internal-token <INTERNAL_SERVICE_TOKEN> \
-  --document-ids <collection_id>
-```
+- `eval/eval.py` — đánh giá classic `/chat/ask` (Spring Boot).
+- `eval/agent_eval.py` — đánh giá `/v1/agent/invoke` (intent routing, retrieval
+  accuracy, answer completeness, hallucination, latency, citation rate).
+- `agent/eval_framework/` — suite cases (answer quality, hallucination,
+  retrieval quality, robustness, security, cost, latency).
 
 ## Interview Positioning
 
-Use this distinction when explaining the Java and Python flows:
-
-- Java Spring Boot is the product/API layer: security, ownership, document management,
-  stable user-facing APIs, and compatibility endpoints.
-- Python LangGraph is the AI agent layer: intent routing, specialist agents,
-  tool usage, connector ingestion, evaluation, and engineering-report workflows.
-
+- Java Spring Boot là product/API layer: auth, ownership, CRAG, persistence,
+  stable user-facing APIs.
+- Python LangGraph là AI agent layer thử nghiệm: multi-agent, connector
+  ingestion, evaluation — sẵn sàng nối vào product khi có nhu cầu thực.

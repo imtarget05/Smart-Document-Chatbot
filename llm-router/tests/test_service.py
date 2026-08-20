@@ -1,11 +1,13 @@
-import json
 import asyncio
+import json
+from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 
 from app.config import Settings
-from app.models import ChatRequest
-from app.providers import ProviderError, _openai_messages
+from app.models import ChatRequest, RouteDecision, RoutingContext
+from app.providers import ProviderError
 from app.service import LLMRouter
 
 
@@ -14,35 +16,56 @@ class FakeProviders:
         self.fail_local = fail_local
         self.decisions = []
 
-    async def close(self):
+    async def close(self) -> None:
         pass
 
-    async def chat(self, request, decision, request_id):
+    async def chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> dict[str, Any]:
         self.decisions.append(decision)
-        if decision.provider == "local" and self.fail_local:
+        if self.fail_local:
             raise ProviderError("local_timeout")
         return {
+            "model": decision.model,
             "message": {"role": "assistant", "content": "ok"},
-            "router": {"provider": decision.provider, "reason": decision.reason},
+            "done": True,
+            "router": {
+                "provider": decision.provider,
+                "model": decision.model,
+                "reason": decision.reason,
+                "task_type": decision.task_type,
+                "request_id": request_id,
+            },
         }
 
-    async def stream_chat(self, request, decision, request_id):
+    async def stream_chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> AsyncIterator[bytes]:
         self.decisions.append(decision)
-        if decision.provider == "local" and self.fail_local:
+        if self.fail_local:
             raise ProviderError("local_timeout")
-        yield (json.dumps({"message": {"content": "ok"}, "done": True}) + "\n").encode()
+        payload = {
+            "model": decision.model,
+            "message": {"content": "ok"},
+            "done": True,
+            "router": {
+                "provider": decision.provider,
+                "model": decision.model,
+                "reason": decision.reason,
+                "task_type": decision.task_type,
+                "request_id": request_id,
+            },
+        }
+        yield (json.dumps(payload) + "\n").encode()
 
 
 @pytest.fixture
 def settings():
     return Settings(
         local_base_url="http://local",
-        local_model="llama-test",
+        chat_model_simple="qwen2.5:7b",
+        chat_model_complex="qwen2.5:7b",
         local_timeout_seconds=3.0,
-        anthropic_api_key="test",
-        anthropic_model="claude-test",
-        openai_api_key="test",
-        vision_model="gpt-test",
     )
 
 
@@ -50,26 +73,27 @@ def simple_request(stream=False):
     return ChatRequest(
         messages=[{"role": "user", "content": "Extract invoice number"}],
         stream=stream,
-        routing={"task_type": "extract_field", "request_id": "req-1"},
+        routing=RoutingContext(task_type="extract_field", request_id="req-1"),
     )
 
 
-def test_local_timeout_escalates_to_claude(settings):
+def test_chat_routes_through_local_provider(settings):
     async def run():
-        providers = FakeProviders(fail_local=True)
+        providers = FakeProviders()
         response = await LLMRouter(settings, providers).chat(simple_request())
         return providers, response
 
     providers, response = asyncio.run(run())
 
-    assert [item.provider for item in providers.decisions] == ["local", "anthropic"]
-    assert providers.decisions[1].reason == "escalated:local_timeout"
-    assert response["router"]["provider"] == "anthropic"
+    assert [item.provider for item in providers.decisions] == ["local"]
+    assert response["router"]["provider"] == "local"
+    assert response["router"]["model"] == settings.chat_model_simple
+    assert response["router"]["request_id"] == "req-1"
 
 
-def test_stream_timeout_before_first_chunk_escalates(settings):
+def test_stream_yields_router_metadata(settings):
     async def run():
-        providers = FakeProviders(fail_local=True)
+        providers = FakeProviders()
         chunks = [
             chunk
             async for chunk in LLMRouter(settings, providers).stream_chat(
@@ -80,52 +104,28 @@ def test_stream_timeout_before_first_chunk_escalates(settings):
 
     providers, chunks = asyncio.run(run())
 
-    assert [item.provider for item in providers.decisions] == ["local", "anthropic"]
-    assert b'"content": "ok"' in chunks[0]
+    assert [item.provider for item in providers.decisions] == ["local"]
+    payload = json.loads(chunks[0].decode())
+    assert payload["message"]["content"] == "ok"
+    assert payload["router"]["provider"] == "local"
 
 
-def test_openai_payload_includes_structured_attachment():
-    request = ChatRequest(
-        messages=[{"role": "user", "content": "Read the invoice"}],
-        routing={
-            "attachments": [
-                {
-                    "filename": "invoice.png",
-                    "content_type": "image/png",
-                    "data": "aW1hZ2U=",
-                }
-            ]
-        },
-    )
+def test_local_failure_propagates_as_provider_error(settings):
+    async def run():
+        providers = FakeProviders(fail_local=True)
+        await LLMRouter(settings, providers).chat(simple_request())
 
-    messages = _openai_messages(request.messages, request.routing.attachments)
-
-    assert messages[0]["content"][1] == {
-        "type": "image_url",
-        "image_url": {"url": "data:image/png;base64,aW1hZ2U="},
-    }
+    with pytest.raises(ProviderError):
+        asyncio.run(run())
 
 
-def test_input_image_part_is_normalized_for_chat_completions():
-    request = ChatRequest(
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_image",
-                        "image_url": "https://example.test/scan.png",
-                    }
-                ],
-            }
-        ]
-    )
+def test_stream_failure_propagates_as_provider_error(settings):
+    async def run():
+        providers = FakeProviders(fail_local=True)
+        async for _ in LLMRouter(settings, providers).stream_chat(
+            simple_request(stream=True)
+        ):
+            pass
 
-    messages = _openai_messages(request.messages)
-
-    assert messages[0]["content"] == [
-        {
-            "type": "image_url",
-            "image_url": {"url": "https://example.test/scan.png"},
-        }
-    ]
+    with pytest.raises(ProviderError):
+        asyncio.run(run())

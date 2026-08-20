@@ -6,8 +6,16 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.*;
+import java.net.URI;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -16,14 +24,16 @@ import java.util.EnumSet;
 /**
  * StorageService — abstraction over file storage backends.
  *
- * <p>Two providers are supported, selected by {@code STORAGE_PROVIDER} env var:
+ * <p>Three providers are supported, selected by {@code STORAGE_PROVIDER} env var:
  * <ul>
  *   <li><b>local</b> — writes to {@code uploads/} on the local filesystem (dev/test)</li>
- *   <li><b>supabase</b> — uploads to Supabase Storage via REST API (production, free 1 GB tier)</li>
+ *   <li><b>r2</b> — uploads to Cloudflare R2 (S3-compatible, production, free 10 GB tier,
+ *       no egress fees, no 7-day activity requirement)</li>
+ *   <li><b>supabase</b> — legacy Supabase Storage via REST API (kept for compatibility)</li>
  * </ul>
  *
- * <p>Supabase Storage REST API docs:
- * <a href="https://supabase.com/docs/reference/api/storage">storage reference</a>
+ * <p>Cloudflare R2 API docs:
+ * <a href="https://developers.cloudflare.com/r2/api/s3/api/">S3 API</a>
  */
 @Service
 @Slf4j
@@ -34,7 +44,7 @@ public class StorageService {
     @Value("${storage.provider:local}")
     private String provider;
 
-    // ── Supabase config ───────────────────────────────────────────────────────
+    // ── Supabase config (legacy) ─────────────────────────────────────────────
     @Value("${storage.supabase.url:}")
     private String supabaseUrl;
 
@@ -43,6 +53,25 @@ public class StorageService {
 
     @Value("${storage.supabase.service-key:}")
     private String supabaseServiceKey;
+
+    // ── Cloudflare R2 config ─────────────────────────────────────────────────
+    @Value("${storage.r2.account-id:}")
+    private String r2AccountId;
+
+    @Value("${storage.r2.access-key-id:}")
+    private String r2AccessKeyId;
+
+    @Value("${storage.r2.secret-access-key:}")
+    private String r2SecretAccessKey;
+
+    @Value("${storage.r2.bucket:smart-doc-documents}")
+    private String r2Bucket;
+
+    @Value("${storage.r2.endpoint:}")
+    private String r2Endpoint;
+
+    // Lazy-initialized S3 client (package-private for test injection)
+    S3Client r2Client;
 
     // ── Local config ──────────────────────────────────────────────────────────
     @Value("${storage.local.upload-dir:uploads}")
@@ -62,9 +91,12 @@ public class StorageService {
      *
      * @param fileName  final filename (UUID-based, already sanitized)
      * @param file      multipart file from HTTP request
-     * @return storage key (local relative path OR Supabase object path)
+     * @return storage key (local relative path OR R2/Supabase object path)
      */
     public String upload(String fileName, MultipartFile file) throws IOException {
+        if ("r2".equalsIgnoreCase(provider)) {
+            return uploadToR2(fileName, file.getBytes(), file.getContentType());
+        }
         if ("supabase".equalsIgnoreCase(provider)) {
             return uploadToSupabase(fileName, file.getBytes(), file.getContentType());
         }
@@ -76,6 +108,9 @@ public class StorageService {
      * Callers must delete the temp file when done.
      */
     public File download(String storagePath) throws IOException {
+        if ("r2".equalsIgnoreCase(provider)) {
+            return downloadFromR2(storagePath);
+        }
         if ("supabase".equalsIgnoreCase(provider)) {
             return downloadFromSupabase(storagePath);
         }
@@ -86,7 +121,9 @@ public class StorageService {
      * Delete the stored file.
      */
     public void delete(String storagePath) {
-        if ("supabase".equalsIgnoreCase(provider)) {
+        if ("r2".equalsIgnoreCase(provider)) {
+            deleteFromR2(storagePath);
+        } else if ("supabase".equalsIgnoreCase(provider)) {
             deleteFromSupabase(storagePath);
         } else {
             deleteFromLocal(storagePath);
@@ -120,7 +157,103 @@ public class StorageService {
     }
 
     // -----------------------------------------------------------------------
-    // Supabase Storage REST API implementation
+    // Cloudflare R2 (S3-compatible) implementation
+    // -----------------------------------------------------------------------
+
+    /**
+     * Lazily build the S3 client pointed at Cloudflare R2. R2 is S3-compatible,
+     * so the standard AWS SDK works with an endpoint override:
+     * https://&lt;account_id&gt;.r2.cloudflarestorage.com
+     */
+    S3Client getR2Client() {
+        if (r2Client == null) {
+            String endpoint = r2Endpoint;
+            if (endpoint == null || endpoint.isBlank()) {
+                endpoint = "https://" + r2AccountId + ".r2.cloudflarestorage.com";
+            }
+            r2Client = S3Client.builder()
+                    .region(Region.US_EAST_1)
+                    .endpointOverride(URI.create(endpoint))
+                    .credentialsProvider(StaticCredentialsProvider.create(
+                            AwsBasicCredentials.create(r2AccessKeyId, r2SecretAccessKey)))
+                    .build();
+        }
+        return r2Client;
+    }
+
+    /**
+     * Upload object to Cloudflare R2.
+     * PUT /{bucket}/{fileName}
+     *
+     * @return R2 object key (e.g. "uuid.pdf")
+     */
+    private String uploadToR2(String fileName, byte[] bytes, String contentType) {
+        String objectKey = fileName;
+        try {
+            PutObjectRequest.Builder requestBuilder = PutObjectRequest.builder()
+                    .bucket(r2Bucket)
+                    .key(objectKey);
+            if (contentType != null && !contentType.isBlank()) {
+                requestBuilder = requestBuilder.contentType(contentType);
+            }
+            getR2Client().putObject(requestBuilder.build(), RequestBody.fromBytes(bytes));
+            log.info("Uploaded to Cloudflare R2: {}", objectKey);
+            return objectKey;
+        } catch (Exception e) {
+            log.error("Error uploading to Cloudflare R2: {}", e.getMessage(), e);
+            throw new RuntimeException("Storage upload failed", e);
+        }
+    }
+
+    /**
+     * Download object from Cloudflare R2 to a temp file.
+     * GET /{bucket}/{key}
+     */
+    private File downloadFromR2(String objectKey) throws IOException {
+        try {
+            ResponseBytes<GetObjectResponse> objectBytes = getR2Client().getObjectAsBytes(
+                    GetObjectRequest.builder()
+                            .bucket(r2Bucket)
+                            .key(objectKey)
+                            .build());
+            String extension = objectKey.contains(".") ? objectKey.substring(objectKey.lastIndexOf('.')) : ".tmp";
+            Path tempPath = Files.createTempFile(
+                    Path.of(System.getProperty("java.io.tmpdir")),
+                    "sdc_download_", extension,
+                    PosixFilePermissions.asFileAttribute(
+                            EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)));
+            File tempFile = tempPath.toFile();
+            tempFile.deleteOnExit();
+            Files.write(tempPath, objectBytes.asByteArray());
+            log.info("Downloaded {} bytes from Cloudflare R2: {}", objectBytes.asByteArray().length, objectKey);
+            return tempFile;
+        } catch (IOException e) {
+            log.error("Error downloading from Cloudflare R2: {}", e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            log.error("Error downloading from Cloudflare R2: {}", e.getMessage(), e);
+            throw new IOException("Storage download failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Delete object from Cloudflare R2.
+     * DELETE /{bucket}/{key}
+     */
+    private void deleteFromR2(String objectKey) {
+        try {
+            getR2Client().deleteObject(DeleteObjectRequest.builder()
+                    .bucket(r2Bucket)
+                    .key(objectKey)
+                    .build());
+            log.info("Deleted from Cloudflare R2: {}", objectKey);
+        } catch (Exception e) {
+            log.error("Error deleting from Cloudflare R2: {}", e.getMessage(), e);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Supabase Storage REST API implementation (legacy)
     // -----------------------------------------------------------------------
 
     /**

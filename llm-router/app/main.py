@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from .config import Settings, settings
 from .models import ChatRequest
-from .providers import ProviderError
+from .providers import FailoverProvider, ProviderError
 from .service import LLMRouter
 
 
@@ -19,7 +19,7 @@ logging.basicConfig(
 def create_app(
     app_settings: Settings = settings, router: LLMRouter | None = None
 ) -> FastAPI:
-    service = router or LLMRouter(app_settings)
+    service = router or LLMRouter(app_settings, FailoverProvider(app_settings))
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -44,10 +44,14 @@ def create_app(
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
+        providers = service.providers
         return {
             "status": "ok",
             "service": "llm-router",
-            "providers": {"local": True},
+            "providers": {
+                "cloudflare": bool(getattr(providers, "uses_cloudflare", False)),
+                "local": True,
+            },
         }
 
     @app.post("/api/chat", dependencies=[Depends(verify_internal_token)])

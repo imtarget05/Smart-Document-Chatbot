@@ -37,8 +37,20 @@ server:
   shutdown: graceful
 
 jwt:
+  # DEV-ONLY fallback so local development works without configuration.
+  # Staging/production MUST override this via JWT_SECRET (openssl rand -base64 48);
+  # SecretStrengthValidator fails startup if the committed default is still in use.
   secret: ${JWT_SECRET:c21hcnQtZG9jLWNoYXRib3Qtc2VjcmV0LWtleS1mb3ItbG9jYWwtZGV2ZWxvcG1lbnQtMjAyNg==}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+# Security guards for the classic chat path.
+security:
+  prompt-injection:
+    # Heuristic prompt-injection detection on user messages; HIGH-severity
+    # requests are rejected before any LLM call.
+    enabled: ${PROMPT_INJECTION_ENABLED:true}
+  # Token for internal endpoints (actuator metrics). Empty = requests rejected.
+  internal-token: ${INTERNAL_SERVICE_TOKEN:}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:8080,http://127.0.0.1:3000}
@@ -63,6 +75,10 @@ crag:
   # Allow automatic web-search fallback on low confidence (independent of the
   # per-request `webSearch` flag). Requires Tavily to be configured.
   web-search-enabled: ${CRAG_WEB_SEARCH_ENABLED:false}
+  # Safe abstention: when no sufficient evidence exists and no web fallback is
+  # available, return "insufficient evidence" instead of answering from general
+  # knowledge (unanswerable-question handling).
+  abstain-enabled: ${CRAG_ABSTAIN_ENABLED:true}
 
 # Tavily web search (optional). Disabled when api-key is empty.
 tavily:
@@ -73,12 +89,17 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # prometheus is guarded by InternalTokenFilter (X-Internal-Token).
+        include: health,info,prometheus
       base-path: /actuator
   endpoint:
     health:
       show-details: when_authorized
       probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
 logging:
@@ -94,3 +115,9 @@ storage:
   provider: ${STORAGE_PROVIDER:local}
   local:
     upload-dir: ${LOCAL_UPLOAD_DIR:uploads}
+  r2:
+    account-id: ${R2_ACCOUNT_ID:}
+    access-key-id: ${R2_ACCESS_KEY_ID:}
+    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+    bucket: ${R2_BUCKET_NAME:smart-doc-documents}
+    endpoint: ${R2_ENDPOINT:}

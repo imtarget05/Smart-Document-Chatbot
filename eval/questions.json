@@ -4,139 +4,278 @@
     "question": "Hệ thống sử dụng framework backend nào?",
     "expected_answer_contains": ["Spring Boot", "FastAPI"],
     "expected_source_keywords": ["backend", "framework", "Spring"],
-    "difficulty": "easy"
+    "difficulty": "easy",
+    "tags": ["backend"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 2,
     "question": "Vector database nào được sử dụng để lưu embeddings?",
     "expected_answer_contains": ["Qdrant"],
     "expected_source_keywords": ["Qdrant", "vector", "embedding"],
-    "difficulty": "easy"
+    "difficulty": "easy",
+    "tags": ["vector-db"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 3,
     "question": "Mô hình embedding nào được dùng để sinh vector?",
     "expected_answer_contains": ["nomic-embed-text"],
     "expected_source_keywords": ["nomic", "embed", "embedding"],
-    "difficulty": "easy"
+    "difficulty": "easy",
+    "tags": ["embedding"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 4,
     "question": "Hệ thống xử lý thế nào khi retrieval confidence thấp?",
     "expected_answer_contains": ["reformulation", "re-retrieval", "web search", "fallback"],
     "expected_source_keywords": ["confidence", "CRAG", "fallback", "agentic"],
-    "difficulty": "medium"
+    "difficulty": "medium",
+    "tags": ["crag"],
+    "expected_min_confidence": 0.7
   },
   {
     "id": 5,
     "question": "Ngưỡng confidence để kích hoạt Agentic CRAG loop là bao nhiêu?",
     "expected_answer_contains": ["0.45", "45%"],
     "expected_source_keywords": ["confidence", "threshold", "0.45"],
-    "difficulty": "medium"
+    "difficulty": "medium",
+    "tags": ["crag"],
+    "expected_min_confidence": 0.7
   },
   {
     "id": 6,
     "question": "Pipeline ETL tài liệu gồm những bước nào?",
     "expected_answer_contains": ["upload", "parsing", "chunking", "embedding", "index"],
     "expected_source_keywords": ["pipeline", "ETL", "chunk", "Airflow"],
-    "difficulty": "medium"
+    "difficulty": "medium",
+    "tags": ["etl"],
+    "expected_min_confidence": 0.7
   },
   {
     "id": 7,
     "question": "Frontend sử dụng công nghệ gì để quản lý server state?",
     "expected_answer_contains": ["TanStack Query", "React Query"],
     "expected_source_keywords": ["React Query", "TanStack", "cache"],
-    "difficulty": "easy"
+    "difficulty": "easy",
+    "tags": ["frontend"],
+    "expected_min_confidence": 0.8
+  },
+  {
+    "id": 7.5,
+    "question": "SSE streaming response cho user như thế nào?",
+    "expected_answer_contains": ["SSE", "Server-Sent Events", "SseEmitter"],
+    "expected_source_keywords": ["stream", "SSE", "SseEmitter"],
+    "difficulty": "medium",
+    "tags": ["streaming"],
+    "expected_min_confidence": 0.7
   },
   {
     "id": 8,
-    "question": "Hệ thống streaming response cho user như thế nào?",
-    "expected_answer_contains": ["SSE", "Server-Sent Events", "SseEmitter"],
-    "expected_source_keywords": ["stream", "SSE", "SseEmitter"],
-    "difficulty": "medium"
-  },
-  {
-    "id": 9,
     "question": "Khi không tìm thấy thông tin trong tài liệu, hệ thống làm gì?",
     "expected_answer_contains": ["web search", "Tavily", "general knowledge", "deep reasoning"],
     "expected_source_keywords": ["fallback", "Tavily", "web search"],
-    "difficulty": "hard"
+    "difficulty": "hard",
+    "tags": ["fallback"],
+    "expected_min_confidence": 0.6
   },
   {
     "id": 10,
     "question": "Mô hình LLM nào được chạy locally trong hệ thống?",
     "expected_answer_contains": ["DeepSeek", "deepseek-r1"],
     "expected_source_keywords": ["DeepSeek", "Ollama", "LLM"],
-    "difficulty": "easy"
-  },
-  {
-    "id": 11,
-    "question": "Concept Map được tạo ra bằng cách nào?",
-    "expected_answer_contains": ["AI", "extract", "concept", "SVG"],
-    "expected_source_keywords": ["concept", "map", "mindmap"],
-    "difficulty": "medium"
+    "difficulty": "easy",
+    "tags": ["llm"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 12,
     "question": "Hệ thống hỗ trợ những định dạng tài liệu nào?",
     "expected_answer_contains": ["PDF", "DOCX", "TXT"],
     "expected_source_keywords": ["PDF", "DOCX", "TXT", "upload"],
-    "difficulty": "easy"
-  },
-  {
-    "id": 13,
-    "question": "Authentication được thực hiện bằng phương pháp nào?",
-    "expected_answer_contains": ["JWT", "token"],
-    "expected_source_keywords": ["JWT", "auth", "token"],
-    "difficulty": "easy"
-  },
-  {
-    "id": 14,
-    "question": "Parallel Re-retrieval trong Agentic CRAG hoạt động ra sao?",
-    "expected_answer_contains": ["parallel", "multi-thread", "query variation", "reformulation"],
-    "expected_source_keywords": ["parallel", "retrieval", "CompletableFuture"],
-    "difficulty": "hard"
+    "difficulty": "easy",
+    "tags": ["document-formats"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 15,
-    "question": "Dữ liệu lịch sử chat được lưu ở đâu?",
-    "expected_answer_contains": ["PostgreSQL", "database"],
-    "expected_source_keywords": ["PostgreSQL", "chat", "history"],
-    "difficulty": "easy"
+    "question": "Authentication được thực hiện bằng phương pháp nào?",
+    "expected_answer_contains": ["JWT", "token"],
+    "expected_source_keywords": ["JWT", "auth", "token"],
+    "difficulty": "easy",
+    "tags": ["auth"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 16,
-    "question": "Hệ thống monitoring sử dụng những công cụ nào?",
-    "expected_answer_contains": ["Prometheus", "Grafana"],
-    "expected_source_keywords": ["Prometheus", "Grafana", "monitoring"],
-    "difficulty": "medium"
+    "question": "Parallel Re-retrieval trong Agentic CRAG hoạt động ra sao?",
+    "expected_answer_contains": ["parallel", "multi-thread", "query variation", "reformulation"],
+    "expected_source_keywords": ["parallel", "retrieval", "CompletableFuture"],
+    "difficulty": "hard",
+    "tags": ["crag", "parallel"],
+    "expected_min_confidence": 0.7
   },
   {
     "id": 17,
-    "question": "Multi-document synthesis hoạt động như thế nào?",
-    "expected_answer_contains": ["multiple", "document", "parallel", "collection"],
-    "expected_source_keywords": ["multi", "document", "synthesis"],
-    "difficulty": "hard"
+    "question": "Dữ liệu lịch sử chat được lưu ở đâu?",
+    "expected_answer_contains": ["PostgreSQL", "database"],
+    "expected_source_keywords": ["PostgreSQL", "chat", "history"],
+    "difficulty": "easy",
+    "tags": ["history"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 18,
-    "question": "Web Search fallback sử dụng API nào?",
-    "expected_answer_contains": ["Tavily"],
-    "expected_source_keywords": ["Tavily", "web", "search"],
-    "difficulty": "easy"
+    "question": "Hệ thống monitoring sử dụng những công cụ nào?",
+    "expected_answer_contains": ["Prometheus", "Grafana"],
+    "expected_source_keywords": ["Prometheus", "Grafana", "monitoring"],
+    "difficulty": "medium",
+    "tags": ["monitoring"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 18.5,
+    "question": "Multi-document synthesis hoạt động như thế nào?",
+    "expected_answer_contains": ["multiple", "document", "parallel", "collection"],
+    "expected_source_keywords": ["multi", "document", "synthesis"],
+    "difficulty": "hard",
+    "tags": ["synthesis"],
+    "expected_min_confidence": 0.6
   },
   {
     "id": 19,
-    "question": "Cách hệ thống chống hallucination là gì?",
-    "expected_answer_contains": ["confidence", "source", "citation", "fallback"],
-    "expected_source_keywords": ["hallucination", "confidence", "citation"],
-    "difficulty": "hard"
+    "question": "Web Search fallback sử dụng API nào?",
+    "expected_answer_contains": ["Tavily"],
+    "expected_source_keywords": ["Tavily", "web", "search"],
+    "difficulty": "easy",
+    "tags": ["web-search"],
+    "expected_min_confidence": 0.8
   },
   {
     "id": 20,
+    "question": "Cách hệ thống chống hallucination là gì?",
+    "expected_answer_contains": ["confidence", "source", "citation", "fallback"],
+    "expected_source_keywords": ["hallucination", "confidence", "citation"],
+    "difficulty": "hard",
+    "tags": ["hallucination"],
+    "expected_min_confidence": 0.6
+  },
+  {
+    "id": 21,
     "question": "Rate limiting được áp dụng ở đâu trong hệ thống?",
     "expected_answer_contains": ["login", "upload", "chat", "filter"],
     "expected_source_keywords": ["rate", "limit", "filter"],
-    "difficulty": "medium"
+    "difficulty": "medium",
+    "tags": ["rate-limiting"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 22,
+    "question": "Cách hệ thống xử lý lỗi khi LLM call thất bại?",
+    "expected_answer_contains": ["retry", "backoff", "circuit-breaker", "fallback"],
+    "expected_source_keywords": ["retry", "backoff", "circuit-breaker", "error-handling"],
+    "difficulty": "medium",
+    "tags": ["error-handling"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 23,
+    "question": "Cách hệ thống ghi log có chứa thông tin PII không?",
+    "expected_answer_contains": ["PII", "redact", "MDC", "correlation"],
+    "expected_source_keywords": ["PII", "redact", "correlation-id"],
+    "difficulty": "medium",
+    "tags": ["privacy"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 24,
+    "question": "Cách hệ thống cấp quyền truy cập cho role khác nhau?",
+    "expected_answer_contains": ["role-based", "RBAC", "permission", "authentication"],
+    "expected_source_keywords": ["role-based", "RBAC", "permission"],
+    "difficulty": "medium",
+    "tags": ["authorization"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 25,
+    "question": "Cách hệ thống backup và phục hồi dữ liệu?",
+    "expected_answer_contains": ["backup", "restore", "PostgreSQL", "pg_dump"],
+    "expected_source_keywords": ["backup", "restore", "pg_dump", "data-recovery"],
+    "difficulty": "medium",
+    "tags": ["backup"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 25.5,
+    "question": "Cách hệ thống xử lý concurrent users?",
+    "expected_answer_contains": ["concurrent", "thread", "connection pool", "timeout"],
+    "expected_source_keywords": ["concurrent", "connection pool", "timeout"],
+    "difficulty": "medium",
+    "tags": ["concurrency"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 26,
+    "question": "Cách hệ thống tự động scale resources?",
+    "expected_answer_contains": ["Kubernetes", "HPA", "autoscale", "cloud"],
+    "expected_source_keywords": ["Kubernetes", "HPA", "autoscale"],
+    "difficulty": "hard",
+    "tags": ["scaling"],
+    "expected_min_confidence": 0.6
+  },
+  {
+    "id": 27,
+    "question": "Cách hệ thống xử lý đồng bộ đồng bộ request?",
+    "expected_answer_contains": ["synchronization", "lock", "mutex", "thread-safe"],
+    "expected_source_keywords": ["synchronization", "lock", "mutex"],
+    "difficulty": "hard",
+    "tags": ["thread-safety"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 27.5,
+    "question": "Cách hệ thống đảm bảo data consistency?",
+    "expected_answer_contains": ["ACID", "transaction", "commit", "rollback"],
+    "expected_source_keywords": ["ACID", "transaction", "commit"],
+    "difficulty": "hard",
+    "tags": ["consistency"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 28,
+    "question": "Cách hệ thống xử lý lỗi network khi fetch từ external API?",
+    "expected_answer_contains": ["retry", "timeout", "circuit-breaker", "fallback"],
+    "expected_source_keywords": ["retry", "timeout", "circuit-breaker"],
+    "difficulty": "medium",
+    "tags": ["network-error"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 29,
+    "question": "Cách hệ thống versioning codebase?",
+    "expected_answer_contains": ["git", "commit", "branch", "merge"],
+    "expected_source_keywords": ["git", "commit", "branch"],
+    "difficulty": "easy",
+    "tags": ["versioning"],
+    "expected_min_confidence": 0.8
+  },
+  {
+    "id": 29.5,
+    "question": "Cách hệ thống thực hiện code review?",
+    "expected_answer_contains": ["pull request", "review", "approval", "merge"],
+    "expected_source_keywords": ["pull request", "review", "merge"],
+    "difficulty": "medium",
+    "tags": ["code-review"],
+    "expected_min_confidence": 0.7
+  },
+  {
+    "id": 30,
+    "question": "Cách hệ thống thực hiện deployment?",
+    "expected_answer_contains": ["CI/CD", "GitHub Actions", "deploy", "staging"],
+    "expected_source_keywords": ["CI/CD", "deployment", "staging"],
+    "difficulty": "medium",
+    "tags": ["deployment"],
+    "expected_min_confidence": 0.7
   }
 ]

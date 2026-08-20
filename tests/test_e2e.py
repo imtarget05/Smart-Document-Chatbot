@@ -5,7 +5,7 @@ TC-E2E-01 → TC-E2E-04: Integration & End-to-End Tests
 import time
 import sys
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -103,7 +103,7 @@ class MockETLPipeline:
 
 
 class MockAlertSystem:
-    def __init__(self, thresholds: Dict = None):
+    def __init__(self, thresholds: Optional[Dict] = None):
         self.thresholds = thresholds or {"temperature": 85, "downtime": 60}
         self.alerts: List[Dict] = []
 

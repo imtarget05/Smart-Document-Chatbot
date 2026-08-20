@@ -1,0 +1,7 @@
+{
+  "venvPath": "/Users/mainguyenbinhtan/Downloads/Smart-Document-Chatbot",
+  "venv": ".venv",
+  "extraPaths": ["agent", "llm-router", "eval", "tests"],
+  "typeCheckingMode": "basic",
+  "exclude": ["**/__pycache__", "frontend/**", "backend/**", ".venv/**", "node_modules/**", "**/dist"]
+}

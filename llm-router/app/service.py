@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 from .config import Settings
 from .models import ChatRequest, RouteDecision
-from .providers import ProviderClient
+from .providers import ProviderClient, ProviderLike
 from .routing import choose_route
 
 
@@ -14,7 +14,11 @@ logger = logging.getLogger("llm_router")
 
 
 class LLMRouter:
-    def __init__(self, settings: Settings, providers: ProviderClient | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        providers: ProviderClient | ProviderLike | None = None,
+    ):
         self.settings = settings
         self.providers = providers or ProviderClient(settings)
 

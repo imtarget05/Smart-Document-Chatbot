@@ -1,9 +1,12 @@
 package com.smartdocchat.service;
 
 import com.smartdocchat.config.CragConfig;
+import com.smartdocchat.config.PromptInjectionProperties;
 import com.smartdocchat.dto.ChatRequest;
 import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
+import com.smartdocchat.metrics.RagMetrics;
+import com.smartdocchat.security.PromptInjectionDetector;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +32,9 @@ public class ChatService {
     private final RetrievalService retrievalService;
     private final QueryReformulator queryReformulator;
     private final WebSearchService webSearchService;
+    private final PromptInjectionDetector promptInjectionDetector;
+    private final PromptInjectionProperties promptInjectionProperties;
+    private final RagMetrics ragMetrics;
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -54,19 +60,32 @@ public class ChatService {
     // ------------------------------------------------------------------
 
     public ChatResponse processQuery(String ownerUsername, ChatRequest request) {
+        long started = System.currentTimeMillis();
         String userMessage = request.getMessage();
-        CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+        ChatResponse response;
 
-        String aiResponse = strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
-        ChatMessage saved = historyService.save(ChatMessage.builder()
-                .sessionId(request.getSessionId())
-                .ownerUsername(ownerUsername)
-                .documentId(request.getDocumentId())
-                .userMessage(userMessage)
-                .aiResponse(aiResponse)
-                .sourceChunks(buildSourceChunks(crag))
-                .build());
-        return toResponse(saved, crag);
+        if (isBlockedInjection(userMessage)) {
+            ragMetrics.recordInjectionBlocked();
+            ChatMessage blocked = saveResponse(ownerUsername, request, userMessage,
+                    messageHandler.buildInjectionBlockedResponse(), null);
+            response = toResponse(blocked, emptyCrag("blocked"));
+        } else {
+            CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+
+            String aiResponse = "no_evidence".equals(crag.strategy())
+                    ? messageHandler.buildAbstentionResponse()
+                    : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
+            ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
+            response = toResponse(saved, crag);
+
+            if ("no_evidence".equals(crag.strategy())) {
+                ragMetrics.recordAbstention();
+            }
+            ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+        }
+
+        ragMetrics.recordLatency(System.currentTimeMillis() - started);
+        return response;
     }
 
     public SseEmitter processQueryStream(String ownerUsername, ChatRequest request) {
@@ -74,7 +93,22 @@ public class ChatService {
 
         CompletableFuture.runAsync(() -> {
             try {
-                CragResult crag = runCrag(ownerUsername, request.getDocumentId(), request.getMessage(), request.isWebSearch());
+                String userMessage = request.getMessage();
+                if (isBlockedInjection(userMessage)) {
+                    ragMetrics.recordInjectionBlocked();
+                    ChatMessage blocked = saveResponse(ownerUsername, request, userMessage,
+                            messageHandler.buildInjectionBlockedResponse(), null);
+                    Map<String, Object> meta = new LinkedHashMap<>();
+                    meta.put("ragStrategy", "blocked");
+                    meta.put("confidence", "low");
+                    meta.put("confidenceScore", 0.0);
+                    emitter.send(SseEmitter.event().name("metadata").data(meta));
+                    emitter.send(SseEmitter.event().name("complete").data(toResponse(blocked, emptyCrag("blocked"))));
+                    emitter.complete();
+                    return;
+                }
+
+                CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
 
                 // Send metadata (sources + strategy) up front, before the token stream.
                 Map<String, Object> metaEvent = new LinkedHashMap<>();
@@ -85,8 +119,21 @@ public class ChatService {
                 metaEvent.put("ragStrategy", crag.strategy());
                 emitter.send(SseEmitter.event().name("metadata").data(metaEvent));
 
+                // Unanswerable question: stream the safe abstention response, no LLM call.
+                if ("no_evidence".equals(crag.strategy())) {
+                    ragMetrics.recordAbstention();
+                    ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+                    String abstention = messageHandler.buildAbstentionResponse();
+                    emitter.send(SseEmitter.event().name("chunk").data(abstention));
+                    ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstention,
+                            buildSourceChunks(crag));
+                    emitter.send(SseEmitter.event().name("complete").data(toResponse(saved, crag)));
+                    emitter.complete();
+                    return;
+                }
+
                 String prefix = strategyPrefix(crag);
-                String prompt = buildPromptForStrategy(request.getMessage(), crag);
+                String prompt = buildPromptForStrategy(userMessage, crag);
                 StringBuilder aiResponseBuilder = new StringBuilder();
 
                 if (!prefix.isEmpty()) {
@@ -103,14 +150,10 @@ public class ChatService {
                     }
                 });
 
-                ChatMessage saved = historyService.save(ChatMessage.builder()
-                        .sessionId(request.getSessionId())
-                        .ownerUsername(ownerUsername)
-                        .documentId(request.getDocumentId())
-                        .userMessage(request.getMessage())
-                        .aiResponse(aiResponseBuilder.toString())
-                        .sourceChunks(buildSourceChunks(crag))
-                        .build());
+                ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+
+                ChatMessage saved = saveResponse(ownerUsername, request, userMessage,
+                        aiResponseBuilder.toString(), buildSourceChunks(crag));
 
                 emitter.send(SseEmitter.event().name("complete").data(toResponse(saved, crag)));
                 emitter.complete();
@@ -127,6 +170,33 @@ public class ChatService {
         });
 
         return emitter;
+    }
+
+    // ------------------------------------------------------------------
+    // Guards (prompt injection) & persistence helpers
+    // ------------------------------------------------------------------
+
+    /** True when the user message must be rejected before any retrieval/LLM call. */
+    private boolean isBlockedInjection(String userMessage) {
+        return promptInjectionProperties.isEnabled()
+                && promptInjectionDetector.analyze(userMessage) == PromptInjectionDetector.Severity.HIGH;
+    }
+
+    private ChatMessage saveResponse(String ownerUsername, ChatRequest request, String userMessage,
+                                     String aiResponse, String sourceChunks) {
+        return historyService.save(ChatMessage.builder()
+                .sessionId(request.getSessionId())
+                .ownerUsername(ownerUsername)
+                .documentId(request.getDocumentId())
+                .userMessage(userMessage)
+                .aiResponse(aiResponse)
+                .sourceChunks(sourceChunks)
+                .build());
+    }
+
+    /** Empty CRAG result for guarded responses (blocked / no evidence). */
+    private CragResult emptyCrag(String strategy) {
+        return new CragResult(List.of(), List.of(), 0.0, strategy);
     }
 
     public List<ChatMessage> getChatHistory(String ownerUsername, String sessionId) {
@@ -181,7 +251,8 @@ public class ChatService {
             return new CragResult(topMerged, List.of(), confidence, strategy);
         }
 
-        // Still low -> web search (if configured/requested) else general knowledge.
+        // Still low -> web search (if configured/requested) else abstain
+        // (safe "insufficient evidence") or general knowledge.
         boolean useWeb = webSearchRequested
                 || (webSearchService.isConfigured() && cragConfig.isWebSearchEnabled());
         if (useWeb) {
@@ -189,6 +260,9 @@ public class ChatService {
             if (web.isPresent()) {
                 return new CragResult(List.of(), web.get(), confidence, "web_search");
             }
+        }
+        if (cragConfig.isAbstainEnabled()) {
+            return new CragResult(List.of(), List.of(), confidence, "no_evidence");
         }
         return new CragResult(List.of(), List.of(), confidence, "general_knowledge");
     }

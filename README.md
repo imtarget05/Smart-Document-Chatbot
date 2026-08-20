@@ -18,7 +18,9 @@ Dự án mẫu mực kết hợp giữa **Kỹ nghệ Phần mềm truyền th�
 
 ## 🧪 Chạy n8n cục bộ
 
-Để khởi động workflow automation cùng hệ thống chính, chạy:
+> **Trạng thái trung thực:** n8n được đóng gói dưới dạng hạ tầng Docker Compose (service + Postgres riêng) **nhưng chưa có workflow nào được định nghĩa trong repository này**. Phần tích hợp sâu với Action Agent (`n8n_config.py`) nằm trong roadmap. Chạy n8n nếu bạn muốn dùng nó làm công cụ tự động hóa ngoài hệ thống — đừng coi đây là tính năng tích hợp đã hoàn thiện.
+
+Để khởi động n8n cùng hệ thống chính, chạy:
 
 ```bash
 cd docker
@@ -27,7 +29,7 @@ docker compose -f docker-compose.yml up -d n8n n8n-postgres
 
 Sau khi khởi động, truy cập:
 - n8n UI: http://localhost:5678
-- tài khoản đăng nhập: giá trị `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` trong file `.env`
+- tài khoản đăng nhập: giá trị `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` trong file `.env` (phải tự đặt — không có giá trị mặc định trong repo)
 
 Nếu bạn muốn khởi động toàn bộ stack (backend, frontend, agent, monitoring và n8n), chạy:
 
@@ -42,21 +44,21 @@ docker compose -f docker-compose.yml up -d
 *   **Vite + React + TypeScript 5 (Strict Mode)**: Hệ thống Frontend được tái cấu trúc từ CRA sang **Vite**, tăng tốc độ khởi động và HMR gấp 10-20 lần. Toàn bộ mã nguồn sử dụng **TypeScript** an toàn cao, biên dịch 100% không lỗi.
 *   **TanStack Query (React Query v5)**: Quản lý cache dữ liệu tài liệu và lịch sử chat tối ưu, tự động invalidation khi upload/delete thông qua `useQuery` và `useMutation`, loại bỏ hoàn toàn việc fetch dữ liệu thủ công qua `useEffect`.
 *   **Kiến trúc Agentic CRAG (Corrective RAG) Loop**:
-    *   *Confidence Evaluation*: Đánh giá điểm tin cậy ngữ cảnh trích xuất từ Qdrant (ngưỡng 0.6).
-    *   *Query Reformulation*: Khi độ tin cậy thấp, kích hoạt tác nhân (Agent) tự động phân rã và viết lại câu hỏi thành các biến thể tối ưu hơn thông qua mô hình DeepSeek.
-    *   *Parallel Retrieval & Reranking*: Truy vấn song song (Multi-threading) trên các vector collection và xếp hạng lại tài liệu.
-    *   *Web Search Fallback*: Tự động bổ sung ngữ cảnh trực tuyến bằng API Tavily khi tài liệu không đủ dữ liệu.
-    *   *Deep Reasoning Fallback*: Kích hoạt chế độ suy luận chuyên sâu nội bộ của mô hình khi nằm ngoài phạm vi tài liệu.
+    *   *Confidence Evaluation*: Đánh giá điểm tin cậy ngữ cảnh trích xuất (ngưỡng 0.6).
+    *   *Query Reformulation*: Khi độ tin cậy thấp, tự động viết lại câu hỏi thành các biến thể tối ưu hơn thông qua mô hình `qwen2.5:7b` qua LLM Router, sau đó truy vấn lại.
+    *   *Reranking*: Gộp kết quả truy vấn gốc và các biến thể, sắp xếp lại theo điểm số và giữ top-k.
+    *   *Web Search Fallback*: Bổ sung ngữ cảnh trực tuyến bằng API Tavily khi tài liệu không đủ dữ liệu (tùy chọn, cần `TAVILY_API_KEY`).
+    *   *Safe Abstention (Unanswerable Handling)*: Khi không có đủ bằng chứng và không có web fallback, hệ thống **trả về thông báo "không đủ bằng chứng" thay vì bịa câu trả lời** từ kiến thức chung (có thể tắt qua `CRAG_ABSTAIN_ENABLED=false`).
 *   **Multi-Document Synthesis**: Hỗ trợ lựa chọn linh hoạt giữa chế độ hỏi đáp trên một tài liệu đơn lẻ (Single File Mode) hoặc tổng hợp ngữ cảnh chéo trên nhiều tài liệu cùng lúc (Multi-File Chat Mode).
-*   **Trích dẫn Nguồn ngữ cảnh (Citations)**: Hiển thị minh bạch nguồn gốc thông tin trích xuất (metadata tệp, nội dung đoạn văn gốc) giúp kiểm chứng tính chính xác của phản hồi.
-*   **Visual Concept Mapping**: AI tự động trích xuất các khái niệm cốt lõi của tài liệu và dựng thành bản đồ tư duy (Concept Map) trực quan bằng SVG, cho phép người dùng click để hỏi chatbot sâu hơn về khái niệm đó.
-*   **Apache Airflow Ingestion ETL**: Pipeline dữ liệu tự động hóa quy trình phân tách trang, làm sạch nội dung, sinh embeddings và nạp index vào Qdrant một cách chuyên nghiệp.
+*   **Trích dẫn Nguồn ngữ cảnh (Citations)**: Hiển thị minh bạch nguồn gốc thông tin trích xuất (metadata tệp, nội dung đoạn văn gốc, điểm số tương đồng) giúp kiểm chứng tính chính xác của phản hồi.
+*   **Prompt-Injection Defense**: Kiểm tra heuristic trên câu hỏi người dùng trước mọi lời gọi LLM; các yêu cầu cố gắng ghi đè chỉ thị / lộ system prompt / trích xuất bí mật bị chặn (xem `backend/.../security/PromptInjectionDetector.java`).
+*   **Apache Airflow Ingestion ETL** *(Prototype)*: DAG `document_etl.py` phân tách trang, làm sạch nội dung, sinh embeddings và nạp index vào Qdrant. **Lưu ý:** đường upload chính của sản phẩm (Spring Boot) xử lý inline (parse → chunk → lưu PostgreSQL), Airflow là pipeline ETL độc lập kích hoạt thủ công bằng conf — chưa nối vào luồng upload mặc định.
 
 ---
 
 ## 🏗️ Kiến trúc Hệ thống (System Architecture)
 
-Flow AI chính được chuẩn hóa trong [`docs/agent_architecture.md`](docs/agent_architecture.md): Frontend -> Spring Boot API gateway -> Python Agent Service -> LangGraph Orchestrator -> Specialist Agent -> Tools/Qdrant/LLM Router.
+> **Ghi chú trung thực:** Luồng chat chính của sản phẩm là **Spring Boot → LLM Router → Ollama**, với retrieval dựa trên chunks lưu trong **PostgreSQL** (lexical scoring). Python Agent Service (LangGraph) là một dịch vụ AI thử nghiệm riêng biệt có đầy đủ endpoint riêng (`/v1/agent/*`) nhưng **chưa được nối vào luồng chat chính** — đừng mô tả nó như API gateway của sản phẩm.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -70,26 +72,33 @@ Flow AI chính được chuẩn hóa trong [`docs/agent_architecture.md`](docs/a
 │               Controller (SseEmitter)                  │
 │  ┌──────────────────────────────────────────────────┐  │
 │  │                    ChatService                   │  │
-│  │     ┌──────────────┐            ┌─────────────┐  │  │
-│  │     │  Embeddings  ├─(Ollama)──►│   Qdrant    │  │  │
-│  │     └──────────────┘            └─────────────┘  │  │
-│  │                                 (Vector search)  │  │
-│  │     ┌──────────────┐                             │  │
-│  │     │ Ollama/DeepSeek├─(Streaming)┐              │  │
-│  │     └──────────────┘             │               │  │
-│  │                                  │               │  │
-│  │     ┌──────────────┐             ▼               │  │
-│  │     │  Web Search  ├─(Tavily)──►[SSE Endpoint]   │  │
-│  │     └──────────────┘                             │  │
+│  │  ┌──────────────┐      ┌──────────────────────┐  │  │
+│  │  │  Retrieval   ├─────►│  PostgreSQL chunks   │  │  │
+│  │  │ (lexical     │      │  (vector collection  │  │  │
+│  │  │  scoring)    │      │  per user/document)  │  │  │
+│  │  └──────┬───────┘      └──────────────────────┘  │  │
+│  │         │ confidence < 0.6                        │  │
+│  │         ▼                                         │  │
+│  │  ┌──────────────┐      ┌──────────────────────┐  │  │
+│  │  │ Query Reform │─────►│ Re-retrieve + merge  │  │  │
+│  │  └──────┬───────┘      └──────────────────────┘  │  │
+│  │         ▼                                         │  │
+│  │  [LLM Router → Ollama (qwen2.5:7b)] ◄── [Tavily] │  │
+│  │         │ (web fallback tùy chọn)                │  │
+│  │         ▼                                         │  │
+│  │  [Safe Abstention khi thiếu bằng chứng]          │  │
 │  └──────────────────┬───────────────────────────────┘  │
 └─────────────────────┼──────────────────────────────────┘
                       │ JPA ORM
              ┌────────▼────────┐
              │ PostgreSQL DB   │
              │ (Chat History / │
-             │  Doc Metadata)  │
+             │  Doc Metadata / │
+             │  Chunks)        │
              └─────────────────┘
 ```
+
+Dịch vụ Python Agent (LangGraph multi-agent) chạy độc lập trên cổng 9000, với các endpoint `/v1/agent/invoke`, `/v1/agent/invoke-stream`, connector ingestion (Google Drive/Gmail/Slack/SharePoint), memory dài hạn trong PostgreSQL, Qdrant retrieval, và các endpoint thử nghiệm ADK/A2A/MCP (custom implementation lấy cảm hứng từ các khái niệm tương ứng — **không phải** Google ADK / A2A / MCP chính thức). Xem [`docs/agent_architecture.md`](docs/agent_architecture.md).
 
 ---
 
@@ -97,15 +106,15 @@ Flow AI chính được chuẩn hóa trong [`docs/agent_architecture.md`](docs/a
 
 | Layer | Công nghệ | Vai trò & Lý do chọn lựa |
 | :--- | :--- | :--- |
-| **Backend Core** | Spring Boot 3.2.x | Phát triển RESTful API hiệu năng cao, cơ chế Graceful Shutdown & Async processing chuyên nghiệp. |
-| **AI LLM Runtime** | FastAPI LLM Router + Ollama / Claude / GPT-4o | Router ưu tiên Vision cho ảnh/scan, Claude cho tác vụ phức tạp và Llama cục bộ cho tác vụ đơn giản. |
-| **Embedding Engine** | Ollama | Chạy mô hình `nomic-embed-text` cục bộ để sinh vector 768 chiều. |
-| **Vector DB** | Qdrant (REST API) | Cấu trúc dữ liệu Vector hiệu năng cao, tổ chức phân tách linh hoạt theo Collection ID riêng cho từng tài liệu. |
-| **Relational DB** | PostgreSQL 15 | Quản lý lưu trữ metadata tệp tin và toàn bộ lịch sử hội thoại chuẩn hóa ACID. |
-| **Data Pipelines** | Apache Airflow | Tự động hóa tiến trình ETL tách nhỏ tài liệu, làm sạch cấu trúc và lập chỉ mục không đồng bộ. |
-| **Frontend Platform** | Vite 5 + React 18 | Tối ưu hóa tối đa tốc độ biên dịch (Hot Module Replacement) thay thế cho Webpack/CRA lỗi thời. |
-| **State & Caching** | TanStack Query v5 | Quản lý đồng bộ trạng thái server-state, tự động hóa cơ chế cache-busting, retry, và loading skeleton. |
-| **Telemetry** | MLflow / Prometheus | Tracing chi tiết độ trễ, tokens tiêu hao, giám sát trực quan các bước suy luận của Agentic CRAG. |
+| **Backend Core** | Spring Boot 3.2.x | RESTful API, auth JWT, owner isolation, CRAG orchestration, SSE streaming, Graceful Shutdown. |
+| **AI LLM Runtime** | FastAPI LLM Router → Ollama cục bộ (`qwen2.5:7b`, `nomic-embed-text`) | Router phân phối tác vụ đơn giản/phức tạp giữa 2 model cục bộ. **Chỉ local — không còn route cloud** (OpenAI/Anthropic/Gemini đã gỡ bỏ, xem `llm-router/README.md`). |
+| **Embedding Engine** | Ollama | Sinh embedding `nomic-embed-text` 768 chiều — dùng trong Agent Service (Qdrant) và Airflow DAG. |
+| **Vector DB** | Qdrant (REST API) | Retrieval vector cho Agent Service (collection riêng theo user+doc) và Airflow ingestion — **không nằm trong luồng chat Java** (Java dùng lexical scoring trên chunks PostgreSQL). |
+| **Relational DB** | PostgreSQL 15 | Metadata tệp, chunks, lịch sử hội thoại chuẩn hóa ACID, Flyway migrations. |
+| **Data Pipelines** | Apache Airflow *(Prototype)* | DAG ETL độc lập (parse → embed → index Qdrant), kích hoạt thủ công; chưa nối vào upload path. |
+| **Frontend Platform** | Vite 5 + React 18 | Build tool hiện đại, HMR nhanh, TypeScript strict. |
+| **State & Caching** | TanStack Query v5 | Quản lý server-state, cache-busting, retry, loading skeleton. |
+| **Telemetry** | Prometheus / Actuator / structured logs (JSON) | Metrics RAG, health probes, logs có `requestId`; MLflow tùy chọn cho eval. |
 
 ---
 
@@ -133,14 +142,15 @@ Smart-Document-Chatbot/
 │   │   ├── App.tsx, index.tsx, types.ts
 │   ├── e2e/                            # Playwright smoke tests
 │   └── package.json, vite.config.ts
-├── agent/                              # Python FastAPI + LangGraph (multi-agent CRAG)
-│   ├── agents/                         # 6 specialist agents + orchestrator
-│   ├── graph/                          # LangGraph StateGraph workflow
+├── agent/                              # Python FastAPI + LangGraph (multi-agent CRAG, THỬ NGHIỆM)
+│   ├── agents/                         # 8 specialist agents + orchestrator (LangGraph graph)
+│   ├── graph/                          # LangGraph StateGraph workflow (được dùng thật)
 │   ├── tools/                          # Qdrant hybrid search, Tavily web search, report, notification
 │   ├── memory/                         # Short/long-term memory, context summarizer, VI-EN language handler
 │   ├── connectors/                     # Gmail, Google Drive, SharePoint, Slack
 │   ├── streaming/                      # SSE event helpers
-│   ├── benchmark/, eval_framework/, mcp/, a2a/, security/, improvement/
+│   ├── benchmark/, eval_framework/, security/, improvement/
+│   ├── mcp/, a2a/, adk_*               # CUSTOM implementations lấy cảm hứng từ MCP/A2A/ADK (không phải SDK chính thức)
 │   └── main.py                         # FastAPI entrypoint (port 9000)
 ├── llm-router/                         # FastAPI router → local Ollama (chat + embeddings)
 ├── airflow/dags/document_etl.py        # Ingestion ETL DAG
@@ -156,40 +166,49 @@ Smart-Document-Chatbot/
 
 ## 🔄 Luồng Nghiệp vụ RAG Tự Phản Hồi (Self-reflective RAG In-depth)
 
-### Quy trình Xử lý Tài liệu (Ingestion Pipeline)
+### Quy trình Xử lý Tài liệu (Ingestion Pipeline — luồng Java chính)
 1. **Upload**: Tải tài liệu định dạng `.pdf`, `.docx` hoặc `.txt` (kiểm tra loại nội dung ở backend).
 2. **Parsing**: Apache PDFBox / POI phân tách cấu trúc văn bản.
-3. **Hierarchical Chunking**: Cắt nhỏ văn bản thành các phân đoạn nhỏ có gối đầu để bảo toàn ngữ cảnh ngữ nghĩa.
-4. **Vector Embeddings**: Gọi Ollama cục bộ với model `nomic-embed-text`.
-5. **Index**: Lưu trữ các vectors vào collection riêng trong **Qdrant Vector DB**, đồng thời đồng bộ trạng thái hoàn thành và sinh executive summary của tài liệu qua PostgreSQL.
+3. **Chunking**: Cắt nhỏ văn bản thành các phân đoạn (kích thước 500 ký tự).
+4. **Lưu trữ**: Metadata + chunks (JSON) lưu vào **PostgreSQL**; owner isolation theo `owner_username`.
+5. *(Đường ETL thay thế)*: Airflow DAG `document_etl.py` parse → embed (`nomic-embed-text`) → index vào **Qdrant** (kích hoạt thủ công).
 
-### Quy trình Trả lời Streaming & Tác nhân (Query & Self-reflective CRAG Flow)
+### Quy trình Trả lời Streaming & CRAG
 ```
 [User Question]
        │
        ▼
-[Initial Retrieval (Qdrant)] ──► Max Cosine Similarity Score >= 0.6?
-       │                                     │
-       ├──(YES: High Confidence)             ├──(NO: Low Confidence)
-       │                                     │
-       ▼                                     ▼
-[Build RAG Prompt with Context]     [Query Reformulation (DeepSeek)]
-       │                                     │
-       │                                     ▼
-       │                            [Parallel Re-retrieval]
-       │                                     │
-       │                                     ▼
-       │                            [Deduplication & Reranking] ──► Score >= 0.6?
-       │                                     │                           │
-       │                                     ├──(YES)                    ├──(NO)
-       │                                     │                           │
-       │                                     ▼                           ▼
-       │                            [Agentic Synthesis]         [Tavily Web Search Fallback]
-       │                                     │                           │
-       │                                     ▼                           ▼
-       ├─────────────────────────────────────┴───────────────────────────┤
+[Prompt-Injection Check] ──(HIGH)──► [Blocked response — không gọi LLM]
+       │
        ▼
-[Ollama Streaming LLM (DeepSeek-R1)]
+[Initial Retrieval (PostgreSQL chunks — lexical score)] ──► Max Score >= 0.6?
+       │                                                     │
+       ├──(YES: High Confidence)                             ├──(NO: Low Confidence)
+       │                                                     │
+       ▼                                                     ▼
+[Build RAG Prompt with Context]                      [Query Reformulation (qwen2.5:7b)]
+       │                                                     │
+       │                                                     ▼
+       │                                            [Re-retrieve variants]
+       │                                                     │
+       │                                                     ▼
+       │                                            [Merge & Rerank by score] ──► Score >= 0.6?
+       │                                                     │                       │
+       │                                                     ├──(YES)                ├──(NO)
+       │                                                     │                       │
+       │                                                     ▼                       ▼
+       │                                            [Agentic Synthesis]     [Tavily Web Search (nếu có)]
+       │                                                     │                       │
+       │                                                     ▼                       ▼
+       │                                            [Thiếu bằng chứng?]     [Web snippets]
+       │                                                     │                       │
+       │                                                     ▼                       ▼
+       │                                            [Safe Abstention —         [Grounded answer]
+       │                                             "không đủ bằng chứng"]
+       │
+       ├──────────────────────────────────────────────────────────────────────┘
+       ▼
+[Ollama Streaming LLM (qwen2.5:7b via LLM Router)]
        │
        ▼
 [Typewriter Response Streamed to UI via SSE (SseEmitter)]
@@ -215,7 +234,7 @@ make dev-up
 *Hạ tầng sẽ hoạt động tại: PostgreSQL (`localhost:5432`), Qdrant (`localhost:6333`), Ollama (`localhost:11434`) và LLM Router (`localhost:8001`). Container puller tự tải `llama3.2:3b` cùng `nomic-embed-text`.*
 
 ### Bước 2: Khởi động Backend (Spring Boot)
-1. Cấu hình `LLM_BASE_URL=http://localhost:8001` khi backend chạy ngoài Docker, cùng `JWT_SECRET` và `INTERNAL_SERVICE_TOKEN` trong file `.env`. Thêm `ANTHROPIC_API_KEY` và `OPENAI_API_KEY` để bật các route cloud.
+1. Copy `.env.example` sang `.env` và đặt giá trị thật: **bắt buộc** `JWT_SECRET` và `INTERNAL_SERVICE_TOKEN` (tạo bằng `openssl rand -base64 48`), `POSTGRES_PASSWORD`, và `QDRANT_API_KEY` nếu dùng Qdrant Cloud. Nếu backend chạy ngoài Docker, cấu hình `LLM_BASE_URL=http://localhost:8001`.
 2. Khởi chạy ứng dụng Spring Boot:
 ```bash
 cd backend
@@ -243,9 +262,9 @@ API protected yêu cầu JWT (`Authorization: Bearer <token>`); tài liệu và 
 
 ### 📄 API Quản lý Tài liệu (Documents)
 *   `POST /api/documents/upload` - Tải lên tài liệu mới (Xử lý Multipart-file).
-*   `GET /api/documents` - Lấy danh sách toàn bộ tài liệu đã được lập chỉ mục kèm theo tóm tắt và câu hỏi gợi ý.
-*   `GET /api/documents/{id}` - Truy vấn trạng thái chi tiết của tệp tin.
-*   `DELETE /api/documents/{id}` - Xóa tài liệu khỏi hệ cơ sở dữ liệu và thu hồi chỉ mục Vector trên Qdrant.
+*   `GET /api/documents` - Lấy danh sách tài liệu của người dùng hiện tại (cô lập theo `owner_username`).
+*   `GET /api/documents/{id}` - Truy vấn trạng thái chi tiết của tệp tin (chỉ tài liệu của chính người dùng).
+*   `DELETE /api/documents/{id}` - Xóa tài liệu khỏi hệ cơ sở dữ liệu (chỉ tài liệu của chính người dùng).
 
 ### 💬 API Hội thoại & Hỏi đáp (Chat & Streaming)
 *   `POST /api/chat/ask` - Endpoint hỏi đáp đồng bộ truyền thống.
@@ -253,37 +272,12 @@ API protected yêu cầu JWT (`Authorization: Bearer <token>`); tài liệu và 
 *   `GET /api/chat/history/{sessionId}` - Tải lịch sử hội thoại của toàn bộ phiên.
 *   `GET /api/chat/history/{sessionId}/{documentId}` - Lấy lịch sử hội thoại được phân tách theo tài liệu cụ thể.
 *   `DELETE /api/chat/history/{sessionId}` - Xóa lịch sử phiên chat.
+*   `GET /api/chat/sessions` - Danh sách phiên chat của người dùng.
 
-### 🏥 System Health & Metrics
-*   `GET /api/system/health` - Kiểm tra kết nối Qdrant, Ollama và trạng thái tổng thể (public, không cần JWT).
-*   `GET /api/system/metrics` - Tổng hợp RAG metrics: total requests, latency, fallback rate, error rate.
-
-**Ví dụ output `/api/system/health`:**
-```json
-{
-  "vector_db": "connected",
-  "llm_provider": "available",
-  "status": "ok"
-}
-```
-
-**Ví dụ output `/api/system/metrics`:**
-```json
-{
-  "total_requests": 1024,
-  "average_latency_ms": 1350,
-  "p95_latency_ms": 3200,
-  "fallback_count": 42,
-  "fallback_rate": 0.041,
-  "stream_errors": 3,
-  "error_rate": 0.003,
-  "fallback_breakdown": {
-    "corrective_retrieval": 28,
-    "web_search": 10,
-    "general_knowledge": 4
-  }
-}
-```
+### 🏥 Health & Metrics
+*   `GET /api/actuator/health` - Health probe (public; kết nối DB, disk, liveness/readiness).
+*   `GET /api/actuator/info` - Thông tin build (public).
+*   Prometheus: `management.endpoints.web.exposure` chỉ expose `health,info` theo mặc định — cần mở `/actuator/prometheus` nếu muốn scrape metrics (xem [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md)).
 
 ---
 
@@ -301,7 +295,7 @@ Mỗi response từ `/chat/ask` và SSE `complete` event đều trả về cấu
   "confidence": "high",
   "confidenceScore": 0.87,
   "latencyMs": 1420,
-  "model": "llama3.2:3b",
+  "model": "qwen2.5:7b",
   "ragStrategy": "direct",
   "sources": [
     {
@@ -317,7 +311,7 @@ Mỗi response từ `/chat/ask` và SSE `complete` event đều trả về cấu
 | Field | Ý nghĩa |
 | :--- | :--- |
 | `confidence` | `high` (≥0.70), `medium` (≥0.6), `low` (<0.6) |
-| `ragStrategy` | `direct` / `corrective` / `web_search` / `general_knowledge` |
+| `ragStrategy` | `direct` / `corrective` / `web_search` / `no_evidence` / `general_knowledge` / `blocked` |
 | `sources` | Danh sách structured citation kèm similarity score |
 
 ---
@@ -399,11 +393,11 @@ public SseEmitter askStream(@RequestBody ChatRequest request) {
 
 ## Security, Testing & Operations
 
-* `POST /api/auth/register` và `POST /api/auth/login` cấp JWT ký bằng secret cấu hình ổn định; login/upload/chat được rate-limit.
-* Callback Airflow và `/api/actuator/prometheus` cần `INTERNAL_SERVICE_TOKEN`; chỉ health/info được public.
-* Backend dùng JUnit/Mockito/Jacoco; frontend dùng Vitest + Testing Library và Playwright smoke test. GitHub Actions chạy test, build và scan image/IaC.
-* Log backend ở định dạng JSON có `requestId`; Prometheus thu metrics RAG và OTLP tracing có thể xuất sang collector.
-* Structured logging mỗi RAG request ghi nhận: `requestId`, `questionLen`, `retrievedDocs`, `topScore`, `model`, `strategy`, `latencyMs`, `status`.
+* `POST /api/auth/register` và `POST /api/auth/login` cấp JWT ký bằng secret cấu hình; login có khóa tài khoản tạm thời sau 5 lần sai trong 15 phút (in-memory). **Ghi chú trung thực:** rate limiting cho upload/chat đang là roadmap ở backend Java; Agent Service có rate limiting Redis thật (`agent/rate_limiter.py`).
+* `/api/actuator/prometheus` được bảo vệ bằng `X-Internal-Token` (`INTERNAL_SERVICE_TOKEN`); chỉ health/info public. **Fail-fast:** staging/production từ chối khởi động nếu `JWT_SECRET` rỗng hoặc vẫn dùng secret dev mặc định (`SecretStrengthValidator`).
+* Backend dùng JUnit + Mockito + JaCoCo (23 test bao phủ CRAG flow, abstention, prompt-injection, JWT, secret validation); frontend dùng Vitest + Testing Library và Playwright smoke test; agent/llm-router dùng pytest. GitHub Actions chạy test, build và scan image/IaC (Trivy).
+* Structured logging JSON mọi request ghi nhận: `requestId`, `method`, `path`, `status`, `durationMs` (`RequestIdFilter` + LogstashEncoder). Prometheus thu metrics RAG (`chat.requests.total{strategy,confidence}`, `chat.abstentions`, `chat.injection.blocked`, `chat.latency`) qua `/actuator/prometheus`.
+* Prompt-injection defense: heuristic kiểm tra câu hỏi người dùng trước mọi lời gọi LLM (`PromptInjectionDetector`); câu trả lời chỉ dựa trên context khi không đủ bằng chứng (safe abstention, `CRAG_ABSTAIN_ENABLED=true`).
 
-Tài liệu vận hành: [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md), [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) và quyết định bảo mật [`docs/adr/0001-security-boundaries.md`](docs/adr/0001-security-boundaries.md).
+Tài liệu vận hành: [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md), [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md), quyết định bảo mật [`docs/adr/0001-security-boundaries.md`](docs/adr/0001-security-boundaries.md) và bản đồ gap/evidence [`docs/AUDIT_AND_GAP_ANALYSIS.md`](docs/AUDIT_AND_GAP_ANALYSIS.md).
 

@@ -145,6 +145,13 @@
             <version>3.0.0</version>
         </dependency>
 
+        <!-- AWS SDK S3 — S3-compatible client for Cloudflare R2 storage -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.40</version>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi</artifactId>

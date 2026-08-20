@@ -3,6 +3,7 @@ package com.smartdocchat.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
@@ -11,8 +12,19 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
+import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -127,5 +140,85 @@ class StorageServiceTest {
 
         verify(restTemplate).exchange(eq("https://xyz.supabase.co/storage/v1/object/documents?prefixes=uuid.pdf"),
                 eq(HttpMethod.DELETE), any(), eq(String.class));
+    }
+
+    // -----------------------------------------------------------------------
+    // Cloudflare R2 provider tests
+    // -----------------------------------------------------------------------
+
+    private void setUpR2Provider(S3Client client) {
+        ReflectionTestUtils.setField(storageService, "provider", "r2");
+        ReflectionTestUtils.setField(storageService, "r2AccountId", "acct1");
+        ReflectionTestUtils.setField(storageService, "r2Bucket", "docs");
+        storageService.r2Client = client;
+    }
+
+    @Test
+    void r2UploadUsesGivenBucketAndKey() throws Exception {
+        S3Client client = mock(S3Client.class);
+        when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+        setUpR2Provider(client);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "uuid.pdf", "application/pdf", "content".getBytes());
+        assertEquals("uuid.pdf", storageService.upload("uuid.pdf", file));
+
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(client).putObject(captor.capture(), any(RequestBody.class));
+        assertEquals("docs", captor.getValue().bucket());
+        assertEquals("uuid.pdf", captor.getValue().key());
+        assertEquals("application/pdf", captor.getValue().contentType());
+    }
+
+    @Test
+    void r2UploadWrapsClientFailureInRuntimeException() {
+        S3Client client = mock(S3Client.class);
+        when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenThrow(S3Exception.builder().message("boom").build());
+        setUpR2Provider(client);
+        storageService.r2Client = client;
+
+        MockMultipartFile file = new MockMultipartFile("file", "a.pdf", "application/pdf", "c".getBytes());
+        assertThrows(RuntimeException.class, () -> storageService.upload("a.pdf", file));
+    }
+
+    @Test
+    void r2DownloadWritesTempFileWithOwnerOnlyPermissions() throws Exception {
+        S3Client client = mock(S3Client.class);
+        ResponseBytes<GetObjectResponse> bytes = ResponseBytes.fromByteArray(
+                GetObjectResponse.builder().build(), "bytes".getBytes(StandardCharsets.UTF_8));
+        when(client.getObjectAsBytes(any(GetObjectRequest.class))).thenReturn(bytes);
+        setUpR2Provider(client);
+
+        File file = storageService.download("uuid.pdf");
+
+        assertTrue(file.getName().contains("sdc_download_"));
+        assertEquals("bytes", new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void r2DownloadThrowsIOExceptionOnClientFailure() {
+        S3Client client = mock(S3Client.class);
+        when(client.getObjectAsBytes(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().message("not found").build());
+        setUpR2Provider(client);
+
+        assertThrows(IOException.class, () -> storageService.download("missing.pdf"));
+    }
+
+    @Test
+    void r2DeleteSendsRequestAndSwallowsErrors() {
+        S3Client client = mock(S3Client.class);
+        when(client.deleteObject(any(DeleteObjectRequest.class)))
+                .thenReturn(DeleteObjectResponse.builder().build());
+        setUpR2Provider(client);
+
+        storageService.delete("uuid.pdf");
+
+        ArgumentCaptor<DeleteObjectRequest> captor = ArgumentCaptor.forClass(DeleteObjectRequest.class);
+        verify(client).deleteObject(captor.capture());
+        assertEquals("docs", captor.getValue().bucket());
+        assertEquals("uuid.pdf", captor.getValue().key());
     }
 }

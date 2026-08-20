@@ -314,6 +314,7 @@ class TestMLOps:
         assignments = []
         for i in range(1000):
             v = ab.assign_variant("exp-1", f"q-{i}")
+            assert v is not None
             assignments.append(v["id"])
 
         control_count = assignments.count("control")
@@ -334,6 +335,7 @@ class TestMLOps:
 
         for i in range(100):
             variant = ab.assign_variant("exp-rollback", f"q-{i}")
+            assert variant is not None
             if variant["id"] == "control":
                 ab.log_result(
                     "exp-rollback",

@@ -5,7 +5,7 @@ TC-TK-01 → TC-TK-07: TopK Retrieval Pipeline Tests
 import time
 import sys
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,13 +16,13 @@ class RetrievalResult:
     doc_id: str
     content: str
     score: float
-    metadata: dict = None
+    metadata: Optional[dict] = None
 
 
 class MockRetriever:
     """Mock retriever for testing TopK logic."""
 
-    def __init__(self, docs: List[Dict] = None):
+    def __init__(self, docs: Optional[List[Dict]] = None):
         self.docs = docs or []
 
     def retrieve(

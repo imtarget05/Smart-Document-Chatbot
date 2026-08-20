@@ -64,6 +64,22 @@ public class MessageHandler {
         return prompt.toString();
     }
 
+    /**
+     * Safe abstention response for unanswerable questions: no sufficient
+     * evidence was retrieved and no fallback was available, so the system
+     * refuses to fabricate an answer.
+     */
+    public String buildAbstentionResponse() {
+        return "I couldn't find sufficient evidence in the provided documents to answer this question. "
+                + "Please rephrase the question or upload a document that covers this topic.";
+    }
+
+    /** Response when a user message is rejected as a prompt-injection attempt. */
+    public String buildInjectionBlockedResponse() {
+        return "I can't process this request: it appears to contain instructions that attempt to "
+                + "override the assistant's behavior. Please rephrase your question in a normal way.";
+    }
+
     // ------------------------------------------------------------------
     // LLM calls
     // ------------------------------------------------------------------

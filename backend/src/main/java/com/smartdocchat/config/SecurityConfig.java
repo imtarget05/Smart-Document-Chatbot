@@ -57,6 +57,7 @@ public class SecurityConfig {
                     "/swagger-ui.html"
                 ).permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").permitAll() // guarded by InternalTokenFilter
                 .requestMatchers(HttpMethod.GET, "/documents/**").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/documents/**").authenticated()
                 .anyRequest().authenticated()

@@ -29,7 +29,7 @@ class GeneratedAnswer:
 class MockHallucinationDetector:
     """Mock detector for testing hallucination logic."""
 
-    def __init__(self, known_docs: List[Dict] = None):
+    def __init__(self, known_docs: Optional[List[Dict]] = None):
         self.known_docs = known_docs or []
 
     def detect(self, query: str, answer: str, docs: List[Dict]) -> Dict:

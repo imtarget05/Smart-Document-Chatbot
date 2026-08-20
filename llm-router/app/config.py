@@ -19,5 +19,23 @@ class Settings:
     confidence_threshold: float = _float_env("ROUTER_CONFIDENCE_THRESHOLD", 0.7)
     internal_token: str = os.getenv("ROUTER_INTERNAL_TOKEN", "")
 
+    # Cloudflare Workers AI (primary provider, optional fallback to local Ollama)
+    cloudflare_account_id: str = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+    cloudflare_api_token: str = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    cloudflare_chat_model: str = os.getenv(
+        "CLOUDFLARE_CHAT_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    )
+    cloudflare_embed_model: str = os.getenv(
+        "CLOUDFLARE_EMBED_MODEL", "@cf/baai/bge-base-en-v1.5"
+    )
+    cloudflare_api_base: str = os.getenv(
+        "CLOUDFLARE_API_BASE", "https://api.cloudflare.com/client/v4"
+    )
+    cloudflare_timeout_seconds: float = _float_env("CLOUDFLARE_TIMEOUT_SECONDS", 60.0)
+    # Consecutive failures before the circuit breaker locks Cloudflare out.
+    circuit_breaker_threshold: int = int(
+        os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5")
+    )
+
 
 settings = Settings()

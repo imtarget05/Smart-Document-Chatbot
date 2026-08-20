@@ -23,4 +23,11 @@ public class CragConfig {
 
     /** Allow automatic web-search fallback on low confidence. */
     private boolean webSearchEnabled = false;
+
+    /**
+     * When true, queries whose evidence is insufficient (no retrieved chunks and
+     * no web-search fallback available) return a safe "insufficient evidence"
+     * response instead of answering from general knowledge.
+     */
+    private boolean abstainEnabled = true;
 }
