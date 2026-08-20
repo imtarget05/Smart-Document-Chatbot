@@ -33,6 +33,10 @@ except ImportError:
 
 
 def load_questions(path: str) -> list[dict]:
+    if not os.path.exists(path):
+        fallback = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.path.basename(path))
+        if os.path.exists(fallback):
+            path = fallback
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -242,14 +246,46 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     return summary
 
 
+def validate_questions_only(path: str) -> int:
+    """Validate the question set structure without hitting a live backend.
+
+    Used by CI so the eval workflow stays green without a deployed API.
+    Returns number of questions validated.
+    """
+    questions = load_questions(path)
+    errors = []
+    for i, q in enumerate(questions, start=1):
+        if not q.get("question"):
+            errors.append(f"q{i}: missing 'question'")
+        if not (q.get("expected_answer") or q.get("golden_answer") or q.get("expected_answer_contains")):
+            errors.append(f"q{i}: missing expected answer field")
+        expected = q.get("expected_answer_contains") or q.get("expected_source_keywords")
+        if expected is not None and not isinstance(expected, list):
+            errors.append(f"q{i}: expected fields must be lists")
+        for field in ("difficulty", "tags"):
+            if field in q and not isinstance(q[field], (str, list)):
+                errors.append(f"q{i}: invalid '{field}' type")
+    if errors:
+        raise SystemExit(f"Question set invalid:\n  " + "\n  ".join(errors))
+    print(f"[validate-questions] OK: {len(questions)} questions valid in {path}")
+    return len(questions)
+
+
 def main():
     parser = argparse.ArgumentParser(description="RAG Evaluation Pipeline")
     parser.add_argument(
         "--base-url", default="http://localhost:8080/api", help="Backend API base URL"
     )
-    parser.add_argument("--token", required=True, help="JWT auth token")
     parser.add_argument(
-        "--document-id", type=int, required=True, help="Document ID to evaluate against"
+        "--token",
+        default=None,
+        help="JWT auth token (required for live evaluation, not for --validate-only)",
+    )
+    parser.add_argument(
+        "--document-id",
+        type=int,
+        default=None,
+        help="Document ID to evaluate against",
     )
     parser.add_argument(
         "--questions", default="eval/questions.json", help="Path to questions JSON file"
@@ -265,7 +301,16 @@ def main():
     parser.add_argument(
         "--mlflow-uri", default="http://mlflow:5000", help="MLflow tracking server URI"
     )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Only validate question set structure (CI-safe, no backend needed)",
+    )
     args = parser.parse_args()
+
+    if args.validate_only or args.token is None or args.document_id is None:
+        validate_questions_only(args.questions)
+        return
 
     summary = run_evaluation(args)
 
