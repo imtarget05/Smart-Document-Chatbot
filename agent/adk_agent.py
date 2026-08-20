@@ -67,7 +67,7 @@ class ADKAgentConfig:
     name: str
     role: AgentRole
     instructions: str
-    model: str = "qwen2.5:7b"
+    model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
     tools: List[ADKToolSpec] = field(default_factory=list)
     max_retries: int = 2
     temperature: float = 0.7
@@ -106,7 +106,7 @@ class AdkAgentSpec:
     name: str
     description: str
     instructions: str
-    model: str = "qwen2.5:7b"
+    model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
 
 # ============================================================================
@@ -382,7 +382,7 @@ Return ONLY valid JSON, no other text."""
             result = await llm_generate(
                 prompt=prompt,
                 system_prompt="You are a query parser. Return only JSON.",
-                model="qwen2.5:7b",
+                model="@cf/meta/llama-3.3-70b-instruct-fp8-fast",
             )
             text = result.get("text", "")
             # Extract JSON from response

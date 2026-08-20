@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 @Data
 public class LlmConfig {
     private String baseUrl = "http://localhost:8001";
-    private String chatModel = "llama3.2:3b";
-    private String embeddingModel = "nomic-embed-text";
+    private String chatModel = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+    private String embeddingModel = "@cf/baai/bge-base-en-v1.5";
     private double temperature = 0.3;
     
     // Retry configurations

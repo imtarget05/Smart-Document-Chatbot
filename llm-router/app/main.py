@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from .config import Settings, settings
 from .models import ChatRequest
-from .providers import FailoverProvider, ProviderError
+from .providers import CloudflareProvider, ProviderError
 from .service import LLMRouter
 
 
@@ -19,7 +19,7 @@ logging.basicConfig(
 def create_app(
     app_settings: Settings = settings, router: LLMRouter | None = None
 ) -> FastAPI:
-    service = router or LLMRouter(app_settings, FailoverProvider(app_settings))
+    service = router or LLMRouter(app_settings, CloudflareProvider(app_settings))
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -28,8 +28,8 @@ def create_app(
 
     app = FastAPI(
         title="Smart Document Chatbot - LLM Router",
-        version="2.0.0",
-        description="Routes Ollama-compatible chat requests across local Ollama models.",
+        version="3.0.0",
+        description="Routes Ollama-compatible chat requests to Cloudflare Workers AI.",
         lifespan=lifespan,
     )
     app.state.router = service
@@ -44,13 +44,13 @@ def create_app(
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        providers = service.providers
         return {
             "status": "ok",
             "service": "llm-router",
             "providers": {
-                "cloudflare": bool(getattr(providers, "uses_cloudflare", False)),
-                "local": True,
+                "cloudflare": getattr(
+                    service.providers, "configured", False
+                ),
             },
         }
 
@@ -71,7 +71,7 @@ def create_app(
             return await service.providers.embeddings(payload)
         except Exception as exc:
             raise HTTPException(
-                status_code=503, detail="local_embedding_unavailable"
+                status_code=503, detail="embedding_unavailable"
             ) from exc
 
     return app

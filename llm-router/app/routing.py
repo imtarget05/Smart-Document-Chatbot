@@ -1,7 +1,6 @@
 from .config import Settings
 from .models import ChatRequest, RouteDecision
 
-SIMPLE_TASKS = {"qa", "q&a", "extract", "extract_field", "keyword_search", "search"}
 COMPLEX_TASKS = {"compare", "summarize_long", "summarize"}
 
 
@@ -37,7 +36,7 @@ def choose_route(request: ChatRequest, settings: Settings) -> RouteDecision:
 
     if is_complex(request):
         return RouteDecision(
-            model=settings.chat_model_complex,
+            model=settings.cloudflare_chat_model,
             reason=f"complex_task:{task_type}",
             task_type=task_type,
         )
@@ -45,13 +44,13 @@ def choose_route(request: ChatRequest, settings: Settings) -> RouteDecision:
     confidence = request.routing.confidence_score
     if confidence is not None and confidence < settings.confidence_threshold:
         return RouteDecision(
-            model=settings.chat_model_complex,
+            model=settings.cloudflare_chat_model,
             reason=f"low_confidence:{confidence:.3f}",
             task_type=task_type,
         )
 
     return RouteDecision(
-        model=settings.chat_model_simple,
+        model=settings.cloudflare_chat_model,
         reason=f"simple_task:{task_type}",
         task_type=task_type,
     )

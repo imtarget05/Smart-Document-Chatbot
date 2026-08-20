@@ -82,7 +82,7 @@ class TestMetricsLabels:
         agent_run_total.labels(agent_name="rag_agent", status="success").inc()
 
     def test_llm_call_labels(self):
-        llm_call_total.labels(model="qwen2.5:7b", status="success").inc()
+        llm_call_total.labels(model="@cf/meta/llama-3.3-70b-instruct-fp8-fast", status="success").inc()
 
     def test_retrieval_labels(self):
         retrieval_total.labels(search_type="hybrid", status="success").inc()

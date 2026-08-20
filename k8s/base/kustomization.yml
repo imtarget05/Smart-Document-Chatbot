@@ -16,9 +16,7 @@ resources:
   - backend-service.yml
   - frontend-deployment.yml
   - frontend-service.yml
-  - llm-deployment.yml
   - llm-router-deployment.yml
-  - pvc.yml
   - ingress.yml
   - hpa.yml
   - network-policy.yml

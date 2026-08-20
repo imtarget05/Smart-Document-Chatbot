@@ -1,14 +1,13 @@
 # ============================================
 # Smart Document Chatbot - Development Docker Compose
 # Only starts infrastructure services that still run locally in dev:
-#   - Ollama (LLM + embeddings)
-#   - llm-router
+#   - llm-router (Cloudflare Workers AI)
 #   - Agent service (hot-reload)
 #   - pgAdmin (optional, --profile tools)
 #
 # PostgreSQL → Neon Cloud (set NEON_DATABASE_URL in .env)
 # Qdrant     → Qdrant Cloud (set QDRANT_HOST/API_KEY) OR local below
-# Storage    → local disk (STORAGE_PROVIDER=local, default)
+# Storage    → Cloudflare R2 (STORAGE_PROVIDER=r2) OR local disk (local, default)
 #
 # Usage: docker compose -f docker/docker-compose.dev.yml up -d
 # ============================================
@@ -50,72 +49,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Ollama LLM Server ────────────────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: sdc-ollama-dev
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_dev_data:/root/.ollama
-    environment:
-      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
-      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 15s
-      timeout: 10s
-      retries: 8
-      start_period: 30s
-    restart: unless-stopped
-
-  # ── Ollama Model Puller (one-shot) ───────────────────────────────────────────
-  ollama-model-puller:
-    image: curlimages/curl:latest
-    container_name: sdc-ollama-puller-dev
-    depends_on:
-      ollama:
-        condition: service_healthy
-    entrypoint:
-      - sh
-      - -c
-      - |
-        echo "Pulling chat model: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b} ..."
-        curl -sf -X POST http://ollama:11434/api/pull \
-          -H 'Content-Type: application/json' \
-          -d "{\"name\": \"${OLLAMA_CHAT_MODEL:-qwen2.5:7b}\"}"
-        echo "Pulling embedding model: nomic-embed-text ..."
-        curl -sf -X POST http://ollama:11434/api/pull \
-          -H 'Content-Type: application/json' \
-          -d '{"name": "nomic-embed-text"}'
-        echo "All models ready."
-    restart: "no"
-
-  # ── LLM Router (local Ollama only) ─────────────────────────────────────────
+  # ── LLM Router (Cloudflare Workers AI) ────────────────────────────────────
   llm-router:
     build:
       context: ../llm-router
       dockerfile: Dockerfile
     container_name: sdc-llm-router-dev
     environment:
-      LOCAL_LLM_BASE_URL: http://ollama:11434
-      LOCAL_CHAT_MODEL_SIMPLE: ${LOCAL_CHAT_MODEL_SIMPLE:-qwen2.5:7b}
-      LOCAL_CHAT_MODEL_COMPLEX: ${LOCAL_CHAT_MODEL_COMPLEX:-qwen2.5:7b}
-      LOCAL_EMBED_MODEL: ${LOCAL_EMBED_MODEL:-nomic-embed-text}
-      LOCAL_LLM_TIMEOUT_SECONDS: ${LOCAL_LLM_TIMEOUT_SECONDS:-180}
       ROUTER_CONFIDENCE_THRESHOLD: ${ROUTER_CONFIDENCE_THRESHOLD:-0.7}
       CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
       CLOUDFLARE_CHAT_MODEL: ${CLOUDFLARE_CHAT_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
       CLOUDFLARE_EMBED_MODEL: ${CLOUDFLARE_EMBED_MODEL:-@cf/baai/bge-base-en-v1.5}
       CLOUDFLARE_TIMEOUT_SECONDS: ${CLOUDFLARE_TIMEOUT_SECONDS:-60}
-      CIRCUIT_BREAKER_THRESHOLD: ${CIRCUIT_BREAKER_THRESHOLD:-5}
     ports:
       - "${LLM_ROUTER_PORT:-8001}:8000"
-    depends_on:
-      ollama:
-        condition: service_healthy
     restart: unless-stopped
 
   # ── Python Agent Service (hot-reload) ───────────────────────────────────────
@@ -128,8 +76,8 @@ services:
       APP_ENV: local
       INTERNAL_SERVICE_TOKEN: local-development-service-token-change-me
       LLM_BASE_URL: http://llm-router:8000
-      LLM_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
-      LLM_EMBEDDING_MODEL: nomic-embed-text
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-@cf/baai/bge-base-en-v1.5}
       # Qdrant — points to local container by default (no auth in local dev)
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
@@ -212,8 +160,6 @@ volumes:
   postgres_dev_data:
     driver: local
   qdrant_dev_data:
-    driver: local
-  ollama_dev_data:
     driver: local
   agent_dev_reports:
     driver: local

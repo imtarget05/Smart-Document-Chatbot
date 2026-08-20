@@ -20,8 +20,8 @@
   {
     "id": 3,
     "question": "Mô hình embedding nào được dùng để sinh vector?",
-    "expected_answer_contains": ["nomic-embed-text"],
-    "expected_source_keywords": ["nomic", "embed", "embedding"],
+    "expected_answer_contains": ["@cf/baai/bge-base-en-v1.5"],
+    "expected_source_keywords": ["embed", "embedding"],
     "difficulty": "easy",
     "tags": ["embedding"],
     "expected_min_confidence": 0.8

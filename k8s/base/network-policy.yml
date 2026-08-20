@@ -84,12 +84,7 @@ spec:
       ports:
         - port: 8000
   egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app: llm
-      ports:
-        - port: 11434
+    # All chat and embedding requests go to Cloudflare Workers AI (HTTPS).
     - to: []
       ports:
         - port: 443

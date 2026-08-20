@@ -41,7 +41,7 @@ class MessageHandlerTest {
     @BeforeEach
     void setUp() {
         llmConfig = new LlmConfig();
-        llmConfig.setChatModel("llama3.2:3b");
+        llmConfig.setChatModel("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
         llmConfig.setBaseUrl("http://localhost:8001");
         llmConfig.setMaxAttempts(2);
         llmConfig.setRetryBackoffMs(1);
@@ -72,7 +72,7 @@ class MessageHandlerTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void callLLMOnceExtractsContentFromOllamaResponse() {
+    void callLLMOnceExtractsContentFromResponse() {
         Map<String, Object> body = Map.of("message", Map.of("content", "hello world"));
         when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST), any(), eq(Map.class)))
                 .thenReturn(ResponseEntity.ok(body));
@@ -153,7 +153,7 @@ class MessageHandlerTest {
         when(restTemplate.execute(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST),
                 any(org.springframework.web.client.RequestCallback.class),
                 any(org.springframework.web.client.ResponseExtractor.class)))
-                .thenThrow(new IllegalStateException("Ollama stream request failed: 500"));
+                .thenThrow(new IllegalStateException("LLM stream request failed: 500"));
 
         assertThrows(IllegalStateException.class, () -> messageHandler.streamLLM("sys", "user", t -> {
         }));

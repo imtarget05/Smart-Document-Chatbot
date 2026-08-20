@@ -57,8 +57,8 @@ cors:
 
 llm:
   base-url: ${LLM_BASE_URL:http://localhost:8001}
-  chat-model: ${LLM_CHAT_MODEL:qwen2.5:7b}
-  embedding-model: ${LLM_EMBEDDING_MODEL:nomic-embed-text}
+  chat-model: ${LLM_CHAT_MODEL:@cf/meta/llama-3.3-70b-instruct-fp8-fast}
+  embedding-model: ${LLM_EMBEDDING_MODEL:@cf/baai/bge-base-en-v1.5}
   temperature: ${LLM_TEMPERATURE:0.3}
   max-attempts: ${LLM_MAX_ATTEMPTS:3}
   retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}

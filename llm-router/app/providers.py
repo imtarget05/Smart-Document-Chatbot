@@ -1,6 +1,5 @@
 import asyncio
 import json
-import time
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, Protocol
@@ -43,106 +42,6 @@ def _ollama_response(
     }
 
 
-class ProviderClient:
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
-        self.settings = settings
-        self.client = client or httpx.AsyncClient()
-        self._owns_client = client is None
-
-    async def close(self) -> None:
-        if self._owns_client:
-            await self.client.aclose()
-
-    async def chat(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> dict[str, Any]:
-        return await self._local_chat(request, decision, request_id)
-
-    async def stream_chat(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> AsyncIterator[bytes]:
-        async for chunk in self._local_stream(request, decision, request_id):
-            yield chunk
-
-    async def embeddings(self, body: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post(
-            f"{self.settings.local_base_url.rstrip('/')}/api/embeddings",
-            json=body,
-            timeout=self.settings.local_timeout_seconds,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    async def _local_chat(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> dict[str, Any]:
-        body = request.model_dump(exclude={"routing"}, exclude_none=True)
-        body.update({"model": decision.model, "stream": False})
-        try:
-            async with asyncio.timeout(self.settings.local_timeout_seconds):
-                response = await self.client.post(
-                    f"{self.settings.local_base_url.rstrip('/')}/api/chat",
-                    json=body,
-                    timeout=self.settings.local_timeout_seconds,
-                )
-                response.raise_for_status()
-                payload = response.json()
-        except TimeoutError as exc:
-            raise ProviderError("local_timeout") from exc
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ProviderError(f"local_error:{type(exc).__name__}") from exc
-        payload["router"] = route_metadata(decision, request_id)
-        return payload
-
-    async def _local_stream(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> AsyncIterator[bytes]:
-        body = request.model_dump(exclude={"routing"}, exclude_none=True)
-        body.update({"model": decision.model, "stream": True})
-        try:
-            async with self.client.stream(
-                "POST",
-                f"{self.settings.local_base_url.rstrip('/')}/api/chat",
-                json=body,
-                timeout=self.settings.local_timeout_seconds,
-            ) as response:
-                response.raise_for_status()
-                lines = response.aiter_lines()
-                try:
-                    first = await asyncio.wait_for(
-                        anext(lines), self.settings.local_timeout_seconds
-                    )
-                except (TimeoutError, StopAsyncIteration) as exc:
-                    raise ProviderError("local_timeout") from exc
-                if first:
-                    yield self._decorate_ollama_line(first, decision, request_id)
-                async for line in lines:
-                    if line:
-                        yield self._decorate_ollama_line(line, decision, request_id)
-        except ProviderError:
-            raise
-        except httpx.HTTPError as exc:
-            raise ProviderError(f"local_error:{type(exc).__name__}") from exc
-
-    @staticmethod
-    def _decorate_ollama_line(
-        line: str, decision: RouteDecision, request_id: str
-    ) -> bytes:
-        payload = json.loads(line)
-        payload["router"] = route_metadata(decision, request_id)
-        return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
-
-    @staticmethod
-    def _ollama_chunk(
-        content: str, done: bool, decision: RouteDecision, request_id: str
-    ) -> bytes:
-        payload = _ollama_response(content, decision, request_id)
-        payload["done"] = done
-        if not done:
-            payload.pop("done_reason", None)
-        return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
-
-
 class CloudflareProvider:
     """Cloudflare Workers AI provider exposing an Ollama-compatible interface.
 
@@ -155,6 +54,14 @@ class CloudflareProvider:
         self.settings = settings
         self.client = client or httpx.AsyncClient()
         self._owns_client = client is None
+        self._consecutive_failures = 0
+        self._open_until = 0.0
+
+    @property
+    def configured(self) -> bool:
+        return bool(
+            self.settings.cloudflare_account_id and self.settings.cloudflare_api_token
+        )
 
     @property
     def _run_url(self) -> str:
@@ -285,88 +192,3 @@ class CloudflareProvider:
         if isinstance(texts, str):
             return {"model": self.settings.cloudflare_embed_model, "embedding": list(data[0])}
         return {"model": self.settings.cloudflare_embed_model, "embeddings": [list(v) for v in data]}
-
-
-class FailoverProvider:
-    """Routes to Cloudflare Workers AI first, falling back to local Ollama.
-
-    Implements a simple circuit breaker: after N consecutive Cloudflare
-    failures the provider stops trying Cloudflare for a cooldown window, then
-    re-arms automatically.
-    """
-
-    def __init__(
-        self,
-        settings: Settings,
-        cloudflare: CloudflareProvider | None = None,
-        local: ProviderClient | None = None,
-    ):
-        self.settings = settings
-        self.cloudflare = cloudflare or CloudflareProvider(settings)
-        self.local = local or ProviderClient(settings)
-        self._consecutive_failures = 0
-        self._open_until = 0.0
-
-    @property
-    def uses_cloudflare(self) -> bool:
-        return bool(
-            self.settings.cloudflare_account_id and self.settings.cloudflare_api_token
-        )
-
-    def _cloudflare_allowed(self) -> bool:
-        return self.uses_cloudflare and time.monotonic() >= self._open_until
-
-    def _register_failure(self) -> None:
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self.settings.circuit_breaker_threshold:
-            self._open_until = time.monotonic() + 60.0
-            self._consecutive_failures = 0
-
-    def _register_success(self) -> None:
-        self._consecutive_failures = 0
-
-    async def close(self) -> None:
-        await self.cloudflare.close()
-        await self.local.close()
-
-    async def chat(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> dict[str, Any]:
-        if self._cloudflare_allowed():
-            try:
-                result = await self.cloudflare.chat(request, decision, request_id)
-                self._register_success()
-                return result
-            except ProviderError:
-                self._register_failure()
-        return await self.local.chat(request, decision, request_id)
-
-    async def stream_chat(
-        self, request: ChatRequest, decision: RouteDecision, request_id: str
-    ) -> AsyncIterator[bytes]:
-        if self._cloudflare_allowed():
-            gen = self.cloudflare.stream_chat(request, decision, request_id)
-            try:
-                first = await anext(gen)
-            except StopAsyncIteration:
-                self._register_failure()
-            except ProviderError:
-                self._register_failure()
-            else:
-                self._register_success()
-                yield first
-                async for chunk in gen:
-                    yield chunk
-                return
-        async for chunk in self.local.stream_chat(request, decision, request_id):
-            yield chunk
-
-    async def embeddings(self, body: dict[str, Any]) -> dict[str, Any]:
-        if self._cloudflare_allowed():
-            try:
-                result = await self.cloudflare.embeddings(body)
-                self._register_success()
-                return result
-            except ProviderError:
-                self._register_failure()
-        return await self.local.embeddings(body)

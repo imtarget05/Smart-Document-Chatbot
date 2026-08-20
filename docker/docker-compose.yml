@@ -5,63 +5,12 @@
 # Data storage (all free-tier, long-term):
 #   PostgreSQL  → Neon serverless  (set NEON_DATABASE_URL in .env)
 #   Vector DB   → Qdrant Cloud     (set QDRANT_HOST / QDRANT_API_KEY / QDRANT_USE_HTTPS)
-#   File uploads→ Supabase Storage (set SUPABASE_URL / SUPABASE_SERVICE_KEY)
+#   File uploads→ Cloudflare R2    (set R2_* keys in .env)
 # ============================================
 
 services:
 
-  # --- Local LLM & Embedding Engine ---
-  ollama:
-    image: ollama/ollama:latest
-    container_name: smart-document-chatbox-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - app-network
-    environment:
-      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
-      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-  # --- Automated Local Model Puller ---
-  ollama-model-puller:
-    image: curlimages/curl:latest
-    container_name: smart-document-chatbox-ollama-puller
-    depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - app-network
-    entrypoint:
-      - sh
-      - -c
-      - |
-        echo "Pulling simple chat model: ${LOCAL_CHAT_MODEL_SIMPLE:-qwen2.5:7b} ..."
-        until curl -s http://ollama:11434/api/tags >/dev/null 2>&1; do sleep 2; done
-        curl -sf -X POST http://ollama:11434/api/pull \
-          -H 'Content-Type: application/json' \
-          -d "{\"name\": \"${LOCAL_CHAT_MODEL_SIMPLE:-qwen2.5:7b}\"}"
-        echo "Pulling complex chat model: ${LOCAL_CHAT_MODEL_COMPLEX:-qwen2.5:7b} ..."
-        curl -sf -X POST http://ollama:11434/api/pull \
-          -H 'Content-Type: application/json' \
-          -d "{\"name\": \"${LOCAL_CHAT_MODEL_COMPLEX:-qwen2.5:7b}\"}"
-        echo "Pulling embedding model: ${LOCAL_EMBED_MODEL:-nomic-embed-text} ..."
-        curl -sf -X POST http://ollama:11434/api/pull \
-          -H 'Content-Type: application/json' \
-          -d "{\"name\": \"${LOCAL_EMBED_MODEL:-nomic-embed-text}\"}"
-        echo "All local models pulled successfully!"
-
-  # --- LLM Router (local Ollama only) ---
+  # --- LLM Router (Cloudflare Workers AI) ---
   llm-router:
     build:
       context: ../llm-router
@@ -72,24 +21,15 @@ services:
     env_file:
       - ../.env
     environment:
-      LOCAL_LLM_BASE_URL: http://ollama:11434
-      LOCAL_CHAT_MODEL_SIMPLE: ${LOCAL_CHAT_MODEL_SIMPLE:-qwen2.5:7b}
-      LOCAL_CHAT_MODEL_COMPLEX: ${LOCAL_CHAT_MODEL_COMPLEX:-qwen2.5:7b}
-      LOCAL_EMBED_MODEL: ${LOCAL_EMBED_MODEL:-nomic-embed-text}
-      LOCAL_LLM_TIMEOUT_SECONDS: ${LOCAL_LLM_TIMEOUT_SECONDS:-180}
       ROUTER_CONFIDENCE_THRESHOLD: ${ROUTER_CONFIDENCE_THRESHOLD:-0.7}
-      # Cloudflare Workers AI (primary provider when credentials are set)
+      # Cloudflare Workers AI (primary provider with circuit breaker)
       CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
       CLOUDFLARE_CHAT_MODEL: ${CLOUDFLARE_CHAT_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
       CLOUDFLARE_EMBED_MODEL: ${CLOUDFLARE_EMBED_MODEL:-@cf/baai/bge-base-en-v1.5}
       CLOUDFLARE_TIMEOUT_SECONDS: ${CLOUDFLARE_TIMEOUT_SECONDS:-60}
-      CIRCUIT_BREAKER_THRESHOLD: ${CIRCUIT_BREAKER_THRESHOLD:-5}
     ports:
       - "${LLM_ROUTER_PORT:-8001}:8000"
-    depends_on:
-      ollama:
-        condition: service_started
     networks:
       app-network:
         aliases:
@@ -132,8 +72,8 @@ services:
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-documents}
       # CRAG uses the Ollama-compatible router for chat and embeddings.
       LLM_BASE_URL: http://llm-router:8000
-      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-qwen2.5:7b}
-      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-@cf/baai/bge-base-en-v1.5}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
       # JVM
       JAVA_OPTS: "${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}"
@@ -160,8 +100,6 @@ services:
       retries: 10
       start_period: 90s
     depends_on:
-      ollama:
-        condition: service_healthy
       llm-router:
         condition: service_healthy
     networks:
@@ -298,8 +236,8 @@ services:
     environment:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       LLM_BASE_URL: http://llm-router:8000
-      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-qwen2.5:7b}
-      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-@cf/baai/bge-base-en-v1.5}
       # Qdrant Cloud
       QDRANT_HOST: ${QDRANT_HOST}
       QDRANT_PORT: ${QDRANT_PORT:-6333}
@@ -332,8 +270,6 @@ services:
       retries: 5
       start_period: 30s
     depends_on:
-      ollama:
-        condition: service_healthy
       llm-router:
         condition: service_healthy
     networks:
@@ -347,8 +283,6 @@ services:
           cpus: '1.0'
 
 volumes:
-  ollama_data:
-    driver: local
   prometheus_data:
     driver: local
   grafana_data:

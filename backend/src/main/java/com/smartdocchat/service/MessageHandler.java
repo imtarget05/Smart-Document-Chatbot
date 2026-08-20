@@ -159,7 +159,7 @@ public class MessageHandler {
             objectMapper.writeValue(request.getBody(), buildChatRequest(systemPrompt, userPrompt, true));
         }, response -> {
             if (!response.getStatusCode().is2xxSuccessful()) {
-                throw new IllegalStateException("Ollama stream request failed: " + response.getStatusCode());
+                throw new IllegalStateException("LLM stream request failed: " + response.getStatusCode());
             }
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {

@@ -60,10 +60,10 @@ class Settings(BaseSettings):
     # Spring Boot internal auth — NO default. Must be set explicitly.
     internal_service_token: str = ""
 
-    # Ollama-compatible LLM Router (local only)
+    # Ollama-compatible LLM Router (Cloudflare Workers AI behind the router)
     llm_base_url: str = "http://llm-router:8000"
-    llm_chat_model: str = "qwen2.5:7b"
-    llm_embedding_model: str = "nomic-embed-text"
+    llm_chat_model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    llm_embedding_model: str = "@cf/baai/bge-base-en-v1.5"
     llm_temperature: float = 0.3
 
     # Qdrant — NO default api key. Must be set explicitly when Qdrant requires auth.

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class ReportAgent:
     def __init__(self):
-        self._llm = LLMFactory.get_local_model(temperature=0.2)
+        self._llm = LLMFactory.get_model(temperature=0.2)
         self._search = QdrantHybridSearch()
         self._pdf = PdfReportBuilder()
 

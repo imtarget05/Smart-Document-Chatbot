@@ -13,7 +13,7 @@ Usage:
         model_name="rag-retriever",
         version="1.0.0",
         metrics={"retrieval_accuracy": 0.85, "hallucination_rate": 0.10},
-        config={"chunk_size": 512, "embedding_model": "nomic-embed-text"},
+        config={"chunk_size": 512, "embedding_model": "@cf/baai/bge-base-en-v1.5"},
         artifact_path=None
     )
 

@@ -34,7 +34,7 @@ class ChatRequest(BaseModel):
 
 
 class RouteDecision(BaseModel):
-    provider: str = "local"
+    provider: str = "cloudflare"
     model: str
     reason: str
     task_type: str

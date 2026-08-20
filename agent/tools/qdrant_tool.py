@@ -2,7 +2,7 @@
 Qdrant Hybrid Search Tool - Phase 1.
 
 Combines:
-  1. Semantic search  - Qdrant cosine similarity via nomic-embed-text embeddings
+  1. Semantic search  - Qdrant cosine similarity via @cf/baai/bge-base-en-v1.5 embeddings
   2. BM25 keyword     - rank-bm25 scored against the semantic result subset
   3. RRF fusion       - Reciprocal Rank Fusion merges both ranked lists
 

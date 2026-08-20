@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 from .config import Settings
 from .models import ChatRequest, RouteDecision
-from .providers import ProviderClient, ProviderLike
+from .providers import CloudflareProvider, ProviderLike
 from .routing import choose_route
 
 
@@ -17,10 +17,10 @@ class LLMRouter:
     def __init__(
         self,
         settings: Settings,
-        providers: ProviderClient | ProviderLike | None = None,
+        providers: ProviderLike | None = None,
     ):
         self.settings = settings
-        self.providers = providers or ProviderClient(settings)
+        self.providers = providers or CloudflareProvider(settings)
 
     async def close(self) -> None:
         await self.providers.close()

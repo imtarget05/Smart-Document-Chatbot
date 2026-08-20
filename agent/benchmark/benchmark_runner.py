@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .cost_tracker import cost_tracker
 from .latency_profiler import latency_profiler, ProfileSpan
-from .models import get_hardware_cost_estimate
+from .models import CHAT_MODEL, get_hardware_cost_estimate
 
 logger = logging.getLogger(__name__)
 
@@ -154,9 +154,9 @@ class BenchmarkRunner:
 
         latency_summary = latency_profiler.get_summary().to_dict() if self.results else None
         hardware = {
-            "simple": get_hardware_cost_estimate("qwen2.5:7b"),
-            "complex": get_hardware_cost_estimate("qwen2.5:7b"),
-            "embedding": get_hardware_cost_estimate("nomic-embed-text"),
+            "simple": get_hardware_cost_estimate(CHAT_MODEL),
+            "complex": get_hardware_cost_estimate(CHAT_MODEL),
+            "embedding": get_hardware_cost_estimate(EMBEDDING_MODEL),
         }
 
         return BenchmarkReport(
@@ -201,7 +201,7 @@ class BenchmarkRunner:
         latency_profiler.record(query.id, spans)
         cost_tracker.track(
             query_id=query.id,
-            model=query.expected_model or "qwen2.5:7b",
+            model=query.expected_model or CHAT_MODEL,
             input_text=query.query,
             output_text=output.get("final_answer", "") or output.get("answer", ""),
         )
@@ -219,7 +219,7 @@ class BenchmarkRunner:
             query_text=query.query,
             latency_ms=latency,
             cost_usd=per_query_cost,
-            model_used=query.expected_model or "qwen2.5:7b",
+            model_used=query.expected_model or CHAT_MODEL,
             confidence=confidence,
             spans_count=len(spans),
             passed=passed,

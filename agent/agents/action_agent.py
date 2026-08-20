@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class ActionAgent:
     def __init__(self):
-        self._llm = LLMFactory.get_local_model(temperature=0.1)
+        self._llm = LLMFactory.get_model(temperature=0.1)
         self._email = EmailNotifier()
         self._webhook = WebhookTrigger()
 

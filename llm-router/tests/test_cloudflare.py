@@ -1,16 +1,14 @@
 import asyncio
 import json
-from typing import Any
 
 import httpx
 import pytest
 
 from app.config import Settings
 from app.models import ChatRequest, RouteDecision, RoutingContext
-from app.providers import CloudflareProvider, FailoverProvider, ProviderError
+from app.providers import CloudflareProvider, ProviderError
 
 CF_SETTINGS = Settings(
-    local_base_url="http://local",
     cloudflare_account_id="acct-1",
     cloudflare_api_token="token-1",
     cloudflare_chat_model="@cf/meta/llama-3.3-70b-instruct-fp8-fast",
@@ -28,12 +26,11 @@ def _request(stream: bool = False) -> ChatRequest:
 
 def _decision() -> RouteDecision:
     return RouteDecision(
-        provider="local", model="qwen2.5:7b", reason="test", task_type="general"
+        provider="cloudflare",
+        model=CF_SETTINGS.cloudflare_chat_model,
+        reason="test",
+        task_type="general",
     )
-
-
-async def _run(coro: Any) -> Any:
-    return await asyncio.wait_for(coro, timeout=5)
 
 
 def _fake_transport(factory):
@@ -133,61 +130,24 @@ def test_cloudflare_single_embedding():
     assert response["embedding"] == [0.1, 0.2, 0.3]
 
 
-def test_failover_falls_back_to_local_after_threshold():
-    settings = Settings(
-        local_base_url="http://local",
-        cloudflare_account_id="acct-1",
-        cloudflare_api_token="token-1",
-        circuit_breaker_threshold=2,
+def test_cloudflare_configured_flag():
+    provider = CloudflareProvider(CF_SETTINGS)
+    assert provider.configured is True
+
+    unconfigured = CloudflareProvider(Settings(cloudflare_account_id="", cloudflare_api_token=""))
+    assert unconfigured.configured is False
+
+
+def test_cloudflare_empty_response_raises():
+    def handler(request):
+        return httpx.Response(200, json={"success": True, "result": {}})
+
+    provider = CloudflareProvider(
+        CF_SETTINGS, httpx.AsyncClient(transport=_fake_transport(handler))
     )
 
-    class FlakyCloudflare:
-        def __init__(self):
-            self.calls = 0
-
-        async def close(self):
-            pass
-
-        async def chat(self, request, decision, request_id):
-            self.calls += 1
-            raise ProviderError("cloudflare_error")
-
-        async def stream_chat(self, request, decision, request_id):
-            self.calls += 1
-            raise ProviderError("cloudflare_error")
-            yield b""
-
-        async def embeddings(self, body):
-            raise ProviderError("cloudflare_error")
-
-    class DummyLocal:
-        def __init__(self):
-            self.calls = 0
-
-        async def close(self):
-            pass
-
-        async def chat(self, request, decision, request_id):
-            self.calls += 1
-            return {"message": {"content": "local"}}
-
-        async def stream_chat(self, request, decision, request_id):
-            self.calls += 1
-            yield b"local"
-
-        async def embeddings(self, body):
-            self.calls += 1
-            return {"embedding": [1.0]}
-
-    cloudflare = FlakyCloudflare()
-    local = DummyLocal()
-    provider = FailoverProvider(settings, cloudflare=cloudflare, local=local)
-
     async def run():
-        for _ in range(3):
-            await provider.chat(_request(), _decision(), "req-x")
-        return cloudflare.calls, local.calls
+        return await provider.chat(_request(), _decision(), "req-x")
 
-    cf_calls, local_calls = asyncio.run(run())
-    assert cf_calls == 2
-    assert local_calls == 3
+    with pytest.raises(ProviderError):
+        asyncio.run(run())

@@ -9,9 +9,8 @@ class CostEvalCase(EvalCase):
     """Estimates the dollar cost of a query based on token counts and model pricing."""
 
     MODEL_PRICING = {
-        "llama3.2:3b": {"input": 0.15, "output": 0.15},
-        "qwen2.5:32b-instruct": {"input": 0.90, "output": 0.90},
-        "nomic-embed-text": {"input": 0.02, "output": 0.02},
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast": {"input": 0.15, "output": 0.15},
+        "@cf/baai/bge-base-en-v1.5": {"input": 0.02, "output": 0.02},
     }
 
     def __init__(
@@ -21,7 +20,7 @@ class CostEvalCase(EvalCase):
         query: str,
         document_ids: list[str],
         max_cost_usd: float = 0.05,
-        model: str = "qwen2.5:7b",
+        model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
         importance: float = 1.0,
     ):
         super().__init__(case_id, name, importance=importance)

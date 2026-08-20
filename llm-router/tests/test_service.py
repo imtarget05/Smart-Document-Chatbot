@@ -10,10 +10,12 @@ from app.models import ChatRequest, RouteDecision, RoutingContext
 from app.providers import ProviderError
 from app.service import LLMRouter
 
+MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+
 
 class FakeProviders:
-    def __init__(self, fail_local=False):
-        self.fail_local = fail_local
+    def __init__(self, fail=False):
+        self.fail = fail
         self.decisions = []
 
     async def close(self) -> None:
@@ -23,8 +25,8 @@ class FakeProviders:
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> dict[str, Any]:
         self.decisions.append(decision)
-        if self.fail_local:
-            raise ProviderError("local_timeout")
+        if self.fail:
+            raise ProviderError("cloudflare_timeout")
         return {
             "model": decision.model,
             "message": {"role": "assistant", "content": "ok"},
@@ -42,8 +44,8 @@ class FakeProviders:
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> AsyncIterator[bytes]:
         self.decisions.append(decision)
-        if self.fail_local:
-            raise ProviderError("local_timeout")
+        if self.fail:
+            raise ProviderError("cloudflare_timeout")
         payload = {
             "model": decision.model,
             "message": {"content": "ok"},
@@ -62,10 +64,8 @@ class FakeProviders:
 @pytest.fixture
 def settings():
     return Settings(
-        local_base_url="http://local",
-        chat_model_simple="qwen2.5:7b",
-        chat_model_complex="qwen2.5:7b",
-        local_timeout_seconds=3.0,
+        cloudflare_chat_model=MODEL,
+        cloudflare_timeout_seconds=3.0,
     )
 
 
@@ -77,7 +77,7 @@ def simple_request(stream=False):
     )
 
 
-def test_chat_routes_through_local_provider(settings):
+def test_chat_routes_through_cloudflare_provider(settings):
     async def run():
         providers = FakeProviders()
         response = await LLMRouter(settings, providers).chat(simple_request())
@@ -85,9 +85,9 @@ def test_chat_routes_through_local_provider(settings):
 
     providers, response = asyncio.run(run())
 
-    assert [item.provider for item in providers.decisions] == ["local"]
-    assert response["router"]["provider"] == "local"
-    assert response["router"]["model"] == settings.chat_model_simple
+    assert [item.provider for item in providers.decisions] == ["cloudflare"]
+    assert response["router"]["provider"] == "cloudflare"
+    assert response["router"]["model"] == MODEL
     assert response["router"]["request_id"] == "req-1"
 
 
@@ -104,15 +104,15 @@ def test_stream_yields_router_metadata(settings):
 
     providers, chunks = asyncio.run(run())
 
-    assert [item.provider for item in providers.decisions] == ["local"]
+    assert [item.provider for item in providers.decisions] == ["cloudflare"]
     payload = json.loads(chunks[0].decode())
     assert payload["message"]["content"] == "ok"
-    assert payload["router"]["provider"] == "local"
+    assert payload["router"]["provider"] == "cloudflare"
 
 
-def test_local_failure_propagates_as_provider_error(settings):
+def test_cloudflare_failure_propagates_as_provider_error(settings):
     async def run():
-        providers = FakeProviders(fail_local=True)
+        providers = FakeProviders(fail=True)
         await LLMRouter(settings, providers).chat(simple_request())
 
     with pytest.raises(ProviderError):
@@ -121,7 +121,7 @@ def test_local_failure_propagates_as_provider_error(settings):
 
 def test_stream_failure_propagates_as_provider_error(settings):
     async def run():
-        providers = FakeProviders(fail_local=True)
+        providers = FakeProviders(fail=True)
         async for _ in LLMRouter(settings, providers).stream_chat(
             simple_request(stream=True)
         ):

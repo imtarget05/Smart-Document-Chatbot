@@ -2,36 +2,28 @@
 
 FastAPI service placed between the application and the LLM backend. It exposes
 Ollama-compatible endpoints used by the existing CRAG code, while the actual
-inference is handled by **Cloudflare Workers AI** (primary) with **local
-Ollama** as automatic fallback:
+inference is handled by **Cloudflare Workers AI** exclusively (no local Ollama
+fallback).
 
-- `POST /api/chat`: routes chat requests; served by Cloudflare Workers AI when
-  configured, otherwise by the simple/complex local models.
-- `POST /api/embeddings`: proxies embeddings to Cloudflare Workers AI or Ollama.
+- `POST /api/chat`: routes chat requests to Cloudflare Workers AI.
+- `POST /api/embeddings`: proxies embeddings to Cloudflare Workers AI.
 - `GET /health`: reports service provider configuration status.
 
 ## Routing
 
-The router serves **Cloudflare Workers AI** as the primary provider. Routing
-still decides which configured model a request would use under the local
-fallback:
+The router serves **Cloudflare Workers AI** as the only provider. The routing
+logic still classifies request complexity for observability (logs include the
+task type and reason), but all requests go to the same Cloudflare model.
 
-1. Complex tasks (`compare`, `summarize`, `summarize_long`) → `chat_model_complex`.
-2. More than 2 documents or more than 10 pages → `chat_model_complex`.
-3. `confidence_score` below `ROUTER_CONFIDENCE_THRESHOLD` (default 0.7) → `chat_model_complex`.
-4. Everything else (Q&A, extraction, keyword search) → `chat_model_simple`.
+1. Complex tasks (`compare`, `summarize`, `summarize_long`) → logged as `complex_task`.
+2. More than 2 documents or more than 10 pages → logged as `complex_task`.
+3. `confidence_score` below `ROUTER_CONFIDENCE_THRESHOLD` (default 0.7) → logged as `low_confidence`.
+4. Everything else (Q&A, extraction, keyword search) → logged as `simple_task`.
 
 When `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set, requests are
 translated to the Workers AI REST API (`/accounts/{id}/ai/run/{model}`) with
 the model `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. Responses and streaming
 are converted back to the Ollama wire format so callers never change.
-
-## Provider fallback & circuit breaker
-
-`FailoverProvider` tries Cloudflare first. After `CIRCUIT_BREAKER_THRESHOLD`
-consecutive Cloudflare failures (default 5), it stops calling Cloudflare for 60
-seconds and serves local Ollama instead, then re-arms automatically. Request
-metadata and structured JSON logs record the provider actually used.
 
 ## Request metadata
 
@@ -55,7 +47,8 @@ Existing Ollama requests continue to work. Callers can add optional metadata:
 ```
 
 Every response includes a `router` object. Logs are JSON and include the
-selected provider, model, reason, request ID, and latency for cost tracking.
+selected provider ("cloudflare"), model, reason, request ID, and latency for
+cost tracking.
 
 ## Configuration
 
@@ -64,17 +57,14 @@ Use `.env.example` at the repository root. Cloudflare credentials:
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Workers AI API auth.
 - `CLOUDFLARE_CHAT_MODEL` — inference model (default `@cf/meta/llama-3.3-70b-instruct-fp8-fast`).
 - `CLOUDFLARE_EMBED_MODEL` — embedding model (default `@cf/baai/bge-base-en-v1.5`).
-- `CIRCUIT_BREAKER_THRESHOLD` — consecutive failures before falling back (default 5).
-
-`LOCAL_LLM_BASE_URL` points at Ollama (`http://ollama:11434` in Docker);
-`LOCAL_CHAT_MODEL_SIMPLE` / `LOCAL_CHAT_MODEL_COMPLEX` select the fallback
-models. When `ROUTER_INTERNAL_TOKEN` is set, callers must send it in
-`X-Internal-Token` for `/api/*` routes.
+- `CLOUDFLARE_TIMEOUT_SECONDS` — request timeout (default 60s).
+- `ROUTER_CONFIDENCE_THRESHOLD` — confidence threshold for task classification (default 0.7).
+- `ROUTER_INTERNAL_TOKEN` — if set, callers must send it in `X-Internal-Token` for `/api/*` routes.
 
 Run tests from this directory:
 
 ```bash
-pytest -q
+uv run --python 3.12 pytest -q
 ```
 
 Smoke-test against real Cloudflare from this directory:
@@ -84,15 +74,15 @@ set -a && source ../.env && set +a
 uv run --python 3.12 python - <<'PY'
 import asyncio
 from app.config import Settings
-from app.providers import FailoverProvider
+from app.providers import CloudflareProvider
 from app.models import ChatRequest, RoutingContext, RouteDecision
 
 async def main():
-    p = FailoverProvider(Settings())
+    p = CloudflareProvider(Settings())
     resp = await p.chat(
         ChatRequest(messages=[{"role": "user", "content": "Say hello"}],
                      routing=RoutingContext()),
-        RouteDecision(provider="local", model="x", reason="smoke", task_type="general"),
+        RouteDecision(provider="cloudflare", model="x", reason="smoke", task_type="general"),
         "smoke",
     )
     print(resp["message"]["content"])

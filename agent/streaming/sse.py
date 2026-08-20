@@ -141,7 +141,7 @@ class StreamingResponseHandler:
         llm_callable: Callable,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: str = "qwen2.5:7b",
+        model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     ) -> AsyncGenerator[SSEEvent, None]:
         """
         Stream an LLM response token by token.
