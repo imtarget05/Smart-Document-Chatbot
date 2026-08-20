@@ -100,7 +100,6 @@ export default function LoginPage() {
               onChange={(e) => setAuthUsername(e.target.value)}
               placeholder="Enter username"
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm font-semibold text-white placeholder-white/30 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition duration-200"
-              required
             />
           </div>
 
@@ -114,7 +113,6 @@ export default function LoginPage() {
               onChange={(e) => setAuthPassword(e.target.value)}
               placeholder="Enter password"
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm font-semibold text-white placeholder-white/30 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition duration-200"
-              required
             />
           </div>
 

@@ -9,10 +9,18 @@ Security note:
 """
 
 import os
+from pathlib import Path
 from typing import List
 
+from dotenv import load_dotenv
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Load the repository .env into os.environ BEFORE any validation runs so that
+# APP_ENV (and every other variable) is visible to both pydantic-settings and
+# the os.getenv calls in _is_strict_env(). Existing real environment variables
+# take priority over the file (override=False).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 # Values that must never appear in production. If a secret equals one of these
 # (case-insensitive) the Settings validator will raise on instantiation.

@@ -154,6 +154,15 @@ VIETNAMESE_WORDS = {
     "kết_nối",
     "tải_xuống",
     "tải_lên",
+    # Common short/greeting words (were missing, causing false "en" detection)
+    "chào",
+    "xin",
+    "tên",
+    "sinh",
+    "viên",
+    "tuổi",
+    "nhà",
+    "đẹp",
     # Non-diacritic variants (telex/VNI input without diacritics)
     "cua",
     "va",
@@ -280,6 +289,15 @@ VIETNAMESE_WORDS = {
     "ket_noi",
     "tai_xuong",
     "tai_len",
+    # Common short/greeting words (telex/VNI variants)
+    "chao",
+    "xin",
+    "ten",
+    "sinh",
+    "vien",
+    "tuoi",
+    "nha",
+    "dep",
 }
 
 ENGLISH_WORDS = {

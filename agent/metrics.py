@@ -3,9 +3,16 @@ Prometheus metrics for the agent service.
 Exposes /metrics endpoint for Prometheus scraping.
 """
 
+import os
 import time
 from functools import wraps
 from typing import Callable
+
+# prometheus_client reads PROMETHEUS_MULTIPROC_DIR (multiproc mode) at import
+# time and crashes if the directory does not exist. Ensure it exists first.
+_multiproc_dir = os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
+if _multiproc_dir:
+    os.makedirs(_multiproc_dir, exist_ok=True)
 
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from prometheus_client import REGISTRY

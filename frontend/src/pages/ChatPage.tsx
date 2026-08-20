@@ -66,8 +66,6 @@ export default function ChatPage() {
   useEffect(() => {
     if (history.length > 0) {
       setMessages(history);
-    } else {
-      setMessages([]);
     }
   }, [history]);
 
