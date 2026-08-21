@@ -40,26 +40,26 @@ docker compose -f docker-compose.yml up -d
 
 ## 🎯 Tính năng Nổi bật (Core Features)
 
-*   **Real-time Streaming Response (Server-Sent Events - SSE)**: Chatbot phản hồi tức thời theo thời gian thực, kết nối qua `SseEmitter` của Spring Boot và luồng NDJSON native từ **Ollama**.
+*   **Real-time Streaming Response (Server-Sent Events - SSE)**: Chatbot phản hồi tức thời theo thời gian thực, kết nối qua `SseEmitter` của Spring Boot và luồng NDJSON stream từ **LLM Router (Cloudflare Workers AI)**.
 *   **Vite + React + TypeScript 5 (Strict Mode)**: Hệ thống Frontend được tái cấu trúc từ CRA sang **Vite**, tăng tốc độ khởi động và HMR gấp 10-20 lần. Toàn bộ mã nguồn sử dụng **TypeScript** an toàn cao, biên dịch 100% không lỗi.
 *   **TanStack Query (React Query v5)**: Quản lý cache dữ liệu tài liệu và lịch sử chat tối ưu, tự động invalidation khi upload/delete thông qua `useQuery` và `useMutation`, loại bỏ hoàn toàn việc fetch dữ liệu thủ công qua `useEffect`.
 *   **Kiến trúc Agentic CRAG (Corrective RAG) Loop**:
     *   *Confidence Evaluation*: Đánh giá điểm tin cậy ngữ cảnh trích xuất (ngưỡng 0.6).
-    *   *Query Reformulation*: Khi độ tin cậy thấp, tự động viết lại câu hỏi thành các biến thể tối ưu hơn thông qua mô hình `qwen2.5:7b` qua LLM Router, sau đó truy vấn lại.
+    *   *Query Reformulation*: Khi độ tin cậy thấp, tự động viết lại câu hỏi thành các biến thể tối ưu hơn qua LLM Router (Cloudflare Workers AI), sau đó truy vấn lại.
     *   *Reranking*: Gộp kết quả truy vấn gốc và các biến thể, sắp xếp lại theo điểm số và giữ top-k.
     *   *Web Search Fallback*: Bổ sung ngữ cảnh trực tuyến bằng API Tavily khi tài liệu không đủ dữ liệu (tùy chọn, cần `TAVILY_API_KEY`).
     *   *Safe Abstention (Unanswerable Handling)*: Khi không có đủ bằng chứng và không có web fallback, hệ thống **trả về thông báo "không đủ bằng chứng" thay vì bịa câu trả lời** từ kiến thức chung (có thể tắt qua `CRAG_ABSTAIN_ENABLED=false`).
 *   **Multi-Document Synthesis**: Hỗ trợ lựa chọn linh hoạt giữa chế độ hỏi đáp trên một tài liệu đơn lẻ (Single File Mode) hoặc tổng hợp ngữ cảnh chéo trên nhiều tài liệu cùng lúc (Multi-File Chat Mode).
 *   **Trích dẫn Nguồn ngữ cảnh (Citations)**: Hiển thị minh bạch nguồn gốc thông tin trích xuất (metadata tệp, nội dung đoạn văn gốc, điểm số tương đồng) giúp kiểm chứng tính chính xác của phản hồi.
 *   **Prompt-Injection Defense**: Kiểm tra heuristic trên câu hỏi người dùng trước mọi lời gọi LLM; các yêu cầu cố gắng ghi đè chỉ thị / lộ system prompt / trích xuất bí mật bị chặn (xem `backend/.../security/PromptInjectionDetector.java`).
-*   **Cloudflare Workers AI**: LLM primary (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) và embedding (`@cf/baai/bge-base-en-v1.5`) chạy qua LLM Router (Ollama-compatible API), fallback local Ollama khi Cloudflare không khả dụng.
+*   **Cloudflare Workers AI**: LLM (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) và embedding (`@cf/baai/bge-base-en-v1.5`) chạy qua LLM Router (Ollama-compatible API, thuần Cloudflare — không còn local fallback).
 *   **Cloudflare R2 Storage**: Lưu trữ tài liệu gốc (S3-compatible) thay thế Supabase Storage.
 
 ---
 
 ## 🏗️ Kiến trúc Hệ thống (System Architecture)
 
-> **Ghi chú trung thực:** Luồng chat chính của sản phẩm là **Spring Boot → LLM Router → Ollama**, với retrieval dựa trên chunks lưu trong **PostgreSQL** (lexical scoring). Python Agent Service (LangGraph) là một dịch vụ AI thử nghiệm riêng biệt có đầy đủ endpoint riêng (`/v1/agent/*`) nhưng **chưa được nối vào luồng chat chính** — đừng mô tả nó như API gateway của sản phẩm.
+> **Ghi chú trung thực:** Luồng chat chính của sản phẩm là **Spring Boot → LLM Router → Cloudflare Workers AI**, với retrieval dựa trên chunks lưu trong **PostgreSQL** (lexical scoring). Python Agent Service (LangGraph) là một dịch vụ AI thử nghiệm riêng biệt có đầy đủ endpoint riêng (`/v1/agent/*`) nhưng **chưa được nối vào luồng chat chính** — đừng mô tả nó như API gateway của sản phẩm.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -84,7 +84,7 @@ docker compose -f docker-compose.yml up -d
 │  │  │ Query Reform │─────►│ Re-retrieve + merge  │  │  │
 │  │  └──────┬───────┘      └──────────────────────┘  │  │
 │  │         ▼                                         │  │
-│  │  [LLM Router → Ollama (qwen2.5:7b)] ◄── [Tavily] │  │
+│  │  [LLM Router → Cloudflare Workers AI] ◄── [Tavily] │  │
 │  │         │ (web fallback tùy chọn)                │  │
 │  │         ▼                                         │  │
 │  │  [Safe Abstention khi thiếu bằng chứng]          │  │
@@ -108,8 +108,8 @@ Dịch vụ Python Agent (LangGraph multi-agent) chạy độc lập trên cổn
 | Layer | Công nghệ | Vai trò & Lý do chọn lựa |
 | :--- | :--- | :--- |
 | **Backend Core** | Spring Boot 3.2.x | RESTful API, auth JWT, owner isolation, CRAG orchestration, SSE streaming, Graceful Shutdown. |
-| **AI LLM Runtime** | FastAPI LLM Router → Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) | Router phân phối tác vụ đơn giản/phức tạp giữa 2 model Workers AI, fallback local Ollama khi Cloudflare không khả dụng. |
-| **Embedding Engine** | Cloudflare Workers AI (`@cf/baai/bge-base-en-v1.5`) | Sinh embedding 768 chiều — fallback `nomic-embed-text` local (Ollama). |
+| **AI LLM Runtime** | FastAPI LLM Router → Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) | Router phân phối tác vụ đơn giản/phức tạp giữa các model Workers AI (thuần Cloudflare, không local fallback). |
+| **Embedding Engine** | Cloudflare Workers AI (`@cf/baai/bge-base-en-v1.5`) | Sinh embedding 768 chiều qua LLM Router. |
 | **File Storage** | Cloudflare R2 (S3-compatible) | Lưu trữ tài liệu gốc upload, thay thế Supabase Storage. |
 | **Vector DB** | Qdrant (REST API) | Retrieval vector cho Agent Service (collection riêng theo user+doc) — **không nằm trong luồng chat Java** (Java dùng lexical scoring trên chunks PostgreSQL). |
 | **Relational DB** | PostgreSQL 15 | Metadata tệp, chunks, lịch sử hội thoại chuẩn hóa ACID, Flyway migrations. |
@@ -153,11 +153,10 @@ Smart-Document-Chatbot/
 │   ├── benchmark/, eval_framework/, security/, improvement/
 │   ├── mcp/, a2a/, adk_*               # CUSTOM implementations lấy cảm hứng từ MCP/A2A/ADK (không phải SDK chính thức)
 │   └── main.py                         # FastAPI entrypoint (port 9000)
-├── llm-router/                         # FastAPI router → Cloudflare Workers AI (chat + embeddings, Ollama fallback)
+├── llm-router/                         # FastAPI router → Cloudflare Workers AI (chat + embeddings, Ollama wire protocol)
 ├── eval/                               # RAG evaluation scripts + question sets
 ├── docker/                             # docker-compose (prod/dev/monitoring) + Dockerfiles
 │   └── docker-compose.yml              # LLM router, backend, frontend, agent, n8n, Prometheus, Grafana
-├── k8s/                                # Kubernetes manifests (base, overlays, ArgoCD GitOps)
 └── docs/                               # Architecture, API, observability, ADR
 ```
 
@@ -184,7 +183,7 @@ Smart-Document-Chatbot/
        ├──(YES: High Confidence)                             ├──(NO: Low Confidence)
        │                                                     │
        ▼                                                     ▼
-[Build RAG Prompt with Context]                      [Query Reformulation (qwen2.5:7b)]
+[Build RAG Prompt with Context]                      [Query Reformulation (LLM Router)]
        │                                                     │
        │                                                     ▼
        │                                            [Re-retrieve variants]
@@ -206,7 +205,7 @@ Smart-Document-Chatbot/
        │
        ├──────────────────────────────────────────────────────────────────────┘
        ▼
-[Ollama Streaming LLM (qwen2.5:7b via LLM Router)]
+[LLM Router Streaming (Cloudflare Workers AI)]
        │
        ▼
 [Typewriter Response Streamed to UI via SSE (SseEmitter)]
@@ -224,12 +223,12 @@ Smart-Document-Chatbot/
 *   Java 17+ & Maven 3.8+
 *   Node.js 18+ & npm
 
-### Bước 1: Khởi động Hạ tầng Dev (PostgreSQL, Qdrant & Ollama)
+### Bước 1: Khởi động Hạ tầng Dev (PostgreSQL, Qdrant & LLM Router)
 Từ thư mục gốc dự án:
 ```bash
 make dev-up
 ```
-*Hạ tầng sẽ hoạt động tại: PostgreSQL (`localhost:5432`), Qdrant (`localhost:6333`), Ollama (`localhost:11434`) và LLM Router (`localhost:8001`). Container puller tự tải `llama3.2:3b` cùng `nomic-embed-text`.*
+*Hạ tầng sẽ hoạt động tại: PostgreSQL (`localhost:5432`), Qdrant (`localhost:6333`) và LLM Router (`localhost:8001`). LLM Router gọi Cloudflare Workers AI (cần `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`).*
 
 ### Bước 2: Khởi động Backend (Spring Boot)
 1. Copy `.env.example` sang `.env` và đặt giá trị thật: **bắt buộc** `JWT_SECRET` và `INTERNAL_SERVICE_TOKEN` (tạo bằng `openssl rand -base64 48`), `POSTGRES_PASSWORD`, và `QDRANT_API_KEY` nếu dùng Qdrant Cloud. Nếu backend chạy ngoài Docker, cấu hình `LLM_BASE_URL=http://localhost:8001`.
@@ -293,7 +292,7 @@ Mỗi response từ `/chat/ask` và SSE `complete` event đều trả về cấu
   "confidence": "high",
   "confidenceScore": 0.87,
   "latencyMs": 1420,
-  "model": "qwen2.5:7b",
+  "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "ragStrategy": "direct",
   "sources": [
     {

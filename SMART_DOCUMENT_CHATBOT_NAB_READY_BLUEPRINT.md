@@ -73,7 +73,7 @@ Smart Document Chatbot should demonstrate:
 | AI Quality | RAG evaluation, faithfulness, citation accuracy |
 | Security | Authentication, authorization, prompt-injection defense |
 | Distributed Systems | Separate API/agent/vector/database components |
-| Cloud / DevOps | Docker, Kubernetes, GitHub Actions, ArgoCD |
+| Cloud / DevOps | Docker, GitHub Actions, Render, Cloudflare Pages |
 | Reliability | Retries, timeouts, fallback, graceful degradation |
 | Observability | Logs, metrics, traces, AI-quality telemetry |
 | Data Engineering | Document ingestion, indexing, idempotency |
@@ -301,8 +301,6 @@ package/build files
 Dockerfiles
 docker-compose
 CI/CD
-Kubernetes manifests
-ArgoCD
 database schema
 authentication
 authorization
@@ -1100,39 +1098,20 @@ Perform at least one restore drill.
 
 ---
 
-# 26. Kubernetes / ArgoCD
+# 26. Deployment Platform (non-goal: Kubernetes / ArgoCD)
 
-The repository already contains Kubernetes/GitOps concepts.
-
-Do not add more orchestration technology unnecessarily.
-
-Instead prove:
+**Decision (2026-08): Kubernetes and ArgoCD are removed and out of scope.** The
+repository no longer contains k8s manifests, GitOps CD jobs, or ArgoCD
+references. Deployment targets:
 
 ```text
-Kubernetes
-   ↓
-Deployment
-   ↓
-Health
-   ↓
-Scaling
-   ↓
-Rollback
+llm-router + backend  → Render blueprint (render.yaml, autoDeploy on push)
+frontend              → Cloudflare Pages
+images                → GHCR (built by CI/CD on main)
 ```
 
-Verify:
-
-```text
-[ ] readinessProbe
-[ ] livenessProbe
-[ ] resource requests
-[ ] resource limits
-[ ] non-root containers where possible
-[ ] secret handling
-[ ] image tags
-[ ] rollback procedure
-[ ] ArgoCD synchronization
-```
+Do not add orchestration technology unnecessarily. If Kubernetes is ever
+reconsidered, it must be re-added deliberately with a real cluster to deploy to — never as portfolio decoration.
 
 ---
 
@@ -1750,7 +1729,7 @@ flowchart LR
     Security --> Build["Build"]
     Build --> Docker["Docker Build"]
     Docker --> Push["Push Image"]
-    Push --> Deploy["GitOps Update"]
+    Push --> Deploy["Render / Pages Deploy"]
     Deploy --> Health["Health Check"]
     Health --> Smoke["Smoke Test"]
 ```
@@ -1912,8 +1891,6 @@ For every major CV claim:
 |---|---|---|---|---|
 | CRAG | implementation | ... | ... | Verified |
 | Multi-agent | graph | ... | ... | Verified |
-| Kubernetes | manifests | ... | ... | Verified |
-| ArgoCD | application | ... | ... | Verified |
 | RAG evaluation | benchmark | ... | ... | Verified |
 | Prompt injection defense | tests | ... | ... | Verified |
 
@@ -2025,8 +2002,8 @@ Goal:
 [ ] CI verification
 [ ] Docker hardening
 [ ] GHCR verification
-[ ] Kubernetes verification
-[ ] ArgoCD verification
+[ ] Render blueprint verification
+[ ] Cloudflare Pages verification
 [ ] Staging deployment
 [ ] Production process
 [ ] Health checks
@@ -2292,9 +2269,8 @@ The project should not be called production-ready until:
 19. Why PostgreSQL?
 20. Why LangGraph?
 21. Why Airflow?
-22. Why Kubernetes?
-23. Why ArgoCD?
-24. Why not microservices everywhere?
+22. Why did we remove Kubernetes/ArgoCD?
+23. Why not microservices everywhere?
 
 ## Reliability
 
@@ -2309,8 +2285,8 @@ The project should not be called production-ready until:
 
 31. What happens after a Git push?
 32. How is an image promoted?
-33. How does ArgoCD deploy?
-34. How do you rollback?
+32. How does Render / Cloudflare Pages deploy?
+33. How do you rollback?
 35. How do you know the deployment is healthy?
 
 ## Performance
@@ -2327,7 +2303,7 @@ The project should not be called production-ready until:
 
 Do not say:
 
-> "I used React, Spring Boot, FastAPI, LangGraph, Qdrant, Kubernetes, Airflow, and ArgoCD."
+> "I used React, Spring Boot, FastAPI, LangGraph, Qdrant, Airflow, and n8n."
 
 Instead say:
 
@@ -2551,7 +2527,7 @@ The objective is:
 
 Smart-Document-Chatbot should finish as:
 
-> **An evidence-grounded enterprise knowledge platform demonstrating secure RAG, corrective retrieval, measurable AI quality, prompt-injection resilience, tenant isolation, reliable LLM orchestration, observability, automated testing, and cloud-native GitOps deployment.**
+> **An evidence-grounded enterprise knowledge platform demonstrating secure RAG, corrective retrieval, measurable AI quality, prompt-injection resilience, tenant isolation, reliable LLM orchestration, observability, automated testing, and managed-platform deployment (Render + Cloudflare Pages).**
 
 The repository should be:
 
