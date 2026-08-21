@@ -20,15 +20,39 @@ from graph.state import AgentState
 
 logger = logging.getLogger(__name__)
 
-# Load product catalog
+# Load product catalog (graceful when sample data is absent)
 CATALOG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "data",
     "products_catalog.json",
 )
 
-with open(CATALOG_PATH, "r", encoding="utf-8") as f:
-    PRODUCT_CATALOG = json.load(f)
+EMPTY_CATALOG = {
+    "categories": [],
+    "products": [],
+    "policies": {
+        "shipping": {},
+        "return": {"days": 0, "condition": ""},
+        "warranty": "",
+    },
+}
+
+
+def _load_catalog() -> Dict:
+    try:
+        with open(CATALOG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(
+            "Product catalog not found at %s — CSKH agent running with empty catalog",
+            CATALOG_PATH,
+        )
+    except json.JSONDecodeError:
+        logger.warning("Product catalog at %s is corrupt — using empty catalog", CATALOG_PATH)
+    return dict(EMPTY_CATALOG)
+
+
+PRODUCT_CATALOG = _load_catalog()
 
 # ---- System Prompt ----
 
