@@ -23,6 +23,9 @@ public class MessageHandler {
     private final LlmConfig llmConfig;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    @org.springframework.beans.factory.annotation.Value("${security.internal-token:}")
+    private String internalToken;
+
 
     private static final String DEFAULT_SYSTEM_PROMPT =
             "You are a helpful document assistant. Answer questions accurately based on the provided context.";
@@ -121,6 +124,9 @@ public class MessageHandler {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            if (internalToken != null && !internalToken.isBlank()) {
+                headers.set("X-Internal-Token", internalToken);
+            }
 
             HttpEntity<Map<String, Object>> entity =
                     new HttpEntity<>(buildChatRequest(systemPrompt, userPrompt, false), headers);
@@ -156,6 +162,9 @@ public class MessageHandler {
     public void streamLLM(String systemPrompt, String userPrompt, Consumer<String> onToken) {
         restTemplate.execute(llmConfig.getChatUrl(), HttpMethod.POST, request -> {
             request.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            if (internalToken != null && !internalToken.isBlank()) {
+                request.getHeaders().set("X-Internal-Token", internalToken);
+            }
             objectMapper.writeValue(request.getBody(), buildChatRequest(systemPrompt, userPrompt, true));
         }, response -> {
             if (!response.getStatusCode().is2xxSuccessful()) {

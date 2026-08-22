@@ -41,14 +41,41 @@ def load_questions(path: str) -> list[dict]:
         return json.load(f)
 
 
+def get_csrf_token(base_url: str, session: requests.Session) -> str | None:
+    """Fetch a CSRF token from the backend (if the endpoint is available).
+
+    The Spring Boot backend enables CSRF protection on mutating endpoints,
+    so POST requests must carry the X-XSRF-TOKEN header plus the XSRF-TOKEN
+    cookie issued by /api/csrf. Returns None when CSRF is disabled or the
+    endpoint is unreachable.
+    """
+    try:
+        resp = session.get(f"{base_url}/api/csrf", timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("token")
+    except (requests.exceptions.RequestException, ValueError):
+        pass
+    return None
+
+
 def ask_question(
-    base_url: str, token: str, session_id: str, document_id: int, question: str
+    base_url: str,
+    token: str,
+    session_id: str,
+    document_id: int,
+    question: str,
+    session: requests.Session | None = None,
+    csrf_token: str | None = None,
 ) -> dict[str, Any]:
     """Send a synchronous /chat/ask request and capture response + latency."""
+    http = session or requests
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
     }
+    if csrf_token:
+        headers["X-XSRF-TOKEN"] = csrf_token
     payload = {
         "sessionId": session_id,
         "documentId": document_id,
@@ -57,7 +84,7 @@ def ask_question(
 
     start = time.time()
     try:
-        resp = requests.post(
+        resp = http.post(
             f"{base_url}/chat/ask", json=payload, headers=headers, timeout=120
         )
         latency_ms = round((time.time() - start) * 1000)
@@ -121,7 +148,7 @@ def evaluate_answer(result: dict, question: dict) -> dict[str, Any]:
 
     return {
         "question_id": question["id"],
-        "difficulty": question["difficulty"],
+        "difficulty": question.get("difficulty"),
         "answer_correct": answer_correct,
         "keywords_found": keywords_found,
         "retrieval_accurate": retrieval_accurate,
@@ -145,6 +172,17 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     print(f"   Session: {session_id}")
     print()
 
+    # Use a persistent requests.Session so the backend's session cookie
+    # (set during CSRF exchange) is reused across all ask requests.
+    session = requests.Session()
+
+    csrf_token: str | None = get_csrf_token(args.base_url, session)
+    if csrf_token:
+        print(f"   ✅ CSRF token acquired")
+    else:
+        print(f"   ⚠️  No CSRF token (POST may fail if CSRF is enforced)")
+    print()
+
     # Start MLflow run if available
     mlflow_run = None
     if args.mlflow and MLFLOW_AVAILABLE:
@@ -158,6 +196,7 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
                     "document_id": args.document_id,
                     "total_questions": len(questions),
                     "session_id": session_id,
+                    "csrf_enabled": csrf_token is not None,
                 }
             )
         except Exception as e:
@@ -167,8 +206,17 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     details = []
     for i, q in enumerate(questions, 1):
         print(f"  [{i}/{len(questions)}] {q['question'][:60]}...", end=" ", flush=True)
+        # Spring Security rotates the CSRF token on every authenticated POST,
+        # so a fresh token must be fetched before each request.
+        csrf_token = get_csrf_token(args.base_url, session)
         result = ask_question(
-            args.base_url, args.token, session_id, args.document_id, q["question"]
+            args.base_url,
+            args.token,
+            session_id,
+            args.document_id,
+            q["question"],
+            session=session,
+            csrf_token=csrf_token,
         )
         evaluation = evaluate_answer(result, q)
         details.append(evaluation)
