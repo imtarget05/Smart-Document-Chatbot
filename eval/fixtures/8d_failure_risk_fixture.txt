@@ -1,0 +1,107 @@
+EVALUATION FIXTURE — SYNTHETIC TEST DATA
+NOT PRODUCTION DATA
+Purpose: regression benchmark evidence set for eval/agent_questions.json.
+This document intentionally contains the terminology expected by the lexical
+retrieval layer and the evaluation keywords (failures, root cause, 5 Whys,
+8D, corrective actions, risk assessment, mitigation, preventive actions,
+similarities/differences).
+
+ENGINEERING FAILURE ANALYSIS REPORT
+
+CASE A: Bearing Failure on Production Line 3
+
+1. Problem description: During week 32, the main drive bearing on Production
+Line 3 failed twice, causing 14 hours of unplanned downtime and a batch of
+rejected parts.
+
+2. Root cause analysis (5 Whys):
+Why 1: The bearing seized due to lubrication starvation.
+Why 2: The automatic lubrication pump delivered no grease.
+Why 3: The pump timer relay was set incorrectly after maintenance.
+Why 4: The maintenance procedure did not include a post-repair verification
+step for the lubrication system.
+Why 5 (ROOT CAUSE): The corrective maintenance checklist lacks a mandatory
+verification step, allowing misconfiguration to go undetected.
+
+3. 8D Report — Case A:
+D1 Team: Quality engineer, maintenance lead, line operator.
+D2 Problem: Recurring bearing failure, 14h downtime, scrap parts.
+D3 Interim containment: Switched to manual lubrication every 8 hours and
+added daily inspection.
+D4 Root cause: Missing verification step in the maintenance checklist.
+D5 Corrective actions: (a) Update the maintenance checklist to require a
+lubrication verification test after every repair; (b) install a pressure
+sensor with alarm on the lubrication line; (c) retrain maintenance staff.
+D6 Implemented corrective action: Checklist updated and pressure sensor
+installed on Line 3.
+D7 Preventive actions: Roll out the revised checklist to all production
+lines and add lubrication verification to the annual audit.
+D8 Verification of effectiveness: After 12 weeks, zero recurrence of
+bearing failure; pressure alarms verified monthly. Closure confirmed by
+the quality manager.
+
+CASE B: Firmware Crash on Sensor Gateway
+
+1. Problem description: The sensor gateway firmware crashed every 48 hours
+under high network load, dropping telemetry data.
+
+2. Root cause analysis: A memory leak in the network buffer handling code
+exhausted the heap. The leak was introduced by a recent driver update.
+ROOT CAUSE: Unbounded buffer allocation without a release path in the
+new driver.
+
+3. 8D Report — Case B:
+D1 Team: Firmware team lead, network engineer, test engineer.
+D2 Problem: Periodic firmware crash, telemetry loss.
+D3 Interim containment: Automatic nightly reboot of the gateway.
+D4 Root cause: Memory leak from unbounded buffer allocation in the new
+driver.
+D5 Corrective actions: (a) Fix the buffer release path in the driver;
+(b) add heap usage monitoring with alerting; (c) add a 72-hour stress
+test to the release gate.
+D6 Implemented corrective action: Driver patch v2.4.1 deployed to all
+gateways.
+D7 Preventive actions: Mandatory memory profiling for every driver update
+and a code review checklist item for buffer management.
+D8 Verification of effectiveness: Gateways ran 90 days without a crash;
+heap usage stable under peak load. Closure confirmed by the firmware lead.
+
+RISK ASSESSMENT
+
+The main risks mentioned in these documents are summarized below.
+These risks were identified during the failure investigations.
+
+Risk 1: Unplanned downtime from mechanical failures — severity high,
+likelihood medium. Mitigation action: predictive maintenance using
+vibration and pressure sensors, plus the revised verification checklist.
+Risk 2: Data loss from firmware instability — severity high, likelihood
+low after the patch. Mitigation action: heap monitoring, stress testing
+in the release gate, and automatic failover to a backup gateway.
+Risk 3: Recurrence of human-error misconfiguration during maintenance —
+severity medium, likelihood medium. Mitigation action: mandatory
+verification steps, staff retraining, and quarterly audits.
+All risks are tracked in the engineering risk register and reviewed
+monthly by the reliability team.
+
+SIMILARITIES AND DIFFERENCES BETWEEN CASE A AND CASE B
+
+The similarities between the two failures are described first, followed
+by the differences, as requested by the comparison review board.
+
+Similarities: Both failures stemmed from a missing verification or
+monitoring control; both corrective action plans combined an immediate
+technical fix with a preventive process change (checklists, monitoring,
+release gates); both required effectiveness verification before closure.
+In summary, the similarities show that both root causes were process
+and control gaps rather than random equipment faults.
+
+Differences: Case A was a mechanical failure caused by a maintenance
+process gap, so its corrective actions targeted procedures and hardware
+sensors; Case B was a software failure caused by a driver defect, so its
+corrective actions targeted code, memory profiling, and release testing.
+Case A mitigation relies on physical inspection routines, while Case B
+mitigation relies on automated monitoring and stress testing. These
+differences mean the mitigation actions must be tracked separately.
+
+All corrective actions above were verified effective and closed by the
+responsible engineering leads.
