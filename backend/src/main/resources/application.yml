@@ -121,3 +121,27 @@ storage:
     secret-access-key: ${R2_SECRET_ACCESS_KEY:}
     bucket: ${R2_BUCKET_NAME:smart-doc-documents}
     endpoint: ${R2_ENDPOINT:}
+# Circuit breaker around LLM router calls (see LlmClient).
+# registerHealthIndicator is off on purpose: an open breaker must not flip
+# /actuator/health DOWN and trigger a platform restart — the state is visible
+# via resilience4j.circuitbreaker.* metrics on /actuator/prometheus instead.
+resilience4j:
+  circuitbreaker:
+    instances:
+      llmService:
+        registerHealthIndicator: false
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        # Slow-call detection ≈ the RestTemplate read timeout; normal slow
+        # completions must not be counted as failures.
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 60s
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - com.smartdocchat.service.LlmClient.UnexpectedResponseException

@@ -23,6 +23,7 @@ public class MessageHandler {
     private final LlmConfig llmConfig;
     private final RestTemplate restTemplate;
     private final com.smartdocchat.metrics.RagMetrics ragMetrics;
+    private final LlmClient llmClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
     @org.springframework.beans.factory.annotation.Value("${security.internal-token:}")
     private String internalToken;
@@ -98,6 +99,9 @@ public class MessageHandler {
         long backoff = llmConfig.getRetryBackoffMs();
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            // Each attempt goes through the circuit-breaker-guarded client;
+            // when the breaker is open the attempts fail fast instead of
+            // hammering a struggling provider.
             result = callLLMOnce(systemPrompt, userPrompt);
             if (!result.startsWith("Sorry, the language model is temporarily unavailable.")
                     && !result.startsWith("Sorry, I could not generate a response.")) {
@@ -120,51 +124,8 @@ public class MessageHandler {
         return callLLMOnce(DEFAULT_SYSTEM_PROMPT, prompt);
     }
 
-    @SuppressWarnings("unchecked")
     public String callLLMOnce(String systemPrompt, String userPrompt) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            if (internalToken != null && !internalToken.isBlank()) {
-                headers.set("X-Internal-Token", internalToken);
-            }
-
-            HttpEntity<Map<String, Object>> entity =
-                    new HttpEntity<>(buildChatRequest(systemPrompt, userPrompt, false), headers);
-            log.info("Calling local LLM model: {}", llmConfig.getChatModel());
-
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    llmConfig.getChatUrl(),
-                    HttpMethod.POST,
-                    entity,
-                    Map.class
-            );
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Map<String, String> message = (Map<String, String>) response.getBody().get("message");
-                if (message != null && message.get("content") != null) {
-                    recordTokenUsage(response.getBody());
-                    return message.get("content");
-                }
-            }
-
-            log.error("LLM API returned unexpected response structure");
-            ragMetrics.recordLlmError();
-            return "Sorry, I could not generate a response. Please try again.";
-
-        } catch (Exception e) {
-            log.error("Error calling LLM API: {}", e.getMessage(), e);
-            ragMetrics.recordLlmError();
-            return "Sorry, the language model is temporarily unavailable. Please try again.";
-        }
-    }
-
-    /** Records reported generated-token usage when the LLM exposes it (Ollama: eval_count). */
-    private void recordTokenUsage(Map<String, Object> body) {
-        Object evalCount = body.get("eval_count");
-        if (evalCount instanceof Number n && n.longValue() > 0) {
-            ragMetrics.recordTokens(n.longValue());
-        }
+        return llmClient.chat(systemPrompt, userPrompt);
     }
 
     public void streamLLM(String prompt, Consumer<String> onToken) {

@@ -34,6 +34,7 @@ import static org.mockito.Mockito.when;
 class MessageHandlerTest {
 
     @Mock private RestTemplate restTemplate;
+    @Mock private LlmClient llmClient;
 
     private LlmConfig llmConfig;
     private MessageHandler messageHandler;
@@ -46,7 +47,8 @@ class MessageHandlerTest {
         llmConfig.setMaxAttempts(2);
         llmConfig.setRetryBackoffMs(1);
         messageHandler = new MessageHandler(llmConfig, restTemplate,
-                new com.smartdocchat.metrics.RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
+                new com.smartdocchat.metrics.RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                llmClient);
     }
 
     @Test
@@ -72,51 +74,25 @@ class MessageHandlerTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void callLLMOnceExtractsContentFromResponse() {
-        Map<String, Object> body = Map.of("message", Map.of("content", "hello world"));
-        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST), any(), eq(Map.class)))
-                .thenReturn(ResponseEntity.ok(body));
+        when(llmClient.chat("sys", "user")).thenReturn("hello world");
 
         assertEquals("hello world", messageHandler.callLLMOnce("sys", "user"));
-        assertEquals("hello world", messageHandler.callLLMOnce("prompt"));
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void callLLMOnceReturnsErrorPlaceholderOnUnexpectedStructure() {
-        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST), any(), eq(Map.class)))
-                .thenReturn(ResponseEntity.ok(Map.of()));
-        String result = messageHandler.callLLMOnce("sys", "user");
-        assertTrue(result.startsWith("Sorry, I could not generate a response."));
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void callLLMOnceReturnsUnavailablePlaceholderOnException() {
-        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST), any(), eq(Map.class)))
-                .thenThrow(new RestClientException("connection refused"));
-        String result = messageHandler.callLLMOnce("sys", "user");
-        assertTrue(result.startsWith("Sorry, the language model is temporarily unavailable."));
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void callLLMRetriesUntilSuccess() throws Exception {
-        Map<String, Object> okBody = Map.of("message", Map.of("content", "final answer"));
-        Map<String, Object> errBody = Map.of();
-        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST), any(), eq(Map.class)))
-                .thenReturn(ResponseEntity.ok(errBody), ResponseEntity.ok(okBody));
+    void callLLMRetriesUntilSuccess() {
+        when(llmClient.chat(eq("sys"), eq("user")))
+                .thenReturn(LlmClient.NO_RESPONSE_PLACEHOLDER)
+                .thenReturn("final answer");
 
         assertEquals("final answer", messageHandler.callLLM("sys", "user"));
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void callLLMReturnsLastErrorAfterExhaustingRetries() {
-        Map<String, Object> errBody = Map.of();
-        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST), any(), eq(Map.class)))
-                .thenReturn(ResponseEntity.ok(errBody));
+        when(llmClient.chat(anyString(), anyString()))
+                .thenReturn(LlmClient.NO_RESPONSE_PLACEHOLDER);
 
         String result = messageHandler.callLLM("sys", "user");
         assertTrue(result.startsWith("Sorry, I could not generate a response."));
