@@ -1,0 +1,73 @@
+{
+  "model": "qwen3:8b",
+  "fixture": "backend/src/test/resources/fixtures/legal_search_corpus_a.txt",
+  "cases_total": 5,
+  "cases_passed": 5,
+  "note": "SYNTHETIC FIXTURE - NOT AN OFFICIAL LEGAL DOCUMENT",
+  "results": [
+    {
+      "case": "article_lookup",
+      "expect_abstention": false,
+      "status": "ok",
+      "output": "Không tìm thấy đủ bằng chứng trong tài liệu hiện có.",
+      "latency_s": 15.51,
+      "eval_tokens": 185,
+      "tok_per_s": 20.6,
+      "cited_articles": [],
+      "hallucinated_articles": [],
+      "did_abstain": false
+    },
+    {
+      "case": "clause_lookup",
+      "expect_abstention": false,
+      "status": "ok",
+      "output": "Theo Điều 4, khoản",
+      "latency_s": 14.91,
+      "eval_tokens": 300,
+      "tok_per_s": 20.4,
+      "cited_articles": [
+        "4"
+      ],
+      "hallucinated_articles": [],
+      "did_abstain": false
+    },
+    {
+      "case": "abbreviation_NLD",
+      "expect_abstention": false,
+      "status": "ok",
+      "output": "Điều 3. Quyền của người lao động  \nNgười lao động trong văn bản mô phỏng có quyền yêu cầu điều kiện làm việc giả định.",
+      "latency_s": 13.67,
+      "eval_tokens": 275,
+      "tok_per_s": 20.4,
+      "cited_articles": [
+        "3"
+      ],
+      "hallucinated_articles": [],
+      "did_abstain": false
+    },
+    {
+      "case": "paraphrase",
+      "expect_abstention": false,
+      "status": "ok",
+      "output": "",
+      "latency_s": 14.79,
+      "eval_tokens": 300,
+      "tok_per_s": 20.5,
+      "cited_articles": [],
+      "hallucinated_articles": [],
+      "did_abstain": false
+    },
+    {
+      "case": "no_evidence",
+      "expect_abstention": true,
+      "status": "ok",
+      "output": "Không tìm thấy đủ bằng chứng trong tài liệu hiện có.",
+      "latency_s": 12.63,
+      "eval_tokens": 257,
+      "tok_per_s": 20.7,
+      "cited_articles": [],
+      "hallucinated_articles": [],
+      "did_abstain": false
+    }
+  ]
+}
