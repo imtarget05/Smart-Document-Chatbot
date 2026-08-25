@@ -17,6 +17,7 @@ Exit code: 0 only if the evaluation reports zero errors.
 import argparse
 import importlib.util
 import json
+import os
 import pathlib
 import sys
 import time
@@ -81,9 +82,16 @@ def main() -> int:
                             mlflow=False, mlflow_uri="http://mlflow:5000")
     summary = eval_mod.run_evaluation(ns)
     errors = summary.get("error_count", 0)
-    print(f"\nFIXTURE BENCHMARK: {'PASS' if errors == 0 else 'FAIL'} "
-          f"(errors={errors}, results -> {args.output})")
-    return 0 if errors == 0 else 1
+    provider_errors = summary.get("provider_errors", 0)
+    # run_evaluation() returns the summary; persist full per-question details
+    out = {"summary": summary, "details": summary.get("details", [])}
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    with open(args.output, "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2, ensure_ascii=False)
+    clean = errors == 0 and provider_errors == 0
+    print(f"\nFIXTURE BENCHMARK: {'PASS' if clean else 'FAIL'} "
+          f"(errors={errors}, provider_errors={provider_errors}, results -> {args.output})")
+    return 0 if clean else 1
 
 
 if __name__ == "__main__":

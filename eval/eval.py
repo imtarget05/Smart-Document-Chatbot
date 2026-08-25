@@ -19,7 +19,7 @@ import json
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 import requests
 
@@ -41,7 +41,7 @@ def load_questions(path: str) -> list[dict]:
         return json.load(f)
 
 
-def get_csrf_token(base_url: str, session: requests.Session) -> str | None:
+def get_csrf_token(base_url: str, session: requests.Session) -> Optional[str]:
     """Fetch a CSRF token from the backend (if the endpoint is available).
 
     The Spring Boot backend enables CSRF protection on mutating endpoints,
@@ -65,8 +65,8 @@ def ask_question(
     session_id: str,
     document_id: int,
     question: str,
-    session: requests.Session | None = None,
-    csrf_token: str | None = None,
+    session: Optional[requests.Session] = None,
+    csrf_token: Optional[str] = None,
 ) -> dict[str, Any]:
     """Send a synchronous /chat/ask request and capture response + latency."""
     http = session or requests
@@ -122,16 +122,182 @@ def ask_question(
             "confidence_score": None,
         }
 
+# ---------------------------------------------------------------------------
+# Grading Contract v2 helpers (Decision 10)
+#
+# Deterministic concept coverage — NOT semantic LLM judging.
+# Normalization is a small rule-based layer: lowercase, whitespace collapse,
+# and simple plural singularization. No external dependencies, no stemmers,
+# no embeddings. Both answers and surface forms are normalized identically so
+# "differences" in an answer matches the surface form "difference".
+# ---------------------------------------------------------------------------
 
-def evaluate_answer(result: dict, question: dict) -> dict[str, Any]:
-    """Score a single answer against expected keywords."""
+_IRREGULAR_PLURALS = {
+    "analyses": "analysis",
+    "criteria": "criterion",
+    "data": "data",
+}
+
+# Known provider/LLM failure contracts. When a match is found, the evaluator
+# must NOT treat the response as a genuine LLM answer, regardless of HTTP status
+# (the backend returns HTTP 200 and places the message in `aiResponse`).
+_PROVIDER_ERROR_MARKERS = (
+    "temporarily unavailable",           # backend MessageHandler LLM-router error path
+    "language model is temporarily",     # explicit variant
+    "cloudflare_error",                  # llm-router provider error passthrough
+    "http status error",                 # router httpx HTTPStatusError leak
+)
+
+
+def is_provider_error(result: dict) -> bool:
+    """Return True when a response matches a known provider failure contract.
+
+    This is deliberately narrow: only established backend/router failure strings
+    are recognized, so a genuine answer that merely mentions words such as
+    "unavailable", "error", or "failed" is NOT mislabelled as a provider error.
+    """
+    answer = normalize_text(result.get("answer") or "")
+    return any(marker in answer for marker in _PROVIDER_ERROR_MARKERS)
+
+
+def normalize_text(text: str) -> str:
+    """Deterministic text normalization for lexical grading.
+
+    - lowercase
+    - collapse whitespace
+    - strip punctuation from token edges (keep intra-word hyphens/apostrophes)
+    - simple plural singularization (risks→risk, causes→cause, ies→y, ...)
+    """
+    import re as _re
+
+    if not text:
+        return ""
+    lowered = text.lower()
+    # collapse any whitespace runs to single spaces
+    lowered = _re.sub(r"\s+", " ", lowered)
+    tokens = []
+    for tok in lowered.split(" "):
+        tok = tok.strip(".,;:!?()[]{}\"'—–")
+        if not tok:
+            continue
+        # possessives: "document's" -> "document"
+        if tok.endswith("'s"):
+            tok = tok[:-2]
+        if tok in _IRREGULAR_PLURALS:
+            tok = _IRREGULAR_PLURALS[tok]
+        elif len(tok) > 3 and tok.endswith("ies"):
+            tok = tok[:-3] + "y"          # similarities → similarity
+        elif len(tok) > 4 and tok.endswith(
+            ("sses", "shes", "ches", "xes", "zes")
+        ):
+            tok = tok[:-2]                # addresses → address
+        elif len(tok) > 3 and tok.endswith("s") and not tok.endswith(
+            ("ss", "us", "is")
+        ):
+            tok = tok[:-1]               # risks → risk, causes → cause
+        tokens.append(tok)
+    return " ".join(tokens)
+
+
+def load_concepts_overrides(path: Optional[str] = None) -> dict[str, dict]:
+    """Load optional per-question structured concepts from a side file.
+
+    The side file keeps question definitions (agent_questions.json) separate
+    from grading hints. Returns {question_id: {"expected_concepts": [...]}}.
+    """
+    if path is None:
+        path = os.path.join(os.path.dirname(__file__), "concepts_overrides.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
+
+
+def grade_concepts(answer: str, concepts: list[dict]) -> dict[str, Any]:
+    """Grade an answer against required concepts using normalized matching.
+
+    A concept is covered when at least one of its approved surface forms is
+    found in the normalized answer. ALL concepts must be covered for the
+    answer to be correct (AND logic — this is what protects against false
+    positives such as keyword-only answers with unrelated content).
+    """
+    norm_answer = normalize_text(answer)
+    details = []
+    covered = 0
+    for concept in concepts:
+        name = concept.get("concept", "<unnamed>")
+        forms = [normalize_text(f) for f in concept.get("forms", [])]
+        matched = [f for f in forms if f and f in norm_answer]
+        is_covered = len(matched) > 0
+        if is_covered:
+            covered += 1
+        details.append(
+            {
+                "concept": name,
+                "covered": is_covered,
+                "matched_forms": matched,
+            }
+        )
+    return {
+        "concepts_expected": len(concepts),
+        "concepts_covered": covered,
+        "concept_details": details,
+        "answer_correct": len(concepts) > 0 and covered == len(concepts),
+    }
+
+
+def resolve_concepts(question: dict, overrides: dict[str, dict]) -> Optional[list[dict]]:
+    """Return structured concepts for a question, or None for legacy grading.
+
+    Priority: inline `expected_concepts` on the question > side-file override
+    keyed by question id. Absence of both selects the legacy keyword path.
+    """
+    inline = question.get("expected_concepts")
+    if isinstance(inline, list) and inline:
+        return inline
+    override = overrides.get(question.get("id")) or {}
+    ov_concepts = override.get("expected_concepts")
+    if isinstance(ov_concepts, list) and ov_concepts:
+        return ov_concepts
+    return None
+
+
+def evaluate_answer(result: dict, question: dict, overrides: Optional[dict[str, dict]] = None) -> dict[str, Any]:
+    """Score a single answer.
+
+    Grading Contract v2:
+    - structured concepts present  → deterministic concept coverage (AND logic)
+    - legacy keywords only         → original expected_answer_contains behavior
+    """
+    overrides = overrides if overrides is not None else {}
+    provider_error = is_provider_error(result)
     answer = result["answer"].lower()
     sources = (result.get("source_chunks") or "").lower()
 
-    # Answer correctness: at least one expected keyword found
-    expected_keywords = [k.lower() for k in question["expected_answer_contains"]]
-    keywords_found = [k for k in expected_keywords if k in answer]
-    answer_correct = len(keywords_found) > 0
+    concepts = resolve_concepts(question, overrides) if not provider_error else None
+    keywords_found = []
+    concept_payload: dict[str, Any] = {}
+
+    if concepts is not None:
+        graded = grade_concepts(result["answer"], concepts)
+        answer_correct = graded.pop("answer_correct")
+        concept_payload = graded
+        concept_payload["grading_mode"] = "structured_concepts"
+    elif provider_error:
+        # Provider/LLM failure: do NOT grade answer correctness. The response is
+        # excluded from answer-correctness/retrieval denominators in run_evaluation.
+        answer_correct = None
+    else:
+        # Legacy path: at least one expected keyword found (unchanged behavior)
+        expected_keywords = [k.lower() for k in question["expected_answer_contains"]]
+        keywords_found = [k for k in expected_keywords if k in answer]
+        answer_correct = len(keywords_found) > 0
+
+    # Evidence support: retrieval returned usable evidence for this answer.
+    # Distinct from retrieval_accurate (keyword hits) — this only checks that
+    # real evidence existed and the strategy was not no_evidence.
+    evidence_supported = bool(sources) and result.get("rag_strategy") != "no_evidence"
 
     # Retrieval accuracy: expected source keywords found in sourceChunks
     source_keywords = [k.lower() for k in question["expected_source_keywords"]]
@@ -140,17 +306,20 @@ def evaluate_answer(result: dict, question: dict) -> dict[str, Any]:
 
     # Hallucination heuristic: answer is confident but retrieval has no sources
     is_hallucination = (
-        not retrieval_accurate
+        not provider_error
+        and not retrieval_accurate
         and answer_correct
         and "không tìm thấy" not in answer
         and result.get("confidence") != "low"
     )
 
-    return {
+    evaluation = {
         "question_id": question["id"],
         "difficulty": question.get("difficulty"),
         "answer_correct": answer_correct,
+        "provider_error": provider_error,
         "keywords_found": keywords_found,
+        "evidence_supported": evidence_supported,
         "retrieval_accurate": retrieval_accurate,
         "source_hits": source_hits,
         "is_hallucination": is_hallucination,
@@ -160,10 +329,14 @@ def evaluate_answer(result: dict, question: dict) -> dict[str, Any]:
         "rag_strategy": result.get("rag_strategy"),
         "status": result["status"],
     }
+    if concept_payload:
+        evaluation.update(concept_payload)
+    return evaluation
 
 
 def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     questions = load_questions(args.questions)
+    overrides = load_concepts_overrides()
     session_id = f"eval-{int(time.time())}"
 
     print(f"🔬 Running evaluation: {len(questions)} questions")
@@ -176,7 +349,7 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     # (set during CSRF exchange) is reused across all ask requests.
     session = requests.Session()
 
-    csrf_token: str | None = get_csrf_token(args.base_url, session)
+    csrf_token: Optional[str] = get_csrf_token(args.base_url, session)
     if csrf_token:
         print(f"   ✅ CSRF token acquired")
     else:
@@ -218,10 +391,10 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
             session=session,
             csrf_token=csrf_token,
         )
-        evaluation = evaluate_answer(result, q)
+        evaluation = evaluate_answer(result, q, overrides)
         details.append(evaluation)
 
-        status_icon = "✅" if evaluation["answer_correct"] else "❌"
+        status_icon = "⚠️" if evaluation.get("provider_error") else ("✅" if evaluation["answer_correct"] else "❌")
         print(f"{status_icon} ({result['latency_ms']}ms)")
 
         # Log per-question metrics to MLflow
@@ -242,11 +415,17 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
 
     # Aggregate metrics
     total = len(details)
-    successful = [d for d in details if d["status"] == "success"]
+    provider_errors = [d for d in details if d.get("provider_error")]
+    # Genuine LLM responses: HTTP/application success that is NOT a provider error.
+    successful = [
+        d for d in details if d["status"] == "success" and not d.get("provider_error")
+    ]
     correct = [d for d in successful if d["answer_correct"]]
     retrieval_accurate = [d for d in successful if d["retrieval_accurate"]]
     hallucinations = [d for d in successful if d["is_hallucination"]]
     latencies = [d["latency_ms"] for d in successful]
+    # True application/HTTP errors (excludes provider errors, which are counted separately).
+    error_count = total - len(successful) - len(provider_errors)
 
     summary = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -266,7 +445,10 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         ),
         "min_latency_ms": min(latencies) if latencies else 0,
         "max_latency_ms": max(latencies) if latencies else 0,
-        "error_count": total - len(successful),
+        "error_count": error_count,
+        "provider_errors": len(provider_errors),
+        "provider_error_rate": round(len(provider_errors) / max(total, 1), 4),
+        "genuine_llm_responses": len(successful),
         "details": details,
     }
 
@@ -282,6 +464,7 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
                     "p95_latency_ms": summary["p95_latency_ms"],
                     "total_questions": total,
                     "error_count": summary["error_count"],
+                    "provider_errors": summary["provider_errors"],
                 }
             )
             mlflow.end_run(status="FINISHED")

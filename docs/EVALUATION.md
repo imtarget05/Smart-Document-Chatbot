@@ -110,3 +110,91 @@ report results separately:
   - Infrastructure (HTTP/security boundaries)
   - Answer quality (retrieval + correctness + hallucination)
 ```
+
+---
+
+## Grading Contract v2
+
+The evaluator supports two grading modes, selected per question:
+
+### Legacy keyword mode (default, unchanged)
+
+When a question only defines `expected_answer_contains`, grading is unchanged:
+case-insensitive substring match, PASS when at least one keyword is found.
+
+This mode is kept for backward compatibility with existing question files.
+
+### Structured concept mode (opt-in)
+
+Questions can define structured concepts — either inline via
+`expected_concepts` on the question object, or through the side file
+`eval/concepts_overrides.json` (maps `question_id` → concepts). The side
+file keeps "question definition" separate from "grading hints".
+
+```json
+{
+  "agent-003": {
+    "expected_concepts": [
+      {"concept": "compares failure causes",
+       "forms": ["similarities", "failure causes", "root cause", "caused by"]},
+      {"concept": "compares mitigation actions",
+       "forms": ["differences", "mitigation actions", "corrective action", "preventive action"]}
+    ]
+  }
+}
+```
+
+Matching rules:
+
+- Answers are normalized: lowercase, whitespace/punctuation collapse,
+  simple plural collapse (`risks→risk`, `differences→difference`,
+  `actions→action`, ...). No NLP stemmer, no external dependencies.
+- A concept is **covered** when at least one approved surface form appears.
+- `answer_correct = (concepts_covered == concepts_expected)` — AND logic,
+  not OR. This is stricter than legacy mode and prevents false positives
+  such as *"Both documents discuss completely unrelated issues"*.
+
+Structured output adds per-question fields: `concepts_expected`,
+`concepts_covered`, `concept_details`, and `evidence_supported`
+(sources present and RAG strategy is not `no_evidence`).
+
+Three distinct metrics are reported separately and must not be conflated:
+
+| Metric | Meaning |
+|---|---|
+| `retrieval_success` | expected source keywords found in retrieved chunks |
+| `evidence_supported` | retrieval produced usable evidence for answering |
+| `answer_correct` | all required concepts covered in the answer |
+
+### Why exact keyword matching was insufficient (Q3 case study)
+
+Decision 9 showed Q3 ("Compare these documents...") produced semantically
+correct answers in 10/10 production runs, but the lexical grader passed
+only 5/10. The LLM alternated between section headings
+(`Similarities / Differences` → pass) and question-structured headings
+(`Failure Causes / Mitigation Actions` → false negative). Concept-based
+grading accepts both phrasings while still failing answers that lack an
+actual comparison of both required aspects.
+
+### Limitations
+
+**This is deterministic concept coverage, NOT semantic LLM judging.**
+It does not understand negation ("there are no differences" may still
+match the form "difference"), deep semantics, or entailment. Surface-form
+groups are human-curated per question. If true semantic evaluation is
+needed later, it should be a separate decision (e.g., LLM-as-judge or
+embedding similarity) — deliberately excluded here to keep CI
+reproducible, dependency-free, and deterministic.
+
+### Regression testing instructions
+
+```bash
+# Offline grader unit tests (no backend/LLM needed)
+python3 -m pytest tests/test_grader.py -v
+
+# Full fixture benchmark against an environment
+python eval/run_fixture_eval.py --base-url "$BASE_URL"
+```
+
+Baseline expectations: HTTP 3/3, Retrieval 100%, Errors 0;
+answer correctness should be read against concept coverage detail.

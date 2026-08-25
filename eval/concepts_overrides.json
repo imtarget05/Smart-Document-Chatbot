@@ -1,0 +1,31 @@
+{
+  "agent-003": {
+    "expected_concepts": [
+      {
+        "concept": "compares failure causes",
+        "forms": [
+          "similarities",
+          "similarity",
+          "failure causes",
+          "root cause",
+          "caused by",
+          "both failures",
+          "failure analysis"
+        ]
+      },
+      {
+        "concept": "compares mitigation actions",
+        "forms": [
+          "differences",
+          "difference",
+          "mitigation actions",
+          "mitigation",
+          "corrective action",
+          "preventive action",
+          "actions taken",
+          "recommendation"
+        ]
+      }
+    ]
+  }
+}
