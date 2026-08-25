@@ -63,15 +63,24 @@ def main() -> int:
         print("FATAL: login failed", file=sys.stderr)
         return 1
 
-    # 2. Upload fixture (owned by the evaluation user)
-    r = s.post(f"{b}/documents/upload",
-               headers={"Authorization": f"Bearer {jwt}",
-                        "X-XSRF-TOKEN": csrf()},
-               files={"file": (FIXTURE.name, FIXTURE.read_bytes(), "text/plain")},
-               timeout=300)
-    doc = r.json().get("documentId") if r.status_code == 200 else None
+    # 2. Upload fixture (owned by the evaluation user). CI races Render
+    # redeploys, so tolerate transient 5xx/timeouts with a short backoff.
+    doc = None
+    for attempt in range(1, 4):
+        try:
+            r = s.post(f"{b}/documents/upload",
+                       headers={"Authorization": f"Bearer {jwt}",
+                                "X-XSRF-TOKEN": csrf()},
+                       files={"file": (FIXTURE.name, FIXTURE.read_bytes(), "text/plain")},
+                       timeout=300)
+            doc = r.json().get("documentId") if r.status_code == 200 else None
+        except requests.RequestException as exc:
+            print(f"upload attempt {attempt} failed: {exc}", file=sys.stderr)
+        if doc is not None:
+            break
+        time.sleep(15 * attempt)
     if doc is None:
-        print(f"FATAL: fixture upload failed (HTTP {r.status_code})", file=sys.stderr)
+        print("FATAL: fixture upload failed after retries", file=sys.stderr)
         return 1
     print(f"✅ Fixture uploaded: documentId={doc} (user={u})")
 
