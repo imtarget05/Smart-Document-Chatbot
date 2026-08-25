@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, Protocol
@@ -46,8 +47,13 @@ class CloudflareProvider:
     """Cloudflare Workers AI provider exposing an Ollama-compatible interface.
 
     The Spring Boot backend and agent service keep talking to the router as if
-    it were Ollama; this class translates to the Workers AI REST API behind the
-    scenes.
+    it were Ollama; this class translates to the Workers AI REST API behind
+    the scenes.
+
+    A minimal circuit breaker guards every provider call: after
+    ``circuit_failure_threshold`` consecutive failures the circuit opens and
+    calls fail fast with ``cloudflare_circuit_open`` for ``circuit_open_seconds``
+    before a trial call is allowed through again.
     """
 
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
@@ -56,6 +62,29 @@ class CloudflareProvider:
         self._owns_client = client is None
         self._consecutive_failures = 0
         self._open_until = 0.0
+
+    # -- circuit breaker ---------------------------------------------------
+
+    @property
+    def circuit_open(self) -> bool:
+        return time.monotonic() < self._open_until
+
+    def _check_circuit(self) -> None:
+        if self.circuit_open:
+            raise ProviderError("cloudflare_circuit_open")
+
+    def _record_success(self) -> None:
+        self._consecutive_failures = 0
+        self._open_until = 0.0
+
+    def _record_failure(self) -> None:
+
+        self._consecutive_failures += 1
+        if (
+            self.settings.circuit_failure_threshold > 0
+            and self._consecutive_failures >= self.settings.circuit_failure_threshold
+        ):
+            self._open_until = time.monotonic() + self.settings.circuit_open_seconds
 
     @property
     def configured(self) -> bool:
@@ -81,6 +110,7 @@ class CloudflareProvider:
     async def chat(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> dict[str, Any]:
+        self._check_circuit()
         body = {
             "messages": [
                 {"role": m.role, "content": m.content}
@@ -99,15 +129,22 @@ class CloudflareProvider:
                 )
                 response.raise_for_status()
                 payload = response.json()
+        except ProviderError:
+            self._record_failure()
+            raise
         except TimeoutError as exc:
+            self._record_failure()
             raise ProviderError("cloudflare_timeout") from exc
         except (httpx.HTTPError, ValueError) as exc:
+            self._record_failure()
             raise ProviderError(f"cloudflare_error:{type(exc).__name__}") from exc
 
         result = payload.get("result") or {}
         content = result.get("response") or ""
         if not content:
+            self._record_failure()
             raise ProviderError("cloudflare_empty_response")
+        self._record_success()
         response = _ollama_response(content, decision, request_id)
         response["model"] = self.settings.cloudflare_chat_model
         return response
@@ -115,6 +152,7 @@ class CloudflareProvider:
     async def stream_chat(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> AsyncIterator[bytes]:
+        self._check_circuit()
         body = {
             "messages": [
                 {"role": m.role, "content": m.content}
@@ -152,11 +190,13 @@ class CloudflareProvider:
                     collected_end = True
                 if not collected_end:
                     raise ProviderError("cloudflare_stream_empty")
-        except TimeoutError as exc:
-            raise ProviderError("cloudflare_timeout") from exc
         except asyncio.CancelledError:
             raise
+        except TimeoutError as exc:
+            self._record_failure()
+            raise ProviderError("cloudflare_timeout") from exc
         except httpx.HTTPError as exc:
+            self._record_failure()
             raise ProviderError(f"cloudflare_error:{type(exc).__name__}") from exc
 
     async def embeddings(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -170,6 +210,7 @@ class CloudflareProvider:
             texts = [str(t) for t in body["input"]]
         else:
             texts = str(body.get("prompt", ""))
+        self._check_circuit()
         try:
             async with asyncio.timeout(self.settings.cloudflare_timeout_seconds):
                 response = await self.client.post(
@@ -180,15 +221,22 @@ class CloudflareProvider:
                 )
                 response.raise_for_status()
                 payload = response.json()
+        except ProviderError:
+            self._record_failure()
+            raise
         except TimeoutError as exc:
+            self._record_failure()
             raise ProviderError("cloudflare_timeout") from exc
         except (httpx.HTTPError, ValueError) as exc:
+            self._record_failure()
             raise ProviderError(f"cloudflare_error:{type(exc).__name__}") from exc
 
         result = payload.get("result") or {}
         data = result.get("data") or []
         if not data:
+            self._record_failure()
             raise ProviderError("cloudflare_empty_embedding")
+        self._record_success()
         if isinstance(texts, str):
             return {"model": self.settings.cloudflare_embed_model, "embedding": list(data[0])}
         return {"model": self.settings.cloudflare_embed_model, "embeddings": [list(v) for v in data]}
