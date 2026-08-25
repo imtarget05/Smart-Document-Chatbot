@@ -83,44 +83,63 @@ def ask_question(
     }
 
     start = time.time()
-    try:
-        resp = http.post(
-            f"{base_url}/chat/ask", json=payload, headers=headers, timeout=120
-        )
-        latency_ms = round((time.time() - start) * 1000)
+    last_error = None
+    # Rate-limit aware retry: Cloudflare Workers AI free tier throttles bursts,
+    # so 429/5xx responses are retried with exponential backoff (Blueprint #48
+    # fast CI evaluation must not report false failures from transient 429s).
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = http.post(
+                f"{base_url}/chat/ask", json=payload, headers=headers, timeout=120
+            )
 
-        if resp.status_code != 200:
+            if resp.status_code in (429, 502, 503, 504) and attempt < max_attempts:
+                backoff = min(2 ** attempt * 2, 30)
+                print(f"    [retry {attempt}] HTTP {resp.status_code} — backing off {backoff}s")
+                time.sleep(backoff)
+                continue
+
+            latency_ms = round((time.time() - start) * 1000)
+
+            if resp.status_code != 200:
+                return {
+                    "status": "error",
+                    "http_status": resp.status_code,
+                    "latency_ms": latency_ms,
+                    "answer": "",
+                    "source_chunks": "",
+                    "confidence": None,
+                    "confidence_score": None,
+                }
+
+            data = resp.json()
             return {
-                "status": "error",
-                "http_status": resp.status_code,
+                "status": "success",
                 "latency_ms": latency_ms,
-                "answer": "",
-                "source_chunks": "",
-                "confidence": None,
-                "confidence_score": None,
+                "answer": data.get("aiResponse", ""),
+                "source_chunks": data.get("sourceChunks", ""),
+                "confidence": data.get("confidence"),
+                "confidence_score": data.get("confidenceScore"),
+                "rag_strategy": data.get("ragStrategy"),
+                "model": data.get("model"),
             }
-
-        data = resp.json()
-        return {
-            "status": "success",
-            "latency_ms": latency_ms,
-            "answer": data.get("aiResponse", ""),
-            "source_chunks": data.get("sourceChunks", ""),
-            "confidence": data.get("confidence"),
-            "confidence_score": data.get("confidenceScore"),
-            "rag_strategy": data.get("ragStrategy"),
-            "model": data.get("model"),
-        }
-    except requests.exceptions.RequestException as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "latency_ms": round((time.time() - start) * 1000),
-            "answer": "",
-            "source_chunks": "",
-            "confidence": None,
-            "confidence_score": None,
-        }
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            if attempt < max_attempts:
+                backoff = min(2 ** attempt * 2, 30)
+                print(f"    [retry {attempt}] request error: {e} — backing off {backoff}s")
+                time.sleep(backoff)
+                continue
+    return {
+        "status": "error",
+        "error": str(last_error),
+        "latency_ms": round((time.time() - start) * 1000),
+        "answer": "",
+        "source_chunks": "",
+        "confidence": None,
+        "confidence_score": None,
+    }
 
 # ---------------------------------------------------------------------------
 # Grading Contract v2 helpers (Decision 10)
