@@ -102,10 +102,9 @@ jobs:
         working-directory: frontend
         run: npx playwright test e2e/auth.spec.ts
 
-      # Full-stack API smoke against staging (opt-in via env var).
-      # The idempotent-upload check auto-skips until staging runs the
-      # Blueprint #17 backend; set E2E_EXPECT_IDEMPOTENT=1 here to
-      # hard-enforce it once the fix is deployed.
+      # Full-stack API smoke against staging.
+      # Staging now runs the Blueprint #17 backend (verified), so the
+      # idempotent-upload check is hard-enforced via E2E_EXPECT_IDEMPOTENT.
       - name: Wake up staging (cold start)
         run: |
           curl -fsS --retry 8 --retry-delay 20 --retry-all-errors --max-time 30 \
@@ -115,6 +114,7 @@ jobs:
         working-directory: frontend
         env:
           E2E_API_URL: https://smart-doc-backend-h4mt.onrender.com/api
+          E2E_EXPECT_IDEMPOTENT: '1'
         run: npx playwright test e2e/fullstack-smoke.spec.ts
 
       - name: Upload Playwright report
