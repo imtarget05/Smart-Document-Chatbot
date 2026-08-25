@@ -61,9 +61,15 @@ jobs:
 
       - name: Build & test
         working-directory: backend
-        env:
-          TRIVY_USERNAME: ${{ github.actor }}
-          TRIVY_PASSWORD: ${{ github.actor }}
+        run: mvn -B verify
+
+      - name: Upload backend analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sonar
+          path: |
+            backend/target/classes
+            backend/target/site/jacoco
 
   frontend-build:
     name: "1b. Frontend - Build & Test"
@@ -144,7 +150,7 @@ jobs:
         run: python -m pytest tests -q
 
   sonarcloud-backend:
-    name: "2. SonarCloud Analysis"
+    name: "2. SonarCloud Analysis (backend)"
     runs-on: ubuntu-latest
     needs: backend-build
     steps:
@@ -153,13 +159,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Download backend analysis artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-sonar
+          path: backend/target
+
       - name: SonarCloud Scan
-        working-directory: backend
+        uses: SonarSource/sonarqube-scan-action@v7
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: backend
 
   sonarcloud-frontend:
-    name: "3. SonarCloud Analysis"
+    name: "3. SonarCloud Analysis (frontend)"
     runs-on: ubuntu-latest
     needs: frontend-build
     steps:
@@ -168,10 +182,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Download frontend coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend
+          path: frontend
+
       - name: SonarCloud Scan
-        working-directory: frontend
+        uses: SonarSource/sonarqube-scan-action@v7
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_FRONTEND }}
+        with:
+          projectBaseDir: frontend
 
   # ============================================================
   # STAGE 2: Docker Build & Push
@@ -230,7 +252,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./server/Dockerfile
+          file: ./docker/Dockerfile.backend
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ steps.image-names.outputs.backend }}:${{ steps.vars.outputs.tag }}
@@ -252,7 +274,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./client/Dockerfile
+          file: ./docker/Dockerfile.frontend
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:${{ steps.vars.outputs.tag }}

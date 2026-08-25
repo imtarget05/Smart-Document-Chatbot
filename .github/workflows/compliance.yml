@@ -1,20 +1,17 @@
 # ============================================
-# Compliance, Rollback & Post-Deploy Verification
-# Runs after CD pipeline completes
+# Compliance & Post-Deploy Verification
+# Runs after CD Pipeline completes or weekly.
+# Verifies the live staging deployment is healthy.
 # ============================================
 
 name: Compliance & Verification
 
 on:
-  # Trigger after CD pipeline completes
   workflow_run:
     workflows: ["CD Pipeline"]
     types: [completed]
-
-  # Scheduled compliance checks
   schedule:
     - cron: '0 6 * * 1'  # Every Monday at 6:00 UTC
-
   workflow_dispatch:
     inputs:
       action:
@@ -23,3 +20,34 @@ on:
         type: choice
         options:
           - verify
+
+env:
+  BACKEND_URL: https://smart-doc-backend-h4mt.onrender.com
+
+permissions:
+  contents: read
+
+jobs:
+  verify-staging:
+    name: "Verify Staging Deployment"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'schedule') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'verify')
+    steps:
+      # Render free tier can take a minute to wake up; retry generously.
+      - name: Backend health check
+        run: |
+          curl -fsS --retry 3 --retry-delay 20 --max-time 120 \
+            "$BACKEND_URL/api/actuator/health" | tee /dev/stderr | grep -q '"status":"UP"'
+
+      # Client-facing CSRF surface (note the backend quirk: the CSRF
+      # controller is served under an extra /api segment — same path the
+      # eval runner and E2E suite use).
+      - name: API surface reachable (CSRF)
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "$BACKEND_URL/api/api/csrf")
+          echo "GET /api/api/csrf -> $code"
+          [ "$code" = "200" ] || { echo "::error::CSRF endpoint unhealthy (HTTP $code)"; exit 1; }
