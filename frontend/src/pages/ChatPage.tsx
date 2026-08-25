@@ -3,7 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
 import { useAuth, API_BASE_URL } from "../context/AuthContext";
 import { csrfHeaders } from "../csrf";
-import type { Document, ChatMessage as ChatMessageType } from "../types";
+import type { Document, ChatMessage as ChatMessageType, SourceCitation } from "../types";
+import SourceCitations from "../components/SourceCitations";
+import EvidenceState from "../components/EvidenceState";
+import DocumentViewer from "../components/DocumentViewer";
 
 export default function ChatPage() {
   const { token, username, logout } = useAuth();
@@ -23,6 +26,11 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [uploadError, setUploadError] = useState("");
+  // Legal search state (Decision 15)
+  interface DocumentSearchResult { id: number; fileName: string; title?: string | null; documentNumber?: string | null; }
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<DocumentSearchResult[]>([]);
+  const [viewingSource, setViewingSource] = useState<SourceCitation | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -211,7 +219,13 @@ export default function ChatPage() {
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === streamingPlaceholderId
-                  ? { ...msg, sourceChunks: meta.sourceChunks }
+                  ? {
+                      ...msg,
+                      sourceChunks: meta.sourceChunks,
+                      sources: Array.isArray(meta.sources) ? meta.sources : null,
+                      ragStrategy: meta.ragStrategy ?? null,
+                      confidence: meta.confidence ?? null,
+                    }
                   : msg,
               ),
             );
@@ -333,6 +347,56 @@ export default function ChatPage() {
         </button>
       </div>
 
+      {/* Legal search (Decision 15) */}
+      <div className="px-6 py-2 border-b border-gray-100 bg-white">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!searchQuery.trim()) { setSearchResults([]); return; }
+            try {
+              const response = await fetch(
+                `${API_BASE_URL}/documents/search?q=${encodeURIComponent(searchQuery)}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              setSearchResults(response.ok ? await response.json() : []);
+            } catch {
+              setSearchResults([]);
+            }
+          }}
+          className="flex items-center gap-2"
+        >
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm văn bản pháp luật (tên, số hiệu, Điều...)"
+            className="flex-1 max-w-md text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300"
+          />
+          <button type="submit" className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700">
+            Tìm kiếm
+          </button>
+        </form>
+        {searchResults.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {searchResults.map((r) => (
+              <li key={r.id} className="flex items-center gap-2 text-xs text-gray-600">
+                <button
+                  onClick={() => {
+                    const doc = documents.find((d) => d.id === r.id);
+                    setSelectedDoc(doc || null);
+                    setSearchResults([]);
+                  }}
+                  className="text-blue-600 hover:underline"
+                >
+                  Mở
+                </button>
+                <span className="font-medium">{r.title || r.fileName}</span>
+                {r.documentNumber && <span className="text-gray-400">Số: {r.documentNumber}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="max-w-3xl mx-auto space-y-6">
@@ -371,30 +435,15 @@ export default function ChatPage() {
                       )}
                     </div>
 
-                    {/* Sources */}
-                    {msg.sourceChunks && (
-                      <details className="mt-3 group">
-                        <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700 transition flex items-center gap-1.5 select-none">
-                          <span>📚</span> Sources
-                        </summary>
-                        <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {msg.sourceChunks.split("---").map((chunk, i) => {
-                            const match = chunk.trim().match(/^\[(.*?)\] (.*)$/s);
-                            const textContent = match ? match[2] : chunk;
-                            return (
-                              <div
-                                key={i}
-                                className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 text-left"
-                              >
-                                <p className="text-xs text-gray-500 leading-relaxed italic">
-                                  "{textContent.trim()}"
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </details>
+                    {/* Evidence state + structured citations */}
+                    {!msg.isStreaming && (
+                      <EvidenceState ragStrategy={msg.ragStrategy} confidence={msg.confidence} />
                     )}
+                    <SourceCitations
+                      sources={msg.sources}
+                      sourceChunks={msg.sourceChunks}
+                      onViewSource={(s) => setViewingSource(s)}
+                    />
                   </div>
                 </div>
               </div>
@@ -403,6 +452,15 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* Document / evidence viewer */}
+      {viewingSource && (
+        <DocumentViewer
+          citation={viewingSource}
+          token={token}
+          onClose={() => setViewingSource(null)}
+        />
+      )}
 
       {/* Input */}
       <div className="border-t border-gray-200 px-6 py-4 bg-white">
