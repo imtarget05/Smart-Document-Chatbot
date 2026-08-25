@@ -1,13 +1,27 @@
-FROM python:3.11-slim
+# Build stage: install dependencies into a virtualenv so the runtime image
+# stays free of build tooling.
+FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+WORKDIR /build
+COPY requirements.txt .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# Runtime stage
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
 WORKDIR /app
 
 RUN addgroup --system app && adduser --system --uid 10001 --ingroup app app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=builder /opt/venv /opt/venv
 COPY app ./app
 
 USER 10001
