@@ -145,3 +145,10 @@ resilience4j:
           - org.springframework.web.client.ResourceAccessException
           - org.springframework.web.client.HttpServerErrorException
           - com.smartdocchat.service.LlmClient.UnexpectedResponseException
+
+# API rate limiting (bucket4j, see RateLimitInterceptor).
+ratelimit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  chat-per-minute: 30
+  upload-per-minute: 10
+  auth-per-minute: 10
