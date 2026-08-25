@@ -1,0 +1,33 @@
+EVALUATION FIXTURE — SYNTHETIC LEGAL TEST DATA
+NOT AN OFFICIAL LEGAL DOCUMENT
+NOT PRODUCTION DATA
+Purpose: verify Vietnamese legal structure parsing, article/clause/point
+extraction and citation metadata only. This text has no legal value.
+
+BỘ LUẬT TEST
+
+Số: 01/2026/TEST
+
+Chương I
+
+Điều 1. Phạm vi điều chỉnh
+Bộ luật này quy định các nội dung dùng để kiểm thử cấu trúc văn bản.
+Nội dung này chỉ phục vụ mục đích kỹ thuật.
+
+1. Khoản thứ nhất của Điều 1 dùng để kiểm tra việc trích xuất khoản.
+2. Khoản thứ hai của Điều 1 cũng phục vụ kiểm thử.
+a) Điểm a thuộc khoản 2 Điều 1.
+b) Điểm b thuộc khoản 2 Điều 1.
+
+Điều 2. Quyền và nghĩa vụ
+1. Người kiểm thử có quyền chạy bộ kiểm thử.
+a) Điểm a của khoản 1 Điều 2 mô tả chi tiết quyền chạy bộ kiểm thử.
+b) Điểm b của khoản 1 Điều 2 mô tả việc đọc báo cáo kết quả.
+
+Điều 3 Hiệu lực thi hành
+Văn bản thử nghiệm này không có hiệu lực pháp lý và không thay thế
+bất kỳ văn bản thật nào.
+
+Điều 4. Điều khoản không đánh số chuẩn
+Điều này có nội dung không theo mẫu số hóa thông thường nhưng vẫn phải
+được giữ lại toàn bộ trong kết quả phân tích.

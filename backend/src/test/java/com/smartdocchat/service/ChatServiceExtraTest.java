@@ -33,6 +33,7 @@ import static org.mockito.Mockito.when;
 class ChatServiceExtraTest {
 
     @Mock private MessageHandler messageHandler;
+    @Mock private DocumentService documentService;
     @Mock private HistoryService historyService;
     @Mock private RetrievalService retrievalService;
     @Mock private QueryReformulator queryReformulator;
@@ -52,7 +53,8 @@ class ChatServiceExtraTest {
         meterRegistry = new SimpleMeterRegistry();
         ragMetrics = new RagMetrics(meterRegistry);
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
-                queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties, ragMetrics);
+                queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
+                ragMetrics, documentService);
         lenient().when(promptInjectionDetector.analyze(anyString())).thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
     }

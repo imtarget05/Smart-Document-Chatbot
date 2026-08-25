@@ -33,12 +33,17 @@ class DocumentServiceTest {
     @Mock private DocumentRepository documentRepository;
     @Mock private DocumentParser documentParser;
     @Mock private StorageService storageService;
+    @Mock private com.smartdocchat.util.LegalStructureParser legalStructureParser;
+    @Mock private com.smartdocchat.repository.LegalChunkRepository legalChunkRepository;
+    @Mock private com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
+    @Mock private com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
 
     private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentService(documentRepository, documentParser, storageService);
+        documentService = new DocumentService(documentRepository, documentParser, storageService,
+                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor);
     }
 
     private Document document(long id, String chunks) {

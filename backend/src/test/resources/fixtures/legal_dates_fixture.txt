@@ -1,0 +1,14 @@
+EVALUATION FIXTURE — SYNTHETIC LEGAL TEST DATA
+NOT AN OFFICIAL LEGAL DOCUMENT
+NOT PRODUCTION DATA
+Purpose: verify Vietnamese legal date extraction only. This text has no legal value.
+
+TEST DATES METADATA
+
+Số: 02/2026/DATES
+
+ngay ban hanh: 10/01/2026
+co hieu tu: 15/02/2026
+
+Điều 1. Contenu de test
+Ce corps ne porte aucun libellé de date légal; toute date aléatoire y reste null.

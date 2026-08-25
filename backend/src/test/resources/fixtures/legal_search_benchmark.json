@@ -1,0 +1,27 @@
+{
+  "_comment": "SYNTHETIC LEGAL RETRIEVAL BENCHMARK — NOT REAL LAW. expectedDocument: A|B; expectNoResult queries have no evidence in corpus.",
+  "queries": [
+    { "id": "title-exact", "query": "Bộ luật lao động mô phỏng", "expectedDocument": "A" },
+    { "id": "title-partial", "query": "bộ luật lao động", "expectedDocument": "A" },
+    { "id": "number-exact", "query": "03/2026/SIM", "expectedDocument": "A" },
+    { "id": "number-other-doc", "query": "02/2026/SIM", "expectedDocument": "B" },
+    { "id": "article-only", "query": "Điều 4", "expectedDocument": "A", "expectedArticle": "4" },
+    { "id": "article-with-title", "query": "Điều 4 bộ luật lao động", "expectedDocument": "A", "expectedArticle": "4" },
+    { "id": "article-clause", "query": "Điều 4 khoản 2 bộ luật lao động", "expectedDocument": "A", "expectedArticle": "4", "expectedClause": "2" },
+    { "id": "article-topic", "query": "điều kiện chấm dứt hợp đồng lao động", "expectedDocument": "A" },
+    { "id": "abbrev-nld", "query": "quyền của NLĐ", "expectedDocument": "A" },
+    { "id": "abbrev-nsdld", "query": "trách nhiệm của NSDLĐ", "expectedDocument": "A" },
+    { "id": "abbrev-hdld", "query": "chấm dứt HĐLĐ", "expectedDocument": "A" },
+    { "id": "abbrev-mixed", "query": "Điều 5 NSDLĐ trợ cấp", "expectedDocument": "A", "expectedArticle": "5" },
+    { "id": "no-diacritics", "query": "cham dut hop dong lao dong", "expectedDocument": "A" },
+    { "id": "topic-tax", "query": "mức thuế mô phỏng", "expectedDocument": "B" },
+    { "id": "topic-exemption", "query": "miễn giảm lệ phí", "expectedDocument": "B" },
+    { "id": "clause-point", "query": "thủ tục chấm dứt điểm a", "expectedDocument": "A", "expectedArticle": "4" },
+    { "id": "doc-b-article", "query": "tổ chức thực hiện nghị quyết", "expectedDocument": "B", "expectedArticle": "4" },
+    { "id": "dispute", "query": "giải quyết tranh chấp lao động", "expectedDocument": "A" },
+    { "id": "paraphrase", "query": "khi nào hợp đồng kết thúc", "expectedDocument": "A" },
+    { "id": "paraphrase-duty", "query": "nghĩa vụ trả tiền cho nhân viên", "expectedDocument": "A" },
+    { "id": "irrelevant-1", "query": "công thức nấu ăn phở bò", "expectNoResult": true },
+    { "id": "irrelevant-2", "query": "lịch bóng đá ngoại hạng anh", "expectNoResult": true }
+  ]
+}

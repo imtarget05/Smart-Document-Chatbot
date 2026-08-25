@@ -18,12 +18,13 @@ import static org.mockito.Mockito.when;
 class RetrievalServiceTest {
 
     @Mock private DocumentService documentService;
+    @Mock private com.smartdocchat.repository.LegalChunkRepository legalChunkRepository;
 
     private RetrievalService retrievalService;
 
     @BeforeEach
     void setUp() {
-        retrievalService = new RetrievalService(documentService);
+        retrievalService = new RetrievalService(documentService, legalChunkRepository, new com.smartdocchat.util.LegalQueryNormalizer());
     }
 
     @Test
