@@ -70,13 +70,13 @@ class ChatServiceExtraTest {
 
     @Test
     void mediumConfidenceIsLabelledAndLongSourcesAreTruncated() {
-        String longChunk = "x".repeat(350);
+        String longChunk = "backup policy ".concat("x".repeat(336));
         when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt()))
                 .thenReturn(List.of(new RetrievalService.RetrievalResult(longChunk, 0.65)));
         when(messageHandler.buildPrompt(anyString(), anyList())).thenReturn("prompt");
         when(messageHandler.callLLM("prompt")).thenReturn("answer");
 
-        ChatResponse response = chatService.processQuery("alice", request("question?", false));
+        ChatResponse response = chatService.processQuery("alice", request("What is the backup policy?", false));
 
         assertEquals("medium", response.getConfidence());
         assertEquals(0.65, response.getConfidenceScore());
@@ -89,18 +89,18 @@ class ChatServiceExtraTest {
 
     @Test
     void correctiveLoopMergesReformulatedEvidence() {
-        when(retrievalService.retrieve(eq("alice"), eq(1L), eq("original question"), anyInt()))
-                .thenReturn(List.of(new RetrievalService.RetrievalResult("old chunk", 0.5)));
-        when(queryReformulator.reformulate("original question", cragConfig.getMaxReformulations()))
+        when(retrievalService.retrieve(eq("alice"), eq(1L), eq("original database question"), anyInt()))
+                .thenReturn(List.of(new RetrievalService.RetrievalResult("old database chunk", 0.5)));
+        when(queryReformulator.reformulate("original database question", cragConfig.getMaxReformulations()))
                 .thenReturn(List.of("variant one"));
         when(retrievalService.retrieve(eq("alice"), eq(1L), eq("variant one"), anyInt()))
                 .thenReturn(List.of(
-                        new RetrievalService.RetrievalResult("old chunk", 0.5),
-                        new RetrievalService.RetrievalResult("new strong chunk", 0.9)));
+                        new RetrievalService.RetrievalResult("old database chunk", 0.5),
+                        new RetrievalService.RetrievalResult("new strong database chunk", 0.9)));
         when(messageHandler.buildPrompt(anyString(), anyList())).thenReturn("corrective prompt");
         when(messageHandler.callLLM("corrective prompt")).thenReturn("corrected answer");
 
-        ChatResponse response = chatService.processQuery("alice", request("original question", false));
+        ChatResponse response = chatService.processQuery("alice", request("original database question", false));
 
         assertEquals("corrective", response.getRagStrategy());
         assertEquals(2, response.getSources().size());

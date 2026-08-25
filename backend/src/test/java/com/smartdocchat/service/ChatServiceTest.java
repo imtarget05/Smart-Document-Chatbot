@@ -82,6 +82,27 @@ class ChatServiceTest {
     }
 
     @Test
+    void highScoreButTopicallyUnrelatedContextIsRejectedByRelevanceGate() {
+        // Regression for eval case q27: vector score above threshold, yet no
+        // lexical overlap with the question — answering directly would let the
+        // LLM fabricate ("lock") with high confidence.
+        when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt()))
+                .thenReturn(List.of(new RetrievalService.RetrievalResult(
+                        "Quarterly revenue grew by twelve percent.", 0.9)));
+        when(queryReformulator.reformulate(anyString(), anyInt())).thenReturn(List.of());
+        when(webSearchService.isConfigured()).thenReturn(false);
+        when(messageHandler.buildAbstentionResponse())
+                .thenReturn("I couldn't find sufficient evidence in the provided documents to answer this question.");
+        stubSaveReturnsArgument();
+
+        ChatResponse response = chatService.processQuery("alice",
+                request("How does the system handle database backups?"));
+
+        assertEquals("no_evidence", response.getRagStrategy());
+        verify(messageHandler, never()).callLLM(anyString());
+    }
+
+    @Test
     void reformulationRecoversEvidenceAndMarksStrategyCorrective() {
         when(retrievalService.retrieve(eq("alice"), eq(1L), eq("what about insurance policy renewal?"), anyInt()))
                 .thenReturn(List.of(new RetrievalService.RetrievalResult("policy renewal", 0.3)));
@@ -169,7 +190,7 @@ class ChatServiceTest {
     void promptInjectionGuardCanBeDisabled() {
         promptInjectionProperties.setEnabled(false);
         when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt()))
-                .thenReturn(List.of(new RetrievalService.RetrievalResult("relevant chunk", 0.8)));
+                .thenReturn(List.of(new RetrievalService.RetrievalResult("relevant system chunk", 0.8)));
         when(messageHandler.buildPrompt(anyString(), anyList())).thenReturn("direct prompt");
         when(messageHandler.callLLM("direct prompt")).thenReturn("normal answer");
         stubSaveReturnsArgument();

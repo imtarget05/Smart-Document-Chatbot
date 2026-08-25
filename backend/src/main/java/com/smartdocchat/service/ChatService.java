@@ -232,7 +232,13 @@ public class ChatService {
         double confidence = results.isEmpty() ? 0.0 : results.get(0).score();
         String strategy = "direct";
 
-        if (confidence >= cragConfig.getConfidenceThreshold()) {
+        // Relevance sanity-check (anti-hallucination): a high vector score alone
+        // is not proof of topical relevance. If none of the retrieved chunks
+        // share any significant token with the query, the context is likely
+        // unrelated and answering "directly" from it lets the LLM fabricate
+        // with high confidence. Demote to the corrective loop instead.
+        if (confidence >= cragConfig.getConfidenceThreshold()
+                && hasLexicalSupport(query, results)) {
             return new CragResult(results, List.of(), confidence, strategy);
         }
 
@@ -254,7 +260,8 @@ public class ChatService {
         confidence = bestScore;
 
         List<RetrievalService.RetrievalResult> topMerged = keepTopK(merged.values(), cragConfig.getTopK());
-        if (confidence >= cragConfig.getConfidenceThreshold()) {
+        if (confidence >= cragConfig.getConfidenceThreshold()
+                && hasLexicalSupport(query, topMerged)) {
             return new CragResult(topMerged, List.of(), confidence, strategy);
         }
 
@@ -279,6 +286,46 @@ public class ChatService {
         List<RetrievalService.RetrievalResult> sorted = new ArrayList<>(collection);
         sorted.sort((a, b) -> Double.compare(b.score(), a.score()));
         return sorted.size() > topK ? sorted.subList(0, topK) : sorted;
+    }
+
+    /** Common English/Vietnamese function words that carry no topical signal. */
+    private static final java.util.Set<String> STOPWORDS = java.util.Set.of(
+            "the", "and", "for", "with", "what", "how", "does", "did", "are", "was",
+            "were", "when", "which", "that", "this", "those", "these", "from",
+            "into", "about", "can", "could", "should", "would", "will", "have",
+            "has", "had", "not", "but", "all", "any", "its", "his", "her", "their",
+            // Vietnamese
+            "cách", "hệ", "thống", "của", "và", "cho", "là", "gì", "như", "thế",
+            "nào", "các", "được", "không", "trong", "một", "những", "với", "từ");
+
+    /**
+     * True when at least one retrieved chunk shares a significant token with
+     * the query. Used as a cheap lexical relevance gate so that a high vector
+     * similarity alone can never route an unrelated context into the
+     * "direct" answer path (hallucination guard, eval case q27).
+     */
+    private boolean hasLexicalSupport(String query, List<RetrievalService.RetrievalResult> results) {
+        java.util.Set<String> queryTokens = significantTokens(query);
+        if (queryTokens.isEmpty()) {
+            // Nothing verifiable in the query — keep legacy behaviour.
+            return true;
+        }
+        for (RetrievalService.RetrievalResult r : results) {
+            if (!java.util.Collections.disjoint(significantTokens(r.chunk()), queryTokens)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private java.util.Set<String> significantTokens(String text) {
+        java.util.Set<String> tokens = new java.util.HashSet<>();
+        for (String raw : text.toLowerCase().split("[^\\p{L}]+")) {
+            if (raw.length() >= 3 && !STOPWORDS.contains(raw)) {
+                tokens.add(raw);
+            }
+        }
+        return tokens;
     }
 
     private String buildPromptForStrategy(String query, CragResult crag) {
