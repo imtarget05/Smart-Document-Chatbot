@@ -233,7 +233,7 @@ jobs:
           file: ./server/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.backend }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.backend }}:${{ steps.vars.outputs.tag }}
             ${{ env.REGISTRY }}/${{ steps.image-names.outputs.backend }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -255,7 +255,7 @@ jobs:
           file: ./client/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:${{ steps.vars.outputs.tag }}
             ${{ env.REGISTRY }}/${{ steps.image-names.outputs.frontend }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -294,10 +294,6 @@ jobs:
              [[ "${{ needs.sonarcloud-frontend.result }}" == "failure" ]]; then
             echo "::error::Critical CI stages failed!"
             exit 1
-
-          if [[ "${{ needs.trivy-scan-backend.result }}" == "failure" ]] || \
-             [[ "${{ needs.trivy-scan-frontend.result }}" == "failure" ]]; then
-            echo "::warning::Trivy detected CRITICAL/HIGH vulnerabilities. Review required."
           fi
 
           echo "CI Quality Gate: PASSED"
