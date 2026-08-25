@@ -99,3 +99,17 @@ Production deployments must inject a unique internal token into both backend and
 | `GET` | `/system/health` | RAG infrastructure health (Qdrant + Ollama status). Public. |
 | `GET` | `/system/metrics` | Aggregated RAG metrics (requests, latency, fallback/error rates). Requires JWT. |
 
+## Rate Limiting
+
+Token-bucket limits (bucket4j) protect the expensive and abuse-prone surface. Exceeded requests receive `429 Too Many Requests` with a `Retry-After` header in seconds. Limits are configurable via `ratelimit.*` properties and disabled entirely with `RATE_LIMIT_ENABLED=false`.
+
+| Scope | Endpoint(s) | Bucket | Default |
+| --- | --- | --- | --- |
+| per user | `/chat/ask`, `/chat/ask-stream` | 30 requests/min | LLM calls are costly |
+| per user | `/documents/upload` | 10 uploads/min | ingestion is heavy |
+| per client IP (honors `X-Forwarded-For`) | `/auth/register`, `/auth/login` | 10 requests/min | brute-force damping, complements account lockout |
+
+## Resilience
+
+LLM router calls from the backend run behind a resilience4j circuit breaker (`llmService`): transport errors, 5xx responses and unusable bodies count as failures; at a 50% failure rate over a 10-call window the circuit opens for 30 seconds and requests fail fast with the standard "temporarily unavailable" message instead of hammering the provider. The breaker state is exported on `/actuator/prometheus` (`resilience4j.circuitbreaker.*`) and intentionally does not affect `/actuator/health`. The llm-router service applies its own circuit breaker toward Cloudflare Workers AI (`CIRCUIT_FAILURE_THRESHOLD`, default 5 consecutive failures → fail fast for `CIRCUIT_OPEN_SECONDS`, default 30s).
+
