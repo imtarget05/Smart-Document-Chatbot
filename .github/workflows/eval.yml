@@ -1,27 +1,116 @@
 name: "3. Eval & Regression"
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Backend API base URL (defaults to staging)"
+        required: false
+        default: "https://smart-doc-backend-h4mt.onrender.com/api"
+      run_full_suite:
+        description: "Run the full 31-question suite instead of the fast fixture set"
+        type: boolean
+        default: false
 
 jobs:
-  eval:
+  fixture-eval:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
+
       - name: Install deps
-        run: pip install -r eval/requirements.txt
-      - name: Run eval
+        run: pip install requests
+
+      - name: Run fixture benchmark (fast gate)
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://smart-doc-backend-h4mt.onrender.com/api' }}
         run: |
-          cd eval
-          python eval.py  # Sử dụng questions.json + golden set, in ra kết quả accuracy/latency
+          python eval/run_fixture_eval.py --base-url "$BASE_URL" \
+            --output eval/results/fixture_eval.json
+
+      - name: Run full question suite (optional)
+        if: ${{ inputs.run_full_suite == true }}
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://smart-doc-backend-h4mt.onrender.com/api' }}
+        run: |
+          python eval/run_fixture_eval.py --base-url "$BASE_URL" \
+            --questions eval/questions.json \
+            --output eval/results/full_eval.json
+
       - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: eval-report
-          path: eval/results/*
+          path: eval/results/
+
+      - name: Summarize
+        if: always()
+        run: |
+          python - <<'EOF'
+          import json, pathlib
+          p = pathlib.Path("eval/results/fixture_eval.json")
+          if p.exists():
+              d = json.loads(p.read_text())
+              print(f"Fixture benchmark: errors={d.get('error_count')} "
+                    f"provider_errors={d.get('provider_errors')} "
+                    f"retrieval={d.get('retrieval_accuracy')} "
+                    f"correctness={d.get('answer_correctness')} "
+                    f"hallucinations={d.get('hallucination_cases')}")
+          EOF
+
+  e2e-fullstack:
+    name: "Full-stack E2E smoke"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # UI smoke against the built preview bundle (hermetic).
+      - name: UI smoke tests
+        working-directory: frontend
+        run: npx playwright test e2e/auth.spec.ts
+
+      # Full-stack API smoke against staging (opt-in via env var).
+      # The idempotent-upload check auto-skips until staging runs the
+      # Blueprint #17 backend; set E2E_EXPECT_IDEMPOTENT=1 here to
+      # hard-enforce it once the fix is deployed.
+      - name: Full-stack API smoke tests
+        working-directory: frontend
+        env:
+          E2E_API_URL: https://smart-doc-backend-h4mt.onrender.com/api
+        run: npx playwright test e2e/fullstack-smoke.spec.ts
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
