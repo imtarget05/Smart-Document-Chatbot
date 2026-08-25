@@ -13,4 +13,5 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findByOwnerUsernameOrderByCreatedAtDesc(String ownerUsername);
     Optional<Document> findByIdAndOwnerUsername(Long id, String ownerUsername);
     Document findByFilePath(String filePath);
+    Optional<Document> findByOwnerUsernameAndContentHash(String ownerUsername, String contentHash);
 }

@@ -45,6 +45,18 @@ public class DocumentService {
         String originalFileName = sanitizeFileName(file.getOriginalFilename());
         String fileExtension = getFileExtension(originalFileName);
         validateUpload(file, fileExtension);
+
+        // Idempotent ingestion (Blueprint #17): identical content uploaded
+        // twice by the same owner must not create duplicate metadata.
+        String contentHash = sha256Hex(file.getBytes());
+        Optional<Document> existing =
+                documentRepository.findByOwnerUsernameAndContentHash(ownerUsername, contentHash);
+        if (existing.isPresent()) {
+            log.info("Duplicate upload '{}' ignored for {} — existing document id {} returned",
+                    originalFileName, ownerUsername, existing.get().getId());
+            return existing.get();
+        }
+
         String fileName = UUID.randomUUID() + "." + fileExtension;
 
         // Store file on disk
@@ -72,6 +84,7 @@ public class DocumentService {
                 .chunkCount(chunks.size())
                 .chunks(chunksJson)
                 .sourceType(SourceType.USER)
+                .contentHash(contentHash)
                 .build();
 
         // Legal structure detection: when article markers exist, persist
@@ -219,6 +232,21 @@ public class DocumentService {
                 .effectiveDate(d.getEffectiveDate())
                 .sourceType(d.getSourceType() != null ? d.getSourceType().name() : null)
                 .build();
+    }
+
+    /** SHA-256 hex digest used for idempotent ingestion (Blueprint #17). */
+    private String sha256Hex(byte[] content) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest.digest(content)) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 is mandatory on every supported JVM — unreachable.
+            throw new IllegalStateException("SHA-256 algorithm unavailable", e);
+        }
     }
 
     private String getFileExtension(String fileName) {

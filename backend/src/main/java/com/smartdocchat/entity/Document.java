@@ -75,6 +75,14 @@ public class Document {
     @Builder.Default
     private SourceType sourceType = SourceType.USER;
 
+    /**
+     * SHA-256 hex digest of the uploaded file content (Blueprint #17,
+     * idempotent ingestion). Null for legacy rows ingested before this
+     * field existed.
+     */
+    @Column(name = "content_hash")
+    private String contentHash;
+
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();
