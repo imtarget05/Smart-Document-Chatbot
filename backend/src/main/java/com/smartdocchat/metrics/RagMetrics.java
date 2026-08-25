@@ -43,4 +43,31 @@ public class RagMetrics {
                 .register(meterRegistry)
                 .record(Duration.ofMillis(durationMs));
     }
+
+    /**
+     * AI-quality telemetry (Blueprint #18): one answer-level counter per
+     * strategy with a cited flag, so citation coverage and CRAG/web-search
+     * fallback rates are derivable from Prometheus.
+     */
+    public void recordAnswer(String strategy, boolean cited) {
+        Counter.builder("chat.answers.total")
+                .tag("strategy", strategy)
+                .tag("cited", Boolean.toString(cited))
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /** Counts upstream LLM failures (unexpected structure or call errors). */
+    public void recordLlmError() {
+        Counter.builder("chat.llm.errors").register(meterRegistry).increment();
+    }
+
+    /** Records generated-token usage per LLM response when reported. */
+    public void recordTokens(long tokens) {
+        io.micrometer.core.instrument.DistributionSummary
+                .builder("chat.tokens")
+                .publishPercentiles(0.5, 0.95)
+                .register(meterRegistry)
+                .record(tokens);
+    }
 }

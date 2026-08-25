@@ -83,6 +83,7 @@ public class ChatService {
                 ragMetrics.recordAbstention();
             }
             ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+            ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
         }
 
         ragMetrics.recordLatency(System.currentTimeMillis() - started);
@@ -127,6 +128,7 @@ public class ChatService {
                 if ("no_evidence".equals(crag.strategy())) {
                     ragMetrics.recordAbstention();
                     ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+                    ragMetrics.recordAnswer(crag.strategy(), false);
                     String abstention = messageHandler.buildAbstentionResponse();
                     emitter.send(SseEmitter.event().name("chunk").data(abstention));
                     ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstention,
@@ -155,6 +157,7 @@ public class ChatService {
                 });
 
                 ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+                ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
 
                 ChatMessage saved = saveResponse(ownerUsername, request, userMessage,
                         aiResponseBuilder.toString(), buildSourceChunks(crag));

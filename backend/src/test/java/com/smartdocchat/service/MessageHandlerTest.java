@@ -45,7 +45,8 @@ class MessageHandlerTest {
         llmConfig.setBaseUrl("http://localhost:8001");
         llmConfig.setMaxAttempts(2);
         llmConfig.setRetryBackoffMs(1);
-        messageHandler = new MessageHandler(llmConfig, restTemplate);
+        messageHandler = new MessageHandler(llmConfig, restTemplate,
+                new com.smartdocchat.metrics.RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
     }
 
     @Test
