@@ -25,20 +25,6 @@ jobs:
   backend-build:
     name: "1a. Backend - Build & Test"
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: smart_doc_chatbot_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout
-          --health-retries
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -85,6 +71,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
@@ -121,6 +108,9 @@ jobs:
   agent-tests:
     name: "1c. Agent - pytest"
     runs-on: ubuntu-latest
+    env:
+      # Permissive profile: unit tests must not require real secrets.
+      APP_ENV: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
