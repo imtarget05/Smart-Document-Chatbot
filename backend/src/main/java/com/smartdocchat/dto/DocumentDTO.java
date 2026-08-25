@@ -18,4 +18,11 @@ public class DocumentDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Integer chunkCount;
+    // Legal metadata (Decision 13/15/16A). Nullable.
+    private String title;
+    private String documentNumber;
+    private String issuingBody;
+    private java.time.LocalDate issueDate;
+    private java.time.LocalDate effectiveDate;
+    private String sourceType;
 }

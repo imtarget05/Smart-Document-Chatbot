@@ -35,6 +35,7 @@ public class ChatService {
     private final PromptInjectionDetector promptInjectionDetector;
     private final PromptInjectionProperties promptInjectionProperties;
     private final RagMetrics ragMetrics;
+    private final DocumentService documentService;
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -68,7 +69,7 @@ public class ChatService {
             ragMetrics.recordInjectionBlocked();
             ChatMessage blocked = saveResponse(ownerUsername, request, userMessage,
                     messageHandler.buildInjectionBlockedResponse(), null);
-            response = toResponse(blocked, emptyCrag("blocked"));
+            response = toResponse(ownerUsername, blocked, emptyCrag("blocked"));
         } else {
             CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
 
@@ -76,7 +77,7 @@ public class ChatService {
                     ? messageHandler.buildAbstentionResponse()
                     : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
             ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
-            response = toResponse(saved, crag);
+            response = toResponse(ownerUsername, saved, crag);
 
             if ("no_evidence".equals(crag.strategy())) {
                 ragMetrics.recordAbstention();
@@ -103,7 +104,7 @@ public class ChatService {
                     meta.put("confidence", "low");
                     meta.put("confidenceScore", 0.0);
                     emitter.send(SseEmitter.event().name("metadata").data(meta));
-                    emitter.send(SseEmitter.event().name("complete").data(toResponse(blocked, emptyCrag("blocked"))));
+                    emitter.send(SseEmitter.event().name("complete").data(toResponse(ownerUsername, blocked, emptyCrag("blocked"))));
                     emitter.complete();
                     return;
                 }
@@ -113,6 +114,9 @@ public class ChatService {
                 // Send metadata (sources + strategy) up front, before the token stream.
                 Map<String, Object> metaEvent = new LinkedHashMap<>();
                 metaEvent.put("sourceChunks", buildSourceChunks(crag));
+                // Structured citations for Decision 14 (frontend evidence UI).
+                metaEvent.put("sources",
+                        buildSources(ownerUsername, request.getDocumentId(), crag));
                 metaEvent.put("documentId", request.getDocumentId());
                 metaEvent.put("confidenceScore", round(crag.confidenceScore()));
                 metaEvent.put("confidence", confidenceLabel(crag.confidenceScore()));
@@ -127,7 +131,7 @@ public class ChatService {
                     emitter.send(SseEmitter.event().name("chunk").data(abstention));
                     ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstention,
                             buildSourceChunks(crag));
-                    emitter.send(SseEmitter.event().name("complete").data(toResponse(saved, crag)));
+                    emitter.send(SseEmitter.event().name("complete").data(toResponse(ownerUsername, saved, crag)));
                     emitter.complete();
                     return;
                 }
@@ -155,7 +159,7 @@ public class ChatService {
                 ChatMessage saved = saveResponse(ownerUsername, request, userMessage,
                         aiResponseBuilder.toString(), buildSourceChunks(crag));
 
-                emitter.send(SseEmitter.event().name("complete").data(toResponse(saved, crag)));
+                emitter.send(SseEmitter.event().name("complete").data(toResponse(ownerUsername, saved, crag)));
                 emitter.complete();
 
             } catch (Exception e) {
@@ -299,7 +303,7 @@ public class ChatService {
     // Response mapping
     // ------------------------------------------------------------------
 
-    private ChatResponse toResponse(ChatMessage message, CragResult crag) {
+    private ChatResponse toResponse(String ownerUsername, ChatMessage message, CragResult crag) {
         return ChatResponse.builder()
                 .id(message.getId())
                 .sessionId(message.getSessionId())
@@ -310,11 +314,26 @@ public class ChatService {
                 .confidence(confidenceLabel(crag.confidenceScore()))
                 .confidenceScore(round(crag.confidenceScore()))
                 .ragStrategy(crag.strategy())
-                .sources(buildSources(message.getDocumentId(), crag))
+                .sources(buildSources(ownerUsername, message.getDocumentId(), crag))
                 .build();
     }
 
-    private List<Map<String, Object>> buildSources(Long documentId, CragResult crag) {
+    /**
+     * Structured citations (Decision 13). Legal metadata is included only
+     * when verifiably present; missing fields stay null rather than being
+     * fabricated. Document-level metadata is attached when the document is
+     * accessible to the requesting owner.
+     */
+    private List<Map<String, Object>> buildSources(String ownerUsername, Long documentId, CragResult crag) {
+        com.smartdocchat.entity.Document doc = null;
+        if (documentId != null) {
+            try {
+                doc = documentService.getDocumentById(documentId, ownerUsername);
+            } catch (RuntimeException e) {
+                log.debug("Source enrichment skipped: document {} not accessible for {}", documentId, ownerUsername);
+            }
+        }
+
         List<Map<String, Object>> sources = new ArrayList<>();
         for (RetrievalService.RetrievalResult r : crag.results()) {
             String content = r.chunk();
@@ -325,7 +344,14 @@ public class ChatService {
             s.put("documentId", documentId);
             s.put("content", content);
             s.put("score", round(r.score()));
-            s.put("sourceType", "document");
+            s.put("sourceType", doc != null && doc.getSourceType() != null
+                    ? doc.getSourceType().name() : "document");
+            s.put("chunkId", r.chunkId());
+            s.put("article", r.article());
+            s.put("clause", r.clause());
+            s.put("point", r.point());
+            s.put("documentTitle", doc != null ? doc.getTitle() : null);
+            s.put("documentNumber", doc != null ? doc.getDocumentNumber() : null);
             sources.add(s);
         }
         return sources;

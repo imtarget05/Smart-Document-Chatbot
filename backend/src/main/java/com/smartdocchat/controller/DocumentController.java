@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -22,6 +23,45 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DocumentController {
     private final DocumentService documentService;
+
+    /**
+     * Structured legal evidence units for a document (Decision 14 navigation).
+     * Owner isolation is enforced in DocumentService: another user's document
+     * returns 404, never its chunks.
+     */
+    @GetMapping("/{id}/legal-chunks")
+    public ResponseEntity<?> getLegalChunks(@PathVariable Long id, Principal principal) {
+        try {
+            Document document = documentService.getDocumentById(id, principal.getName());
+            List<com.smartdocchat.entity.LegalChunk> chunks =
+                    documentService.getLegalChunks(id, principal.getName());
+            Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("documentId", id);
+            body.put("fileName", document.getFileName());
+            body.put("title", document.getTitle());
+            body.put("documentNumber", document.getDocumentNumber());
+            body.put("issuingBody", document.getIssuingBody());
+            body.put("issueDate", document.getIssueDate());
+            body.put("effectiveDate", document.getEffectiveDate());
+            body.put("sourceType", document.getSourceType() != null
+                    ? document.getSourceType().name() : "USER");
+            body.put("chunks", chunks.stream().map(c -> {
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("id", c.getId());
+                m.put("ordinal", c.getOrdinal());
+                m.put("article", c.getArticleNumber());
+                m.put("clause", c.getClauseNumber());
+                m.put("point", c.getPointLabel());
+                m.put("content", c.getContent());
+                return m;
+            }).collect(Collectors.toList()));
+            return ResponseEntity.ok(body);
+        } catch (RuntimeException e) {
+            // Not found OR not owned by the caller — indistinguishable by design.
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(java.util.Map.of("message", "Document not found"));
+        }
+    }
 
     @PostMapping("/upload")
     public ResponseEntity<UploadResponse> uploadDocument(
@@ -69,6 +109,12 @@ public class DocumentController {
         return ResponseEntity.ok(dtos);
     }
 
+    /** Legal document search (Decision 15). Owner-scoped; never exposes other users' documents. */
+    @GetMapping("/search")
+    public ResponseEntity<List<DocumentDTO>> searchDocuments(@RequestParam("q") String query, Principal principal) {
+        return ResponseEntity.ok(documentService.searchDocuments(principal.getName(), query));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<DocumentDTO> getDocumentById(@PathVariable Long id, Principal principal) {
         try {
@@ -98,6 +144,13 @@ public class DocumentController {
                 .createdAt(document.getCreatedAt())
                 .updatedAt(document.getUpdatedAt())
                 .chunkCount(document.getChunkCount())
+                .title(document.getTitle())
+                .documentNumber(document.getDocumentNumber())
+                .issuingBody(document.getIssuingBody())
+                .issueDate(document.getIssueDate())
+                .effectiveDate(document.getEffectiveDate())
+                .sourceType(document.getSourceType() != null
+                        ? document.getSourceType().name() : null)
                 .build();
     }
 }

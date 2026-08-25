@@ -45,6 +45,36 @@ public class Document {
     @Column(columnDefinition = "TEXT")
     private String chunks;
 
+    // ------------------------------------------------------------------
+    // Legal metadata (Decision 13). Nullable: only set when verifiable
+    // from the document text or explicitly provided. Never fabricated.
+    // ------------------------------------------------------------------
+
+    @Column
+    private String title;
+
+    /** Văn bản số hiệu, e.g. "45/2019/QH14". */
+    @Column(name = "document_number")
+    private String documentNumber;
+
+    @Column(name = "issuing_body")
+    private String issuingBody;
+
+    @Column(name = "issue_date")
+    private java.time.LocalDate issueDate;
+
+    @Column(name = "effective_date")
+    private java.time.LocalDate effectiveDate;
+
+    /**
+     * Provenance of the document. Defaults to USER on upload; never
+     * silently set to OFFICIAL.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", nullable = false)
+    @Builder.Default
+    private SourceType sourceType = SourceType.USER;
+
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();

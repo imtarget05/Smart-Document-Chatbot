@@ -1,8 +1,14 @@
 package com.smartdocchat.service;
 
+import com.smartdocchat.dto.DocumentDTO;
 import com.smartdocchat.entity.Document;
+import com.smartdocchat.entity.LegalChunk;
+import com.smartdocchat.entity.SourceType;
 import com.smartdocchat.repository.DocumentRepository;
+import com.smartdocchat.repository.LegalChunkRepository;
 import com.smartdocchat.util.DocumentParser;
+import com.smartdocchat.util.LegalDateExtractor;
+import com.smartdocchat.util.LegalStructureParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,6 +20,8 @@ import java.io.InputStream;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +30,14 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentParser documentParser;
     private final StorageService storageService;
+    private final LegalStructureParser legalStructureParser;
+    private final LegalChunkRepository legalChunkRepository;
+    private final com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
+    private final com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
+
+    /** Matches an explicit "Số: NN/YYYY/AAA" document-number line only. */
+    private static final Pattern DOCUMENT_NUMBER =
+            Pattern.compile("(?im)^\\s*Số\\s*:\\s*(\\S+/\\d{4}/\\S+)");
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "txt");
 
@@ -45,7 +61,8 @@ public class DocumentService {
         String chunksJson = new com.fasterxml.jackson.databind.ObjectMapper()
                 .writeValueAsString(chunks);
 
-        // Save document metadata + chunks to database
+        // Save document metadata + chunks to database.
+        // Provenance defaults to USER — never silently OFFICIAL.
         Document document = Document.builder()
                 .fileName(originalFileName)
                 .filePath(storagePath)
@@ -54,12 +71,52 @@ public class DocumentService {
                 .fileSize(file.getSize())
                 .chunkCount(chunks.size())
                 .chunks(chunksJson)
+                .sourceType(SourceType.USER)
                 .build();
 
-        return documentRepository.save(document);
+        // Legal structure detection: when article markers exist, persist
+        // addressable evidence units alongside the generic chunks (which are
+        // kept for backward compatibility with the legacy retrieval path).
+        List<LegalStructureParser.StructuredUnit> legalUnits =
+                legalStructureParser.parse(extractedText);
+        if (!legalUnits.isEmpty()) {
+            Matcher numberMatch = DOCUMENT_NUMBER.matcher(extractedText);
+            if (numberMatch.find()) {
+                document.setDocumentNumber(numberMatch.group(1));
+            }
+            // Legal dates (Decision 16A): only explicit labelled lines; never
+            // inferred from arbitrary body text; missing stays null.
+            LegalDateExtractor.LegalDateMetadata dates = legalDateExtractor.extract(extractedText);
+            document.setIssueDate(dates.issueDate());
+            document.setEffectiveDate(dates.effectiveDate());
+        }
+        Document saved = documentRepository.save(document);
+
+        if (!legalUnits.isEmpty()) {
+            int ordinal = 0;
+            for (LegalStructureParser.StructuredUnit unit : legalUnits) {
+                legalChunkRepository.save(LegalChunk.builder()
+                        .documentId(saved.getId())
+                        .ordinal(ordinal++)
+                        .content(unit.text())
+                        .chapterNumber(unit.chapter())
+                        .articleNumber(unit.article())
+                        .clauseNumber(unit.clause())
+                        .pointLabel(unit.point())
+                        .build());
+            }
+            log.info("Document '{}' ingested as structured legal text: {} evidence units",
+                    originalFileName, legalUnits.size());
+        }
+
+        return saved;
     }
 
     public List<Document> getAllDocuments(String ownerUsername) {
+        return documentRepository.findByOwnerUsernameOrderByCreatedAtDesc(ownerUsername);
+    }
+
+    private List<Document> getDocumentsByOwner(String ownerUsername) {
         return documentRepository.findByOwnerUsernameOrderByCreatedAtDesc(ownerUsername);
     }
 
@@ -72,6 +129,7 @@ public class DocumentService {
     public void deleteDocument(Long id, String ownerUsername) {
         Document document = getDocumentById(id, ownerUsername);
         storageService.delete(document.getFilePath());
+        legalChunkRepository.deleteByDocumentId(id);
         documentRepository.delete(document);
     }
 
@@ -88,6 +146,79 @@ public class DocumentService {
             log.error("Error parsing chunks for document {}", documentId, e);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * Returns the structured legal evidence units for a document, enforcing
+     * owner isolation. Empty when the document was ingested without legal
+     * structure (legacy/generic chunking only).
+     */
+    public List<LegalChunk> getLegalChunks(Long documentId, String ownerUsername) {
+        getDocumentById(documentId, ownerUsername); // owner isolation check
+        return legalChunkRepository.findByDocumentIdOrderByOrdinalAsc(documentId);
+    }
+
+    /**
+     * Legal document search (Decision 15): matches the query against file
+     * name, legal title and document number using Vietnamese-aware
+     * normalisation (case-fold + diacritic-fold + abbreviation expansion).
+     * Only the requesting owner's documents are ever considered.
+     */
+    public List<DocumentDTO> searchDocuments(String ownerUsername, String query) {
+        Set<String> terms = legalQueryNormalizer.matchTerms(query);
+        String foldedQuery = legalQueryNormalizer.foldContent(query);
+        String rawNumber = extractDocumentNumber(query);
+
+        return getDocumentsByOwner(ownerUsername).stream()
+                .map(doc -> {
+                    String haystack = legalQueryNormalizer.foldContent(
+                            nullSafe(doc.getFileName()) + " " + nullSafe(doc.getTitle()) + " "
+                                    + nullSafe(doc.getDocumentNumber()));
+                    boolean match = false;
+                    if (!rawNumber.isEmpty() && doc.getDocumentNumber() != null
+                            && legalQueryNormalizer.foldContent(doc.getDocumentNumber()).contains(rawNumber)) {
+                        match = true;
+                    }
+                    if (!match && !terms.isEmpty()) {
+                        long hits = terms.stream().filter(haystack::contains).count();
+                        match = hits >= Math.min(terms.size(), 1);
+                    }
+                    if (!match && haystack.contains(foldedQuery) && !foldedQuery.isBlank()) {
+                        match = true;
+                    }
+                    return match ? toDTO(doc) : null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static final Pattern NUMBER_TOKEN = Pattern.compile("\\d{1,4}/\\d{4}/[A-Za-z\\-]+");
+
+    private String extractDocumentNumber(String query) {
+        Matcher m = NUMBER_TOKEN.matcher(query == null ? "" : query);
+        return m.find() ? legalQueryNormalizer.foldContent(m.group()) : "";
+    }
+
+    private String nullSafe(String s) {
+        return s == null ? "" : s;
+    }
+
+    private DocumentDTO toDTO(Document d) {
+        return DocumentDTO.builder()
+                .id(d.getId())
+                .fileName(d.getFileName())
+                .fileType(d.getFileType())
+                .fileSize(d.getFileSize())
+                .createdAt(d.getCreatedAt())
+                .updatedAt(d.getUpdatedAt())
+                .chunkCount(d.getChunkCount())
+                .title(d.getTitle())
+                .documentNumber(d.getDocumentNumber())
+                .issuingBody(d.getIssuingBody())
+                .issueDate(d.getIssueDate())
+                .effectiveDate(d.getEffectiveDate())
+                .sourceType(d.getSourceType() != null ? d.getSourceType().name() : null)
+                .build();
     }
 
     private String getFileExtension(String fileName) {
