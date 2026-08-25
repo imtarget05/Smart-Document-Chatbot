@@ -31,6 +31,13 @@ jobs:
       - name: Install deps
         run: pip install requests
 
+      # Render free tier sleeps after ~15 min idle; first request can take a
+      # minute+. Warm the service up so the eval doesn't die on a read timeout.
+      - name: Wake up staging (cold start)
+        run: |
+          curl -fsS --retry 8 --retry-delay 20 --retry-all-errors --max-time 30 \
+            https://smart-doc-backend-h4mt.onrender.com/api/actuator/health
+
       - name: Run fixture benchmark (fast gate)
         env:
           BASE_URL: ${{ inputs.base_url || 'https://smart-doc-backend-h4mt.onrender.com/api' }}
@@ -99,6 +106,11 @@ jobs:
       # The idempotent-upload check auto-skips until staging runs the
       # Blueprint #17 backend; set E2E_EXPECT_IDEMPOTENT=1 here to
       # hard-enforce it once the fix is deployed.
+      - name: Wake up staging (cold start)
+        run: |
+          curl -fsS --retry 8 --retry-delay 20 --retry-all-errors --max-time 30 \
+            https://smart-doc-backend-h4mt.onrender.com/api/actuator/health
+
       - name: Full-stack API smoke tests
         working-directory: frontend
         env:
