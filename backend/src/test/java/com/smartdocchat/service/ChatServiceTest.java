@@ -49,7 +49,7 @@ class ChatServiceTest {
         cragConfig = new CragConfig();
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService);
+                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService());
     }
 
     private ChatRequest request(String message) {

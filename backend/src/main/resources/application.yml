@@ -152,3 +152,17 @@ ratelimit:
   chat-per-minute: 30
   upload-per-minute: 10
   auth-per-minute: 10
+
+# Langfuse observability (traces per CRAG request). Opt-in: when
+# LANGFUSE_PUBLIC_KEY is empty the tracer is disabled and the app runs
+# with zero overhead. Keys MUST come from env / Render dashboard — never
+# commit them. LANGFUSE_HOST defaults to the EU cloud; set to a
+# self-hosted URL (e.g. http://localhost:3000) for local dev.
+langfuse:
+  enabled: ${LANGFUSE_ENABLED:true}
+  host: ${LANGFUSE_HOST:https://cloud.langfuse.com}
+  public-key: ${LANGFUSE_PUBLIC_KEY:}
+  secret-key: ${LANGFUSE_SECRET_KEY:}
+  # Propagate the trace id to the FastAPI llm-router so a single request
+  # shows both Java and Python spans in one tree.
+  router-trace-header: X-Langfuse-Trace-Id

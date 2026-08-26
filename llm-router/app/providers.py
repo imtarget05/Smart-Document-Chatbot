@@ -240,3 +240,138 @@ class CloudflareProvider:
         if isinstance(texts, str):
             return {"model": self.settings.cloudflare_embed_model, "embedding": list(data[0])}
         return {"model": self.settings.cloudflare_embed_model, "embeddings": [list(v) for v in data]}
+
+
+class LocalOllamaProvider:
+    """Opt-in local provider: talks to a user-run Ollama server (e.g.
+    ``LOCAL_OLLAMA_URL=http://localhost:11434`` with a model pulled via
+    ``ollama pull qwen3:8b``).
+
+    Contract (Decision: local-first, NO mid-request auto-fallback):
+    - when LOCAL_OLLAMA_URL is unset → ``available`` is False and the router
+      serves everything from Cloudflare;
+    - when set, availability is a cached health probe (TTL
+      ``local_ollama_health_ttl_seconds``): if Ollama is not reachable the
+      request goes to Cloudflare instead — never half-served by both;
+    - embeddings stay on Cloudflare regardless (local embed models are out of
+      scope; changing the embedding model invalidates stored vectors).
+
+    Translates the Ollama /api/chat shape to the same Ollama-compatible
+    response contract CloudflareProvider emits, so Spring Boot cannot tell
+    them apart apart from the reported model name.
+    """
+
+    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
+        self.settings = settings
+        self.client = client or httpx.AsyncClient()
+        self._owns_client = client is None
+        self._healthy_until = 0.0
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.settings.local_ollama_url)
+
+    async def close(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
+
+    async def _probe_health(self) -> bool:
+        import time as _time
+
+        now = _time.monotonic()
+        if now < self._healthy_until:
+            return True
+        try:
+            async with asyncio.timeout(2.0):
+                response = await self.client.get(
+                    f"{self.settings.local_ollama_url.rstrip('/')}/api/tags",
+                    timeout=2.0,
+                )
+                healthy = response.status_code == 200
+        except (httpx.HTTPError, TimeoutError):
+            healthy = False
+        if healthy:
+            self._healthy_until = now + self.settings.local_ollama_health_ttl_seconds
+        return healthy
+
+    async def is_available(self) -> bool:
+        return self.enabled and await self._probe_health()
+
+    def _chat_body(self, request: ChatRequest, stream: bool) -> dict[str, Any]:
+        messages = [
+            {"role": m.role, "content": m.content}
+            for m in request.messages
+            if isinstance(m.content, str)
+        ]
+        body: dict[str, Any] = {
+            "model": self.settings.local_ollama_model,
+            "messages": messages,
+            "stream": stream,
+            "think": False,  # qwen3-style reasoning must never leak into answers
+        }
+        options = dict(request.options or {})
+        options.setdefault("temperature", 0.3)
+        body["options"] = options
+        return body
+
+    async def chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> dict[str, Any]:
+        try:
+            async with asyncio.timeout(self.settings.local_ollama_timeout_seconds):
+                response = await self.client.post(
+                    f"{self.settings.local_ollama_url.rstrip('/')}/api/chat",
+                    json=self._chat_body(request, stream=False),
+                    timeout=self.settings.local_ollama_timeout_seconds,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except TimeoutError as exc:
+            raise ProviderError("ollama_timeout") from exc
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ProviderError(f"ollama_error:{type(exc).__name__}") from exc
+
+        content = ((payload.get("message") or {}).get("content")) or ""
+        if not content.strip():
+            raise ProviderError("ollama_empty_response")
+        response = _ollama_response(content, decision, request_id)
+        response["model"] = self.settings.local_ollama_model
+        return response
+
+    async def stream_chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> AsyncIterator[bytes]:
+        try:
+            async with self.client.stream(
+                "POST",
+                f"{self.settings.local_ollama_url.rstrip('/')}/api/chat",
+                json=self._chat_body(request, stream=True),
+                timeout=self.settings.local_ollama_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                collected_end = False
+                async for raw in response.aiter_lines():
+                    if not raw.strip():
+                        continue
+                    try:
+                        chunk = json.loads(raw)
+                    except ValueError:
+                        continue
+                    token = (chunk.get("message") or {}).get("content") or ""
+                    payload = _ollama_response(token, decision, request_id)
+                    payload["model"] = self.settings.local_ollama_model
+                    payload["done"] = bool(chunk.get("done"))
+                    if payload["done"]:
+                        payload["done_reason"] = "stop"
+                    else:
+                        payload.pop("done_reason", None)
+                    yield (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+                    collected_end = collected_end or bool(chunk.get("done"))
+                if not collected_end:
+                    raise ProviderError("ollama_stream_empty")
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError as exc:
+            raise ProviderError("ollama_timeout") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"ollama_error:{type(exc).__name__}") from exc

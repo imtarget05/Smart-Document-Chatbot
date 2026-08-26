@@ -97,3 +97,6 @@ eval/results/*.json
 data/raw/
 data/processed/
 
+finetune/llama.cpp/
+finetune/qwen3-vi-f16.gguf
+finetune/qwen3-vi-fused/

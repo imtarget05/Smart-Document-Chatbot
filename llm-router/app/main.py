@@ -7,6 +7,13 @@ from fastapi.responses import StreamingResponse
 
 from .config import Settings, settings
 from .models import ChatRequest
+from .observability import (
+    enabled as langfuse_enabled,
+    flush as langfuse_flush,
+    generation as langfuse_generation,
+    trace_id_from_headers,
+    update_generation as langfuse_update_generation,
+)
 from .providers import CloudflareProvider, ProviderError
 from .service import LLMRouter
 
@@ -55,21 +62,58 @@ def create_app(
         }
 
     @app.post("/api/chat", dependencies=[Depends(verify_internal_token)])
-    async def chat(payload: ChatRequest):
+    async def chat(request: Request, payload: ChatRequest):
+        trace_id = trace_id_from_headers(dict(request.headers))
         try:
             if payload.stream:
                 return StreamingResponse(
                     service.stream_chat(payload), media_type="application/x-ndjson"
                 )
-            return await service.chat(payload)
+            result = await service.chat(payload)
+            # Join to the backend-originated trace (Phase 2 glue).
+            if langfuse_enabled() and trace_id is not None:
+                model = result.get("model", app_settings.cloudflare_chat_model)
+                langfuse_generation(
+                    trace_id, "router_generate", model,
+                    input={"message_count": len(payload.messages)},
+                    metadata={"stream": False},
+                )
+                langfuse_update_generation(
+                    trace_id, "router_generate",
+                    output=result.get("message", {}).get("content"),
+                    metadata={"backend": "cloudflare"},
+                )
+                langfuse_flush()
+            return result
         except ProviderError as exc:
+            if langfuse_enabled() and trace_id is not None:
+                langfuse_update_generation(
+                    trace_id, "router_generate",
+                    output=None, metadata={"error": str(exc)},
+                )
+                langfuse_flush()
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/api/embeddings", dependencies=[Depends(verify_internal_token)])
-    async def embeddings(payload: dict[str, Any]):
+    async def embeddings(request: Request, payload: dict[str, Any]):
+        trace_id = trace_id_from_headers(dict(request.headers))
         try:
-            return await service.providers.embeddings(payload)
+            result = await service.providers.embeddings(payload)
+            if langfuse_enabled() and trace_id is not None:
+                langfuse_generation(
+                    trace_id, "router_embeddings",
+                    model=app_settings.cloudflare_embed_model,
+                    metadata={"stream": False},
+                )
+                langfuse_flush()
+            return result
         except Exception as exc:
+            if langfuse_enabled() and trace_id is not None:
+                langfuse_update_generation(
+                    trace_id, "router_embeddings",
+                    output=None, metadata={"error": str(exc)},
+                )
+                langfuse_flush()
             raise HTTPException(
                 status_code=503, detail="embedding_unavailable"
             ) from exc

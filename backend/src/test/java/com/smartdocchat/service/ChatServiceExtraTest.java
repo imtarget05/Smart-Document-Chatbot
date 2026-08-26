@@ -54,7 +54,7 @@ class ChatServiceExtraTest {
         ragMetrics = new RagMetrics(meterRegistry);
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService);
+                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService());
         lenient().when(promptInjectionDetector.analyze(anyString())).thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
     }

@@ -1,0 +1,7 @@
+FROM ./qwen3-vi-f16.gguf
+
+PARAMETER temperature 0.3
+PARAMETER num_ctx 8192
+PARAMETER stop "<|im_end|>"
+
+SYSTEM """Bạn là trợ lý AI của hệ thống Smart Document Chatbot. Trả lời ngắn gọn, chính xác bằng tiếng Việt, chỉ dựa trên ngữ cảnh được cung cấp."""

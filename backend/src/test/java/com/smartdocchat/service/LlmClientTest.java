@@ -54,7 +54,8 @@ class LlmClientTest {
         llmConfig.setBaseUrl("http://localhost:8001");
 
         llmClient = new LlmClient(restTemplate, llmConfig,
-                new RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
+                new RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                new com.smartdocchat.observability.LangfuseService());
         ReflectionTestUtils.setField(llmClient, "internalToken", "");
 
         CircuitBreakerConfig config = CircuitBreakerConfig.custom()

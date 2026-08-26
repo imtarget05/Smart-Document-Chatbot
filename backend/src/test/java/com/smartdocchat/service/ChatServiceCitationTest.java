@@ -45,7 +45,7 @@ class ChatServiceCitationTest {
                 promptInjectionDetector,
                 new com.smartdocchat.config.PromptInjectionProperties(),
                 new com.smartdocchat.metrics.RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
-                documentService);
+                documentService, new com.smartdocchat.observability.LangfuseService());
         lenient().when(promptInjectionDetector.analyze(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(org.mockito.ArgumentMatchers.any(ChatMessage.class)))

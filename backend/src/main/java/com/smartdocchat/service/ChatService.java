@@ -6,6 +6,7 @@ import com.smartdocchat.dto.ChatRequest;
 import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.metrics.RagMetrics;
+import com.smartdocchat.observability.LangfuseService;
 import com.smartdocchat.security.PromptInjectionDetector;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class ChatService {
     private final PromptInjectionProperties promptInjectionProperties;
     private final RagMetrics ragMetrics;
     private final DocumentService documentService;
+    private final LangfuseService langfuse;
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -227,9 +229,20 @@ public class ChatService {
     // ------------------------------------------------------------------
 
     private CragResult runCrag(String ownerUsername, Long documentId, String query, boolean webSearchRequested) {
+        String traceId = langfuse.startTrace("crag_request", ownerUsername,
+                Map.of("documentId", documentId, "query", query));
+        long requestStart = System.currentTimeMillis();
+
+        String retrieveSpan = langfuse.startSpan("retrieve_chunks",
+                Map.of("query", query, "topK", cragConfig.getTopK()));
         List<RetrievalService.RetrievalResult> results =
                 retrievalService.retrieve(ownerUsername, documentId, query, cragConfig.getTopK());
         double confidence = results.isEmpty() ? 0.0 : results.get(0).score();
+        langfuse.endSpan(retrieveSpan, String.format("%d chunks, top score %.3f",
+                        results.size(), confidence),
+                Map.of("chunkCount", results.size(), "topScore", round(confidence),
+                        "latencyMs", System.currentTimeMillis() - requestStart));
+
         String strategy = "direct";
 
         // Relevance sanity-check (anti-hallucination): a high vector score alone
@@ -237,18 +250,36 @@ public class ChatService {
         // share any significant token with the query, the context is likely
         // unrelated and answering "directly" from it lets the LLM fabricate
         // with high confidence. Demote to the corrective loop instead.
-        if (confidence >= cragConfig.getConfidenceThreshold()
-                && hasLexicalSupport(query, results)) {
+        String judgeSpan = langfuse.startSpan("judge_relevance",
+                Map.of("confidence", round(confidence), "threshold", cragConfig.getConfidenceThreshold()));
+        boolean passedJudge = confidence >= cragConfig.getConfidenceThreshold()
+                && hasLexicalSupport(query, results);
+        langfuse.endSpan(judgeSpan, passedJudge ? "direct" : "needs_corrective",
+                Map.of("passed", passedJudge, "confidence", round(confidence)));
+
+        if (passedJudge) {
+            langfuse.updateTrace(
+                    Map.of("strategy", "direct", "confidence", round(confidence),
+                            "chunkCount", results.size(), "documentId", documentId),
+                    Map.of("query", query));
+            langfuse.flush();
             return new CragResult(results, List.of(), confidence, strategy);
         }
 
         // Corrective loop: reformulate (if possible) and re-retrieve.
+        String reformSpan = langfuse.startSpan("query_reformulate",
+                Map.of("originalQuery", query, "maxReformulations", cragConfig.getMaxReformulations()));
         List<String> variants = queryReformulator.reformulate(query, cragConfig.getMaxReformulations());
+        langfuse.endSpan(reformSpan, "generated " + variants.size() + " variants",
+                Map.of("variantCount", variants.size(), "variants", variants));
+
         Map<String, RetrievalService.RetrievalResult> merged = new LinkedHashMap<>();
         results.forEach(r -> merged.put(r.chunk(), r));
         double bestScore = confidence;
         strategy = "corrective";
 
+        String reretSpan = langfuse.startSpan("retrieve_chunks_corrective",
+                Map.of("variantCount", variants.size()));
         for (String variant : variants) {
             List<RetrievalService.RetrievalResult> vResults =
                     retrievalService.retrieve(ownerUsername, documentId, variant, cragConfig.getTopK());
@@ -258,10 +289,18 @@ public class ChatService {
             }
         }
         confidence = bestScore;
+        langfuse.endSpan(reretSpan, String.format("merged %d unique chunks, best %.3f",
+                        merged.size(), confidence), Map.of("mergedCount", merged.size()));
 
         List<RetrievalService.RetrievalResult> topMerged = keepTopK(merged.values(), cragConfig.getTopK());
         if (confidence >= cragConfig.getConfidenceThreshold()
                 && hasLexicalSupport(query, topMerged)) {
+            langfuse.updateTrace(
+                    Map.of("strategy", "corrective", "confidence", round(confidence),
+                            "chunkCount", topMerged.size(), "documentId", documentId,
+                            "reformulated", true),
+                    Map.of("query", query, "variants", variants));
+            langfuse.flush();
             return new CragResult(topMerged, List.of(), confidence, strategy);
         }
 
@@ -270,14 +309,34 @@ public class ChatService {
         boolean useWeb = webSearchRequested
                 || (webSearchService.isConfigured() && cragConfig.isWebSearchEnabled());
         if (useWeb) {
+            String webSpan = langfuse.startSpan("web_search", Map.of("query", query));
             Optional<List<String>> web = webSearchService.search(query);
             if (web.isPresent()) {
+                langfuse.endSpan(webSpan, "web snippets retrieved",
+                        Map.of("snippetCount", web.get().size(), "strategy", "web_search"));
+                langfuse.updateTrace(
+                        Map.of("strategy", "web_search", "confidence", round(confidence),
+                                "documentId", documentId, "webSearch", true),
+                        Map.of("query", query));
+                langfuse.flush();
                 return new CragResult(List.of(), web.get(), confidence, "web_search");
             }
+            langfuse.endSpan(webSpan, "web search returned nothing",
+                    Map.of("strategy", "no_evidence"));
         }
         if (cragConfig.isAbstainEnabled()) {
+            langfuse.updateTrace(
+                    Map.of("strategy", "no_evidence", "confidence", round(confidence),
+                            "documentId", documentId, "abstained", true),
+                    Map.of("query", query));
+            langfuse.flush();
             return new CragResult(List.of(), List.of(), confidence, "no_evidence");
         }
+        langfuse.updateTrace(
+                Map.of("strategy", "general_knowledge", "confidence", round(confidence),
+                        "documentId", documentId),
+                Map.of("query", query));
+        langfuse.flush();
         return new CragResult(List.of(), List.of(), confidence, "general_knowledge");
     }
 
