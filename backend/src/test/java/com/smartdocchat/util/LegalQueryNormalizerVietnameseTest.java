@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,16 +37,18 @@ class LegalQueryNormalizerVietnameseTest {
     }
 
     @Test
-    void emitsAdjacentContentWordBigramsAsPhraseUnits() {
-        Set<String> terms = normalizer.matchTerms(
-                "Cách hệ thống xử lý concurrent users?");
-        assertTrue(terms.contains("concurrent users"),
-                "bigram hai từ nội dung liền kề phải được phát hành như một cụm");
+    void vietnameseCompoundPhrasesEarnBonusInScoring() {
+        LegalQueryNormalizer normalizer = new LegalQueryNormalizer();
+        String query = "Cách hệ thống xử lý concurrent users?";
+        String matchingChunk = normalizer.foldContent(
+                "Xử lý concurrent users bằng connection pool Hikari giới hạn kết nối PostgreSQL.");
+        String otherChunk = normalizer.foldContent(
+                "Backup định kỳ PostgreSQL bằng pg_dump hàng ngày.");
 
-        Set<String> embedTerms = normalizer.matchTerms(
-                "Mô hình embedding nào được dùng để sinh vector?");
-        assertTrue(embedTerms.contains("sinh vector"),
-                "cụm 'sinh vector' phải thành phrase unit dù có stopwords ở giữa");
+        double bonusMatch = normalizer.phraseBonus(query, matchingChunk, 5, 0.15);
+        double bonusOther = normalizer.phraseBonus(query, otherChunk, 5, 0.15);
+        assertTrue(bonusMatch > 0, "Cụm 'concurrent users' xuất hiện trong chunk phải được thưởng");
+        assertEquals(0.0, bonusOther, 1e-9, "Chunk không chứa cụm thì không thưởng");
     }
 
     @Test
