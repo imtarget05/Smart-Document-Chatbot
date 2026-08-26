@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -70,5 +71,42 @@ class RetrievalServiceTest {
         when(documentService.getDocumentChunks(1L, "alice"))
                 .thenReturn(java.util.Arrays.asList("word one", null, " ", "word two"));
         assertEquals(2, retrievalService.retrieve("alice", 1L, "word one two", 10).size());
+    }
+
+    @Test
+    void retrievesVietnameseChunkForVietnameseQuestion() {
+        when(documentService.getDocumentChunks(1L, "alice"))
+                .thenReturn(List.of(
+                        "Hệ thống sử dụng Spring Boot 3.2 làm framework backend chính, "
+                                + "kết hợp FastAPI cho dịch vụ agent.",
+                        "Vector database Qdrant lưu trữ embeddings của tài liệu."));
+        when(documentService.getDocumentById(1L, "alice"))
+                .thenReturn(new com.smartdocchat.entity.Document());
+
+        List<RetrievalService.RetrievalResult> results =
+                retrievalService.retrieve("alice", 1L,
+                        "Hệ thống sử dụng framework backend nào?", 5);
+
+        assertFalse(results.isEmpty(), "Phải tìm được chunk chứa đáp án tiếng Việt");
+        assertTrue(results.get(0).chunk().contains("Spring Boot"),
+                "Chunk đứng đầu phải chứa đáp án");
+    }
+
+    @Test
+    void vietnameseCompoundBigramsBoostCorrectChunk() {
+        when(documentService.getDocumentChunks(1L, "alice"))
+                .thenReturn(List.of(
+                        "Xử lý concurrent users bằng connection pool Hikari giới hạn kết nối PostgreSQL "
+                                + "và thread pool với timeout cho mọi call.",
+                        "Backup định kỳ PostgreSQL bằng pg_dump hàng ngày."));
+        when(documentService.getDocumentById(1L, "alice"))
+                .thenReturn(new com.smartdocchat.entity.Document());
+
+        List<RetrievalService.RetrievalResult> results =
+                retrievalService.retrieve("alice", 1L,
+                        "Cách hệ thống xử lý concurrent users?", 5);
+
+        assertFalse(results.isEmpty(), "Bigram 'concurrent users' phải match được chunk");
+        assertTrue(results.get(0).chunk().contains("connection pool"));
     }
 }
