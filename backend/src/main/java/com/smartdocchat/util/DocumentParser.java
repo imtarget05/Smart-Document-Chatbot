@@ -1,36 +1,100 @@
 package com.smartdocchat.util;
 
+import net.sourceforge.tess4j.Tesseract;
+import net.sourceforge.tess4j.TesseractException;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.stereotype.Component;
-import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Component
 public class DocumentParser {
 
+    /**
+     * Extract text from document file.
+     * Falls back to OCR for scanned/image-based PDFs when text extraction
+     * yields too little content.
+     */
     public String extractText(File file, String fileType) throws IOException {
         if (fileType.equals("pdf")) {
-            return extractPdfText(file);
+            String text = extractPdfText(file);
+            // Heuristic: if extracted text is too short, the PDF is likely scanned.
+            // Fall back to Tesseract OCR.
+            if (text.trim().length() < 200) {
+                log.warn("PDF text extraction yielded {} chars (< 200) — running OCR fallback for {}",
+                        text.trim().length(), file.getName());
+                try {
+                    String ocrText = runOcrOnPdf(file);
+                    if (ocrText != null && ocrText.trim().length() > text.trim().length()) {
+                        log.info("OCR fallback succeeded for {}, got {} chars (vs {} from text extraction)",
+                                file.getName(), ocrText.trim().length(), text.trim().length());
+                        return ocrText;
+                    }
+                } catch (Exception e) {
+                    log.error("OCR fallback failed for {}", file.getName(), e);
+                }
+            }
+            return text;
         } else if (fileType.equals("docx") || fileType.equals("doc")) {
             return extractDocxText(file);
         } else if (fileType.equals("txt")) {
-            return new String(java.nio.file.Files.readAllBytes(file.toPath()));
+            return new String(Files.readAllBytes(file.toPath()));
         }
         throw new IllegalArgumentException("Unsupported file type: " + fileType);
+    }
+
+    /**
+     * Run Tesseract OCR on a PDF file page-by-page and concatenate results.
+     */
+    public String runOcrOnPdf(File pdfFile) throws IOException {
+        try (PDDocument document = Loader.loadPDF(pdfFile)) {
+            PDFRenderer renderer = new PDFRenderer(document);
+            Tesseract tesseract = new Tesseract();
+            // Giả định đã cài English language data trong /usr/local/share/tessdata
+            // hoặc dùng hệ thống tessdata mặc định.
+            tesseract.setLanguage("eng");
+            // 0 = legacy Tesseract only, 1 = LSTM only, 2 = combined (tessdata best)
+            tesseract.setOcrEngineMode(1);
+            tesseract.setPageSegMode(1); // Page segmentation mode: treat as single block of text
+
+            StringBuilder result = new StringBuilder();
+            int pageCount = document.getNumberOfPages();
+
+            for (int i = 0; i < pageCount; i++) {
+                PDPage page = document.getPage(i);
+                // Render page to BufferedImage (dpi ~ 300 to balance quality & speed)
+                BufferedImage image = renderer.renderImageWithDPI(i, 300);
+                // Tesseract có thểwork trực tiếp từ BufferedImage
+                try {
+                    // Tesseract 5.x có API nhận BufferedImage
+                    String pageText = tesseract.doOCR(image);
+                    result.append(pageText).append("\n");
+                } catch (TesseractException e) {
+                    log.warn("OCR page {} failed, skipping", i, e);
+                }
+            }
+            return result.toString();
+        }
     }
 
     private String extractPdfText(File file) throws IOException {
         StringBuilder text = new StringBuilder();
         try (PDDocument document = Loader.loadPDF(file)) {
-            PDFTextStripper stripper = new PDFTextStripper();
+            var stripper = new org.apache.pdfbox.text.PDFTextStripper();
             text.append(stripper.getText(document));
         }
         return text.toString();
@@ -38,7 +102,7 @@ public class DocumentParser {
 
     private String extractDocxText(File file) throws IOException {
         StringBuilder text = new StringBuilder();
-        try (XWPFDocument document = new XWPFDocument(java.nio.file.Files.newInputStream(file.toPath()))) {
+        try (XWPFDocument document = new XWPFDocument(Files.newInputStream(file.toPath()))) {
             for (XWPFParagraph paragraph : document.getParagraphs()) {
                 text.append(paragraph.getText()).append("\n");
             }
@@ -49,12 +113,10 @@ public class DocumentParser {
     public List<String> chunkText(String text, int chunkSize) {
         List<String> chunks = new ArrayList<>();
         String[] sentences = text.split("(?<=[.!?])\\s+");
-        
-        // If sentence splitting yielded only one large block, fall back to newline splitting
+
         if (sentences.length <= 1) {
             sentences = text.split("\\n+");
         }
-        // If still only one block, fall back to splitting by character count
         if (sentences.length <= 1) {
             int maxChars = chunkSize * 4;
             List<String> parts = new ArrayList<>();
@@ -63,32 +125,31 @@ public class DocumentParser {
             }
             sentences = parts.toArray(new String[0]);
         }
-        
+
         StringBuilder chunk = new StringBuilder();
         int tokenCount = 0;
-        
+
         for (String sentence : sentences) {
             int sentenceTokens = estimateTokens(sentence);
-            
+
             if (tokenCount + sentenceTokens > chunkSize && chunk.length() > 0) {
                 chunks.add(chunk.toString().trim());
                 chunk = new StringBuilder();
                 tokenCount = 0;
             }
-            
+
             chunk.append(sentence).append(" ");
             tokenCount += sentenceTokens;
         }
-        
+
         if (chunk.length() > 0) {
             chunks.add(chunk.toString().trim());
         }
-        
+
         return chunks;
     }
 
     private int estimateTokens(String text) {
-        // Rough estimation: 1 token ≈ 4 characters
         return (text.length() + 3) / 4;
     }
 

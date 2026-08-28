@@ -14,6 +14,7 @@ from .observability import (
     trace_id_from_headers,
     update_generation as langfuse_update_generation,
 )
+from .document_ocr import classify_document_type, extract_text
 from .providers import CloudflareProvider, ProviderError
 from .service import LLMRouter
 
@@ -48,6 +49,46 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
             )
+
+    @app.post("/classify", dependencies=[Depends(verify_internal_token)])
+    async def classify_document(request: Request):
+        """Classify document type (PO/Invoice/ASN/OTHER) from extracted text."""
+        body = await request.json()
+        text = body.get("text", "")
+        filename = body.get("filename", "")
+        doc_type = classify_document_type(text, filename)
+        return {"document_type": doc_type}
+
+
+    @app.post("/extract", dependencies=[Depends(verify_internal_token)])
+    async def extract_text_endpoint(request: Request):
+        """Extract text from PDF/DOCX/TXT bytes."""
+        body = await request.json()
+        file_bytes = body.get("file_bytes", b"")
+        file_type = body.get("file_type", "txt")
+        if isinstance(file_bytes, str):
+            import base64
+            try:
+                file_bytes = base64.b64decode(file_bytes)
+            except Exception:
+                file_bytes = b""
+        text = extract_text(file_bytes, file_type)
+        return {"text": text, "chars": len(text)}
+
+    @app.post("/agent/invoke", dependencies=[Depends(verify_internal_token)])
+    async def agent_invoke(request: Request):
+        """Run the LangGraph agent (Phase 0-2) with a user message."""
+        body = await request.json()
+        message = body.get("message", "")
+        trace_id = trace_id_from_headers(dict(request.headers))
+        try:
+            from agent.graph import run_agent
+        except ImportError:
+            from ..agent.graph import run_agent
+
+        answer = await run_agent(message, trace_id=trace_id)
+        langfuse_flush()
+        return {"answer": answer}
 
     @app.get("/health")
     async def health() -> dict[str, Any]:

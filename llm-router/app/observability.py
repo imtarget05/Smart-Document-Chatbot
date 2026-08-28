@@ -89,6 +89,44 @@ def update_generation(
         pass
 
 
+def span(
+    trace_id: str | None,
+    name: str,
+    parent_observation_id: str | None = None,
+    input: Any = None,
+    metadata: dict[str, Any] | None = None,
+) -> tuple[str | None, Any]:
+    """Create a span observation joined to the incoming trace.
+
+    Returns (observation_id, span_client) — both may be None when tracing is
+    disabled or no trace id was propagated. Use the returned client to ``end``
+    the span with output/error info.
+    """
+    if _client is None or trace_id is None:
+        return None, None
+    try:
+        obs = _client.span(
+            trace_id=trace_id,
+            name=name,
+            parent_observation_id=parent_observation_id,
+            input=input,
+            metadata=metadata or {},
+        )
+        return getattr(obs, "id", name), obs
+    except Exception:
+        return None, None
+
+
+def end_span(span_client: Any, output: Any = None, error: str | None = None) -> None:
+    if span_client is None:
+        return
+    try:
+        span_client.end(output=output, level="ERROR" if error else "DEFAULT",
+                        status_message=error or None)
+    except Exception:
+        pass
+
+
 def flush() -> None:
     if _client is not None:
         try:

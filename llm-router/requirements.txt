@@ -5,3 +5,11 @@ pydantic==2.7.4
 
 # Langfuse observability (Phase 2: trace llm-router + join Spring trace)
 langfuse==2.53.0
+
+# Phase 1: Document OCR & ingestion (PDF text + DOCX extraction)
+pdfplumber==0.11.4
+python-docx==1.1.2
+
+# Agentic: LangGraph stateful agent (Phase 0: supply chain + doc tools)
+# Note: LangGraph tracing có sẵn trong package langfuse (langfuse.langchain CallbackHandler)
+langgraph>=0.2
