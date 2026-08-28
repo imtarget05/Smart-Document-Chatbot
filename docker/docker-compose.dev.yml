@@ -155,6 +155,40 @@ services:
     profiles:
       - tools
 
+  # ── Supply Chain API (agentic tools backend) ────────────────────────────────
+  supply-chain-api:
+    build:
+      context: ../supply-chain-module
+      dockerfile: api/Dockerfile
+    container_name: sdc-supply-chain-api
+    ports:
+      - "8020:8020"
+    environment:
+      - SUPPLY_CHAIN_INTERNAL_TOKEN=${SUPPLY_CHAIN_INTERNAL_TOKEN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8020/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - tools
+
+  # ── Redis (async job queue, optional) ───────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sdc-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - tools
+
 # ── Named Volumes ────────────────────────────────────────────────────────────
 volumes:
   postgres_dev_data:
@@ -166,4 +200,6 @@ volumes:
   n8n_dev_data:
     driver: local
   n8n_postgres_dev_data:
+    driver: local
+  redis_dev_data:
     driver: local

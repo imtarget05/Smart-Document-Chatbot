@@ -1,8 +1,9 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, status
 from fastapi.responses import StreamingResponse
 
 from .config import Settings, settings
@@ -114,6 +115,51 @@ def create_app(
         )
         langfuse_flush()
         return {"answer": answer}
+
+    @app.post("/agent/jobs", dependencies=[Depends(verify_internal_token)])
+    async def agent_jobs_submit(request: Request):
+        """Submit async agent job (Phase 4: queue + worker). Trả job_id."""
+        body = await request.json()
+        from . import jobs
+        trace_id = trace_id_from_headers(dict(request.headers))
+        message = body.get("message", "")
+        params = body.get("params")
+        job_id = await jobs.create_job("agent_invoke", {"message": message})
+        try:
+            from agent.graph import run_agent
+        except ImportError:
+            from ..agent.graph import run_agent
+        asyncio.get_running_loop().create_task(
+            jobs.run_job(job_id, lambda: run_agent(message, trace_id=trace_id, tool_params=params))
+        )
+        return {"job_id": job_id, "status": "queued"}
+
+    @app.get("/agent/jobs/{job_id}", dependencies=[Depends(verify_internal_token)])
+    async def agent_jobs_get(job_id: str):
+        from . import jobs
+        job = await jobs.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return job
+
+    @app.websocket("/ws/agent/{job_id}")
+    async def agent_jobs_ws(websocket: WebSocket, job_id: str):
+        """Stream job status cho client tới khi done/failed."""
+        from . import jobs
+        await websocket.accept()
+        last_status = None
+        while True:
+            job = await jobs.get_job(job_id)
+            if job is None:
+                await websocket.send_json({"error": "job_not_found"})
+                break
+            if job["status"] != last_status:
+                await websocket.send_json(job)
+                last_status = job["status"]
+            if job["status"] in ("done", "failed"):
+                break
+            await asyncio.sleep(0.5)
+        await websocket.close()
 
     @app.get("/health")
     async def health() -> dict[str, Any]:

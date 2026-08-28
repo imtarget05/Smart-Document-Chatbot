@@ -1,5 +1,17 @@
 services:
 - type: web
+  name: smart-doc-supply-chain-api
+  runtime: python
+  rootDir: supply-chain-module
+  plan: free
+  buildCommand: pip install -r api/requirements.txt
+  startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --app-dir .
+  healthCheckPath: /health
+  autoDeploy: true
+  envVars:
+  - key: SUPPLY_CHAIN_INTERNAL_TOKEN
+    sync: false
+- type: web
   name: smart-doc-llm-router
   runtime: python
   rootDir: llm-router
@@ -22,6 +34,13 @@ services:
   - key: ROUTER_CONFIDENCE_THRESHOLD
     value: '0.7'
   - key: ROUTER_INTERNAL_TOKEN
+    sync: false
+  - key: SUPPLY_CHAIN_API_URL
+    fromService:
+      name: smart-doc-supply-chain-api
+      type: web
+      property: host
+  - key: REDIS_URL
     sync: false
 - type: web
   name: smart-doc-backend

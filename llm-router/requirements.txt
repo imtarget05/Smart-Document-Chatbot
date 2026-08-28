@@ -13,3 +13,7 @@ python-docx==1.1.2
 # Agentic: LangGraph stateful agent (Phase 0: supply chain + doc tools)
 # Note: LangGraph tracing có sẵn trong package langfuse (langfuse.langchain CallbackHandler)
 langgraph>=0.2
+
+# Phase 4: async job queue (Redis optional — in-memory fallback khi không set REDIS_URL)
+redis>=5.0
+websockets>=12.0

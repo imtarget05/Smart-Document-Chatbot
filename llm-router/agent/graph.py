@@ -79,6 +79,8 @@ async def _call_supply_chain_api(endpoint: str, message: str,
             "source": "deterministic_fallback",
             "detail": "SUPPLY_CHAIN_API_URL chưa cấu hình — module chưa có API deploy",
         }
+    if not base.startswith("http"):  # Render fromService host = hostname only
+        base = f"https://{base}"
     payload = {"query": message, **(params or {})}
     try:
         async with httpx.AsyncClient(
