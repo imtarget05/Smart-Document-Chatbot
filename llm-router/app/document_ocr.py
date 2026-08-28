@@ -43,6 +43,31 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         return ""
 
 
+def extract_tables_from_pdf(file_bytes: bytes) -> list[list[list[str]]]:
+    """Extract tables from each PDF page using pdfplumber.
+
+    Returns list of pages, each page a list of tables, each table a list of
+    rows (list of string cells). Empty list on failure — never raises.
+    """
+    pages: list[list[list[str]]] = []
+    try:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                tables = []
+                for table in page.extract_tables() or []:
+                    rows = [
+                        [("" if cell is None else str(cell)).strip() for cell in row]
+                        for row in table
+                        if any(cell for cell in row)
+                    ]
+                    if rows:
+                        tables.append(rows)
+                pages.append(tables)
+    except Exception:
+        return []
+    return pages
+
+
 def extract_text(file_bytes: bytes, file_type: str) -> str:
     """Route extraction based on file_type."""
     if file_type == "pdf":
@@ -63,7 +88,7 @@ def extract_text(file_bytes: bytes, file_type: str) -> str:
 PO_KEYWORDS = [
     "purchase order", "đơn đặt hàng", "po #", "po number",
     "số đặt hàng", "đặt hàng", "order no", "order number",
-    "vendor", "nhà cung cấp", "supplier", "đơn hàng mua",
+    "đơn hàng mua",
 ]
 
 # Invoice keywords

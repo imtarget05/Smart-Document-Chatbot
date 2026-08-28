@@ -1,0 +1,20 @@
+[
+  {
+    "text": "PURCHASE ORDER\nPO #PO-2024-001\nVendor: ABC Trading Corp\nOrder date: 15/03/2024\nTotal amount: 1,500 USD",
+    "filename": "po_001.pdf",
+    "doc_type": "PO",
+    "expected_fields": {"po_number": "PO-2024-001", "vendor": "ABC Trading Corp", "total_amount": "1,500", "currency": "USD"}
+  },
+  {
+    "text": "INVOICE\nSo hoa don: INV-2024-0099\nVendor: ABC Trading Corp\nInvoice date: 20/03/2024\nDue date: 20/04/2024\nTotal amount: 1,500 USD",
+    "filename": "inv_099.pdf",
+    "doc_type": "INVOICE",
+    "expected_fields": {"invoice_number": "INV-2024-0099", "vendor": "ABC Trading Corp", "total_amount": "1,500", "currency": "USD"}
+  },
+  {
+    "text": "ASN #ASN-77\nShip date: 01/04/2024\nExpected delivery: 05/04/2024\nCarrier: ViettelPost",
+    "filename": "asn_77.pdf",
+    "doc_type": "ASN",
+    "expected_fields": {"asn_number": "ASN-77", "ship_date": "01/04/2024", "expected_delivery": "05/04/2024"}
+  }
+]

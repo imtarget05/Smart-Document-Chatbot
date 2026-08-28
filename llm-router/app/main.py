@@ -73,7 +73,30 @@ def create_app(
             except Exception:
                 file_bytes = b""
         text = extract_text(file_bytes, file_type)
-        return {"text": text, "chars": len(text)}
+        tables: list = []
+        if file_type == "pdf":
+            from .document_ocr import extract_tables_from_pdf
+            tables = extract_tables_from_pdf(file_bytes)
+        return {"text": text, "chars": len(text), "tables": tables}
+
+    @app.post("/document/workflow", dependencies=[Depends(verify_internal_token)])
+    async def document_workflow(request: Request):
+        """Document workflow agent (Phase 2): classify → extract → map → match."""
+        body = await request.json()
+        trace_id = trace_id_from_headers(dict(request.headers))
+        try:
+            from agent.document_graph import run_document_workflow
+        except ImportError:
+            from ..agent.document_graph import run_document_workflow
+
+        result = run_document_workflow(
+            text=body.get("text", ""),
+            filename=body.get("filename", ""),
+            counterpart_fields=body.get("counterpart_fields"),
+            trace_id=trace_id,
+        )
+        langfuse_flush()
+        return result
 
     @app.post("/agent/invoke", dependencies=[Depends(verify_internal_token)])
     async def agent_invoke(request: Request):
