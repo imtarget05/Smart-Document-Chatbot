@@ -1,0 +1,7 @@
+<clickhouse>
+    <!-- Override IPv6 listen to 0.0.0.0 for IPv4-only hosts (macOS local dev) -->
+    <listen_host>0.0.0.0</listen_host>
+    <!-- Allow connections from local Docker network -->
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+</clickhouse>

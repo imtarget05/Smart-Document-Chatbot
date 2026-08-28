@@ -1,0 +1,5 @@
+<!-- ClickHouse override: bind to IPv4 0.0.0.0 instead of :: (IPv6) -->
+<!-- Fix for hosts where IPv6 is disabled -->
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>

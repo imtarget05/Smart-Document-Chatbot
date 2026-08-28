@@ -41,13 +41,30 @@ def auth_header() -> str:
 
 
 def list_traces(host: str, project_id: str, from_date: str, limit: int = 100):
+    """Paginated fetch all traces; returns flat list across pages."""
     url = f"{host}/api/public/traces"
-    params = {"pageSize": limit, "fromTimestamp": from_date}
-    if project_id:
-        params["projectId"] = project_id
-    resp = requests.get(url, headers={"Authorization": auth_header()}, params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json().get("data", [])
+    all_traces: list[dict] = []
+    page = 1
+    while True:
+        params = {
+            "pageSize": min(limit, 100),  # API cap 100/page
+            "page": page,
+            "fromTimestamp": from_date,
+        }
+        if project_id:
+            params["projectId"] = project_id
+        resp = requests.get(url, headers={"Authorization": auth_header()},
+                            params=params, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+        traces = payload.get("data", [])
+        all_traces.extend(traces)
+        if not traces or len(traces) < min(limit, 100):
+            break
+        page += 1
+        if page > 20:  # safety cap
+            break
+    return all_traces
 
 
 def get_trace(host: str, trace_id: str) -> dict:

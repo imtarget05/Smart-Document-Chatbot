@@ -4,7 +4,7 @@
 # Prometheus & Grafana are defined in the base
 # docker-compose.yml (production stack).
 #
-# Usage: docker compose -f docker/docker-compose.yml -f docker/docker-compose.monitoring.yml up -d
+# Usage: docker compose -f docker/docker-compose.monitoring.yml up -d
 # ============================================
 
 services:
@@ -35,10 +35,35 @@ services:
       - app-network
 
   # --- Langfuse (Observability & Eval) — self-hosted, dev/local only ---
-  # NOTE: Render staging CANNOT run compose sidecars, so staging uses
-  # Langfuse Cloud (set LANGFUSE_* env on the Render dashboard instead).
-  # This service is for local dev: bring up with the command above, then
-  # open http://localhost:3000 and create a project to get the keys.
+  # Run `docker compose -f docker/docker-compose.monitoring.yml up -d` then open
+  # http://localhost:3000 and log in as admin@local.dev / admin12345 to create the
+  # "smart-doc-chatbot" project and get API keys. Render staging uses Langfuse Cloud
+  # (set LANGFUSE_* env on the Render dashboard instead) because Render cannot run
+  # compose sidecars.
+  #
+  # ClickHouse: langfuse:3 server expects an external ClickHouse. Set
+  # CLICKHOUSE_URL + CLICKHOUSE_USER + CLICKHOUSE_PASSWORD on langfuse-server
+  # to connect. The separate clickhouse service below mounts clickhouse_override_ipv4.xml
+  # to bind to 0.0.0.0 (fixes "IPv6 listen failed" on IPv4-only hosts).
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: sdc-langfuse-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./clickhouse_override_ipv4.xml:/etc/clickhouse-server/config.d/override_ipv4.xml:ro
+      - langfuse_ch_data:/var/lib/clickhouse
+      - langfuse_ch_logs:/var/log/clickhouse-server
+    networks:
+      - app-network
+
+  # Langfuse DB: Postgres for metadata (users, projects, etc.)
   langfuse-db:
     image: postgres:14-alpine
     container_name: sdc-langfuse-db
@@ -57,30 +82,7 @@ services:
       timeout: 5s
       retries: 10
 
-  langfuse-clickhouse:
-    image: clickhouse/clickhouse-server:24.3-alpine
-    container_name: sdc-langfuse-clickhouse
-    restart: unless-stopped
-    environment:
-      CLICKHOUSE_DB: default
-      CLICKHOUSE_USER: clickhouse
-      CLICKHOUSE_PASSWORD: clickhouse
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    volumes:
-      - langfuse_ch_data:/var/lib/clickhouse
-      - langfuse_ch_logs:/var/log/clickhouse-server
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8123/ping || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
+  # Langfuse Server
   langfuse-server:
     image: langfuse/langfuse:3
     container_name: sdc-langfuse
@@ -89,7 +91,7 @@ services:
       langfuse-db:
         condition: service_healthy
       langfuse-clickhouse:
-        condition: service_healthy
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
       CLICKHOUSE_URL: http://langfuse-clickhouse:8123
