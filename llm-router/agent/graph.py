@@ -25,6 +25,7 @@ except ImportError:  # agent được import như sub-package của root package
 class AgentState(TypedDict):
     messages: Annotated[Sequence, operator.add]
     tool_choice: str
+    tool_params: Dict[str, Any]
     tool_result: Dict[str, Any]
     final_answer: str
     trace_id: Optional[str]
@@ -68,7 +69,8 @@ async def intent_node(state: AgentState) -> Dict[str, Any]:
     return {"tool_choice": choice}
 
 
-async def _call_supply_chain_api(endpoint: str, message: str) -> Dict[str, Any]:
+async def _call_supply_chain_api(endpoint: str, message: str,
+                                 params: Optional[dict] = None) -> Dict[str, Any]:
     """Gọi supply-chain-module API. Trả dict với key 'status' và 'source'."""
     base = settings.supply_chain_api_url
     if not base:
@@ -77,13 +79,12 @@ async def _call_supply_chain_api(endpoint: str, message: str) -> Dict[str, Any]:
             "source": "deterministic_fallback",
             "detail": "SUPPLY_CHAIN_API_URL chưa cấu hình — module chưa có API deploy",
         }
+    payload = {"query": message, **(params or {})}
     try:
         async with httpx.AsyncClient(
             timeout=settings.supply_chain_timeout_seconds
         ) as client:
-            resp = await client.post(
-                f"{base.rstrip('/')}{endpoint}", json={"query": message}
-            )
+            resp = await client.post(f"{base.rstrip('/')}{endpoint}", json=payload)
             resp.raise_for_status()
             return {"status": "ok", "source": "supply_chain_api", "data": resp.json()}
     except Exception as exc:
@@ -102,7 +103,9 @@ async def execute_tool_node(state: AgentState) -> Dict[str, Any]:
     else:
         endpoint = SUPPLY_CHAIN_ENDPOINTS.get(tool)
         if endpoint:
-            result = await _call_supply_chain_api(endpoint, _last_message(state))
+            result = await _call_supply_chain_api(
+                endpoint, _last_message(state), state.get("tool_params") or {}
+            )
             result["tool"] = tool
         else:
             # doc_search / tool chưa nối API — deterministic placeholder
@@ -153,7 +156,8 @@ def build_agent_app():
 agent_app = build_agent_app()
 
 
-async def run_agent(message: str, trace_id: Optional[str] = None) -> str:
+async def run_agent(message: str, trace_id: Optional[str] = None,
+                    tool_params: Optional[dict] = None) -> str:
     """Chạy agent graph; mỗi node span vào Langfuse trace nếu có trace_id."""
     root_id, root = observability.span(
         trace_id, "agent_run", input={"message": message[:200]}
@@ -161,6 +165,7 @@ async def run_agent(message: str, trace_id: Optional[str] = None) -> str:
     initial_state: AgentState = {
         "messages": [{"role": "user", "content": message}],
         "tool_choice": "",
+        "tool_params": tool_params or {},
         "tool_result": {},
         "final_answer": "",
         "trace_id": trace_id,

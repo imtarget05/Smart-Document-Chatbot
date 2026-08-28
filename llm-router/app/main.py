@@ -109,7 +109,9 @@ def create_app(
         except ImportError:
             from ..agent.graph import run_agent
 
-        answer = await run_agent(message, trace_id=trace_id)
+        answer = await run_agent(
+            message, trace_id=trace_id, tool_params=body.get("params")
+        )
         langfuse_flush()
         return {"answer": answer}
 
