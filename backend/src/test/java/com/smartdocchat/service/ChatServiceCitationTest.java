@@ -33,6 +33,7 @@ class ChatServiceCitationTest {
     @Mock private WebSearchService webSearchService;
     @Mock private PromptInjectionDetector promptInjectionDetector;
     @Mock private DocumentService documentService;
+    @Mock private AgentClient agentClient;
 
     private CragConfig cragConfig;
     private ChatService chatService;
@@ -45,7 +46,7 @@ class ChatServiceCitationTest {
                 promptInjectionDetector,
                 new com.smartdocchat.config.PromptInjectionProperties(),
                 new com.smartdocchat.metrics.RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
-                documentService, new com.smartdocchat.observability.LangfuseService());
+                documentService, new com.smartdocchat.observability.LangfuseService(), agentClient);
         lenient().when(promptInjectionDetector.analyze(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(org.mockito.ArgumentMatchers.any(ChatMessage.class)))

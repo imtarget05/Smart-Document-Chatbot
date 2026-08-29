@@ -34,6 +34,7 @@ class ChatServiceExtraTest {
 
     @Mock private MessageHandler messageHandler;
     @Mock private DocumentService documentService;
+    @Mock private AgentClient agentClient;
     @Mock private HistoryService historyService;
     @Mock private RetrievalService retrievalService;
     @Mock private QueryReformulator queryReformulator;
@@ -54,7 +55,7 @@ class ChatServiceExtraTest {
         ragMetrics = new RagMetrics(meterRegistry);
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService());
+                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService(), agentClient);
         lenient().when(promptInjectionDetector.analyze(anyString())).thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
     }

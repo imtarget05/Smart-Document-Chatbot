@@ -38,6 +38,7 @@ class ChatServiceTest {
     @Mock private PromptInjectionDetector promptInjectionDetector;
     @Mock private com.smartdocchat.metrics.RagMetrics ragMetrics;
     @Mock private DocumentService documentService;
+    @Mock private AgentClient agentClient;
 
     private PromptInjectionProperties promptInjectionProperties;
     private CragConfig cragConfig;
@@ -49,7 +50,7 @@ class ChatServiceTest {
         cragConfig = new CragConfig();
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService());
+                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService(), agentClient);
     }
 
     private ChatRequest request(String message) {

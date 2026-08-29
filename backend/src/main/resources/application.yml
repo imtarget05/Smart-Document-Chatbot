@@ -153,6 +153,11 @@ ratelimit:
   upload-per-minute: 10
   auth-per-minute: 10
 
+# Agent (supply-chain) — backend -> llm-router agentic path (#4)
+agent:
+  base-url: ${AGENT_BASE_URL:http://localhost:8001}
+  timeout-ms: ${AGENT_TIMEOUT_MS:15000}
+
 # Langfuse observability (traces per CRAG request). Opt-in: when
 # LANGFUSE_PUBLIC_KEY is empty the tracer is disabled and the app runs
 # with zero overhead. Keys MUST come from env / Render dashboard — never
