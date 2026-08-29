@@ -151,6 +151,7 @@ public class DocumentController {
                 .effectiveDate(document.getEffectiveDate())
                 .sourceType(document.getSourceType() != null
                         ? document.getSourceType().name() : null)
+                .workflowResult(document.getWorkflowResult())
                 .build();
     }
 }

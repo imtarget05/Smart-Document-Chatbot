@@ -83,6 +83,13 @@ public class Document {
     @Column(name = "content_hash")
     private String contentHash;
 
+    /**
+     * Kết quả document workflow (Phase 2: classify → extract → map → match PO↔Invoice)
+     * từ llm-router /document/workflow. Lưu dạng JSON. Null cho tới khi workflow chạy xong.
+     */
+    @Column(name = "workflow_result", columnDefinition = "TEXT")
+    private String workflowResult;
+
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();

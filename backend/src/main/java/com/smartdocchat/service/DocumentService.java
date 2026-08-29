@@ -34,6 +34,7 @@ public class DocumentService {
     private final LegalChunkRepository legalChunkRepository;
     private final com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
     private final com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
+    private final DocumentWorkflowClient documentWorkflowClient;
 
     /** Matches an explicit "Số: NN/YYYY/AAA" document-number line only. */
     private static final Pattern DOCUMENT_NUMBER =
@@ -104,6 +105,20 @@ public class DocumentService {
             document.setEffectiveDate(dates.effectiveDate());
         }
         Document saved = documentRepository.save(document);
+
+        // Phase 2 wiring (#7): fire document workflow (classify → extract → map → match)
+        // to llm-router asynchronously. Không block upload response; nếu lỗi, upload
+        // vẫn thành công và workflowResult giữ null (graceful degradation).
+        try {
+            String workflowResult = documentWorkflowClient.runWorkflow(extractedText, originalFileName);
+            if (workflowResult != null) {
+                saved.setWorkflowResult(workflowResult);
+                saved = documentRepository.save(saved);
+                log.info("Document {} workflow completed", saved.getId());
+            }
+        } catch (Exception e) {
+            log.warn("Document workflow post-processing skipped for {}: {}", saved.getId(), e.getMessage());
+        }
 
         if (!legalUnits.isEmpty()) {
             int ordinal = 0;

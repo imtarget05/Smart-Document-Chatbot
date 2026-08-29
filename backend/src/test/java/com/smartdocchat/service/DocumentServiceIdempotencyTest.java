@@ -39,13 +39,14 @@ class DocumentServiceIdempotencyTest {
     @Mock private com.smartdocchat.repository.LegalChunkRepository legalChunkRepository;
     @Mock private com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
     @Mock private com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
+    @Mock private com.smartdocchat.service.DocumentWorkflowClient documentWorkflowClient;
 
     private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
-                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor);
+                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient);
     }
 
     private MockMultipartFile txtFile(String name, String content) {

@@ -29,13 +29,14 @@ class DocumentSearchTest {
     @Mock private LegalStructureParser legalStructureParser;
     @Mock private LegalChunkRepository legalChunkRepository;
     @Mock private com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
+    @Mock private com.smartdocchat.service.DocumentWorkflowClient documentWorkflowClient;
 
     private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
-                legalStructureParser, legalChunkRepository, new LegalQueryNormalizer(), legalDateExtractor);
+                legalStructureParser, legalChunkRepository, new LegalQueryNormalizer(), legalDateExtractor, documentWorkflowClient);
     }
 
     private Document doc(long id, String fileName, String title, String number) {

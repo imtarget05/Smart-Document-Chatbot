@@ -25,4 +25,6 @@ public class DocumentDTO {
     private java.time.LocalDate issueDate;
     private java.time.LocalDate effectiveDate;
     private String sourceType;
+    // Document workflow result (Phase 2 agentic pipeline: classify → extract → map → match).
+    private String workflowResult;
 }
