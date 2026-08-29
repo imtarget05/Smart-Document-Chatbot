@@ -155,7 +155,7 @@ ratelimit:
 
 # Agent (supply-chain) — backend -> llm-router agentic path (#4)
 agent:
-  base-url: ${AGENT_BASE_URL:http://localhost:8001}
+  base-url: ${AGENT_BASE_URL:http://localhost:9000}
   timeout-ms: ${AGENT_TIMEOUT_MS:15000}
 
 # Langfuse observability (traces per CRAG request). Opt-in: when
