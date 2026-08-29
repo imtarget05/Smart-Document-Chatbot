@@ -5,12 +5,26 @@ services:
   rootDir: supply-chain-module
   plan: free
   buildCommand: pip install -r api/requirements.txt
-  startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --app-dir .
+  startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
   healthCheckPath: /health
   autoDeploy: true
   envVars:
   - key: SUPPLY_CHAIN_INTERNAL_TOKEN
     sync: false
+- type: web
+  name: smart-doc-supply-chain-dashboard
+  runtime: python
+  rootDir: supply-chain-module
+  plan: free
+  buildCommand: pip install -r api/requirements.txt
+  startCommand: streamlit run dashboard/app.py --server.port $PORT --server.address 0.0.0.0
+  autoDeploy: false
+  envVars:
+  - key: SUPPLY_CHAIN_API_URL
+    fromService:
+      name: smart-doc-supply-chain-api
+      type: web
+      property: host
 - type: web
   name: smart-doc-llm-router
   runtime: python

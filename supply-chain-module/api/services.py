@@ -117,16 +117,65 @@ def supplier_risk(lead_time_std: float, defect_rate: float,
 
 
 # ----------------------------------------------------------------------
-# Route optimization (thay OR-Tools bằng nearest-neighbor + 2-opt)
+# Route optimization — OR-Tools VRP, fallback nearest-neighbor + 2-opt
 # ----------------------------------------------------------------------
 
 def optimize_route(distance_matrix: list[list[float]],
                    num_vehicles: int = 1, depot: int = 0) -> dict:
-    """TSP/VRP heuristic: nearest-neighbor rồi 2-opt improvement."""
+    """VRP: thử OR-Tools trước, fallback heuristic."""
     n = len(distance_matrix)
     if n < 2 or not (0 <= depot < n):
         return {"error": "invalid_input"}
     d = np.asarray(distance_matrix, dtype=float)
+
+    # Try OR-Tools
+    try:
+        from ortools.constraint_solver import routing_enums_pb2, pywrapcp
+
+        # OR-Tools expects int costs
+        int_matrix = (d * 100).astype(int).tolist()
+        manager = pywrapcp.RoutingIndexManager(n, num_vehicles, depot)
+        routing = pywrapcp.RoutingModel(manager)
+
+        def distance_callback(from_index, to_index):
+            from_node = manager.IndexToNode(from_index)
+            to_node = manager.IndexToNode(to_index)
+            return int_matrix[from_node][to_node]
+
+        transit_idx = routing.RegisterTransitCallback(distance_callback)
+        routing.SetArcCostEvaluatorOfAllVehicles(transit_idx)
+
+        search_params = pywrapcp.DefaultRoutingSearchParameters()
+        search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+        search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+        search_params.time_limit.FromSeconds(1)
+
+        solution = routing.SolveWithParameters(search_params)
+        if solution:
+            routes = []
+            total = 0
+            for vid in range(num_vehicles):
+                index = routing.Start(vid)
+                route = []
+                route_dist = 0
+                while not routing.IsEnd(index):
+                    node = manager.IndexToNode(index)
+                    route.append(node)
+                    prev_index = index
+                    index = solution.Value(routing.NextVar(index))
+                    route_dist += routing.GetArcCostForVehicle(prev_index, index, vid)
+                route.append(manager.IndexToNode(index))
+                if len(route) <= 2 and route[0] == depot and route[-1] == depot:
+                    continue  # skip empty vehicle
+                if len(route) > 1:
+                    dist = round(route_dist / 100.0, 2)
+                    routes.append({"stops": route, "distance": dist})
+                    total += dist
+            if routes:
+                return {"routes": routes, "total_distance": round(float(total), 2),
+                        "method": "ortools_vrp"}
+    except Exception:
+        pass  # fallback below
 
     def route_length(route: list[int]) -> float:
         return sum(d[route[i]][route[i + 1]] for i in range(len(route) - 1))
