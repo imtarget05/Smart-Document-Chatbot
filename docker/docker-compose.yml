@@ -282,6 +282,92 @@ services:
           memory: 1G
           cpus: '1.0'
 
+  # --- Airflow (batch document ingestion DAG) ---
+  airflow-postgres:
+    image: postgres:16-alpine
+    container_name: smart-document-chatbox-airflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AIRFLOW_DB:-airflow}
+      POSTGRES_USER: ${AIRFLOW_USERNAME:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_PASSWORD:-airflow}
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${AIRFLOW_USERNAME:-airflow}", "-d", "${AIRFLOW_DB:-airflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-webserver:
+    build:
+      context: ../airflow
+      dockerfile: Dockerfile
+    image: smart-doc-airflow:latest
+    container_name: smart-document-chatbox-airflow
+    restart: unless-stopped
+    command: >
+      bash -c "airflow db migrate && airflow users create
+      --username $${AIRFLOW_USERNAME:-airflow} --password $${AIRFLOW_PASSWORD:-airflow}
+      --firstname Smart --lastname Doc --role Admin --email admin@example.com
+      && airflow webserver"
+    env_file:
+      - ../.env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_USERNAME:-airflow}:${AIRFLOW_PASSWORD:-airflow}@airflow-postgres:5432/${AIRFLOW_DB:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      # Connection + vars the ingestion DAG reads:
+      SMARTDOC_BACKEND_URL: http://smart-document:8080
+      SMARTDOC_INGEST_OWNER: ${AIRFLOW_INGEST_OWNER:-airflow-bot}
+      SMARTDOC_INGEST_USERNAME: ${AIRFLOW_INGEST_USERNAME:-airflow-bot}
+      SMARTDOC_INGEST_PASSWORD: ${AIRFLOW_INGEST_PASSWORD:-}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_inbound:/opt/airflow/inbound
+    ports:
+      - "${AIRFLOW_PORT:-8081}:8080"
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      smart-document:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  airflow-scheduler:
+    build:
+      context: ../airflow
+      dockerfile: Dockerfile
+    image: smart-doc-airflow:latest
+    container_name: smart-document-chatbox-airflow-scheduler
+    restart: unless-stopped
+    command: airflow scheduler
+    env_file:
+      - ../.env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_USERNAME:-airflow}:${AIRFLOW_PASSWORD:-airflow}@airflow-postgres:5432/${AIRFLOW_DB:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      SMARTDOC_BACKEND_URL: http://smart-document:8080
+      SMARTDOC_INGEST_OWNER: ${AIRFLOW_INGEST_OWNER:-airflow-bot}
+      SMARTDOC_INGEST_USERNAME: ${AIRFLOW_INGEST_USERNAME:-airflow-bot}
+      SMARTDOC_INGEST_PASSWORD: ${AIRFLOW_INGEST_PASSWORD:-}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_inbound:/opt/airflow/inbound
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_started
+    networks:
+      - app-network
+
 volumes:
   prometheus_data:
     driver: local
@@ -292,6 +378,10 @@ volumes:
   n8n_data:
     driver: local
   n8n_postgres_data:
+    driver: local
+  airflow_postgres_data:
+    driver: local
+  airflow_inbound:
     driver: local
 
 networks:
