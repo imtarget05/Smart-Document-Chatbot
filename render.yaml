@@ -119,6 +119,10 @@ services:
   startCommand: cd agent && uvicorn app.main:app --host 0.0.0.0 --port 9000
   envVars:
     AGENT_PORT: '9000'
-    BACKEND_URL: https://smart-doc-backend-h4mt.onrender.com/api
+    BACKEND_URL:
+      fromService:
+        name: smart-doc-backend
+        type: web
+        property: host
   autoDeploy: true
   plan: free
