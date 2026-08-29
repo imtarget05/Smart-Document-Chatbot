@@ -1,0 +1,88 @@
+package com.smartdocchat.service;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+/**
+ * Integration-style test that locks the Java -> agent service wiring.
+ *
+ * Guards against regression of the supply-chain agentic path (#4):
+ *  - request must hit /v1/agent/invoke
+ *  - body must use query/session_id/user_id (not message/owner/trace_id)
+ *  - response must map agent_type/sources/confidence_score
+ */
+@ExtendWith(MockitoExtension.class)
+class AgentClientTest {
+
+    private RestTemplate restTemplate;
+    private MockRestServiceServer mockServer;
+    private AgentClient agentClient;
+
+    @BeforeEach
+    void setUp() {
+        restTemplate = new RestTemplate();
+        mockServer = MockRestServiceServer.bindTo(restTemplate).build();
+        // agent.base-url default overridden per-test via constructor
+        agentClient = new AgentClient(restTemplate, null,
+                "http://localhost:9000", 15000);
+    }
+
+    @Test
+    void invokeAgent_hitsV1Endpoint_andMapsFullResponse() {
+        String json = "{"
+                + "\"answer\":\"Đây là kế hoạch supply chain\","
+                + "\"agent_type\":\"engineering\","
+                + "\"sources\":[{\"id\":\"s1\"}],"
+                + "\"confidence_score\":0.82"
+                + "}";
+        mockServer.expect(requestTo("http://localhost:9000/v1/agent/invoke"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.query").value("dự báo nhu cầu kho"))
+                .andExpect(jsonPath("$.session_id").value("sess-1"))
+                .andExpect(jsonPath("$.user_id").value("owner-1"))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        AgentClient.AgentResponse resp = agentClient.invokeAgent(
+                "owner-1", "sess-1", "dự báo nhu cầu kho", "trace-1");
+
+        mockServer.verify();
+        assertEquals("Đây là kế hoạch supply chain", resp.answer());
+        assertEquals("engineering", resp.agentType());
+        assertNotNull(resp.sources());
+        assertTrue(resp.sources().size() >= 1);
+        assertEquals(0.82, resp.confidence());
+    }
+
+    @Test
+    void invokeAgent_agentError_throwsRuntimeException_forFallback() {
+        mockServer.expect(requestTo("http://localhost:9000/v1/agent/invoke"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                agentClient.invokeAgent("owner-1", "sess-1", "po risk", "trace-1"));
+
+        assertTrue(ex.getMessage().contains("agent unavailable"), ex.getMessage());
+        mockServer.verify();
+    }
+}
