@@ -38,6 +38,7 @@ public class ChatService {
     private final RagMetrics ragMetrics;
     private final DocumentService documentService;
     private final LangfuseService langfuse;
+    private final AgentClient agentClient;
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -66,6 +67,29 @@ public class ChatService {
         long started = System.currentTimeMillis();
         String userMessage = request.getMessage();
         ChatResponse response;
+
+        // Supply chain intent → agentic path (chain #4)
+        if (SupplyChainIntentDetector.isSupplyChainIntent(userMessage)) {
+            String traceId = langfuse.startTrace("agentic_request", ownerUsername,
+                    Map.of("query", userMessage));
+            try {
+                AgentClient.AgentResponse agentResp = agentClient.invokeAgent(
+                        ownerUsername, request.getSessionId(), userMessage, traceId);
+                langfuse.updateTrace(Map.of("agentAnswer", agentResp.answer()), null);
+                ChatMessage saved = saveResponse(ownerUsername, request, userMessage,
+                        agentResp.answer(), null);
+                response = toResponse(ownerUsername, saved, emptyCrag("agentic"));
+                ragMetrics.recordRequest("agentic", "high");
+                ragMetrics.recordAnswer("agentic", false);
+                ragMetrics.recordLatency(System.currentTimeMillis() - started);
+                return response;
+            } catch (Exception e) {
+                log.warn("Agentic path failed, falling back to RAG: {}", e.getMessage());
+                langfuse.flush();
+            } finally {
+                langfuse.flush();
+            }
+        }
 
         if (isBlockedInjection(userMessage)) {
             ragMetrics.recordInjectionBlocked();

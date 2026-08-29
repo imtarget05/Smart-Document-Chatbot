@@ -3,32 +3,60 @@
 Tương đương logic trong notebooks nhưng nhẹ (numpy-only, không cần
 Prophet/ortools/sklearn) để chạy nhanh trong container nhỏ. Mỗi hàm
 deterministic — cùng input luôn ra cùng output (grounded cho agent).
+
+Nâng cấp Phase 2: load model thật từ MLflow registry (prophet_forecasting,
+supplier_risk, anomaly_detection). Fallback deterministic khi model
+không available.
 """
+import os
+from typing import Any
 
 import numpy as np
 
+try:
+    from . import mlflow_models
+except ImportError:
+    mlflow_models = None  # MLflow unavailable — fallback mode
 
 # ----------------------------------------------------------------------
-# Demand forecasting (thay Prophet bằng linear trend + weekly seasonality)
+# Demand forecasting — Prophet from MLflow registry, fallback linear trend
 # ----------------------------------------------------------------------
 
 def forecast_demand(history: list[float], periods: int = 30) -> dict:
-    """Forecast demand từ chuỗi lịch sử: linear trend + weekly seasonality."""
+    """Forecast demand từ chuỗi lịch sử: Prophet MLflow (hoặc fallback)."""
     if len(history) < 7:
         return {"forecast": [], "method": "insufficient_history",
                 "detail": "cần ít nhất 7 điểm dữ liệu"}
+
+    # Try MLflow Prophet
+    if mlflow_models is not None:
+        try:
+            model = mlflow_models.load_registered_model("prophet_forecasting")
+            import pandas as pd
+            from datetime import datetime, timedelta
+            future = pd.DataFrame({"ds": pd.date_range(
+                datetime.utcnow(), periods=periods, freq="D")})
+            fc = model.predict(future)
+            return {
+                "forecast": [round(float(v), 2) for v in fc["yhat"].tolist()],
+                "method": "prophet_mlflow",
+                "history_points": len(history),
+            }
+        except Exception:  # noqa: BLE001
+            pass  # fallback below
+
+    # Fallback deterministic — linear trend + weekly seasonality
     y = np.asarray(history, dtype=float)
     n = len(y)
     x = np.arange(n)
     slope, intercept = np.polyfit(x, y, 1)
     trend = intercept + slope * np.arange(n, n + periods)
-    # Weekly seasonality: mean deviation theo day-of-week
     dow = np.arange(n) % 7
     global_mean = y.mean()
     seasonal = {d: y[dow == d].mean() - global_mean for d in range(7)}
     future_dow = (np.arange(n, n + periods)) % 7
     forecast = trend + np.array([seasonal[d] for d in future_dow])
-    forecast = np.maximum(forecast, 0.0)  # demand không âm
+    forecast = np.maximum(forecast, 0.0)
     return {
         "forecast": [round(float(v), 2) for v in forecast],
         "method": "linear_trend_weekly_seasonal",
@@ -36,10 +64,9 @@ def forecast_demand(history: list[float], periods: int = 30) -> dict:
         "trend_per_period": round(float(slope), 4),
     }
 
-
-# ----------------------------------------------------------------------
-# Supplier risk scoring (thay RandomForest bằng weighted rule-based)
-# ----------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Supplier risk scoring — LogisticRegression MLflow, fallback rule-based
+# ---------------------------------------------------------------------
 
 def supplier_risk(lead_time_std: float, defect_rate: float,
                   on_time_rate: float) -> dict:
@@ -47,16 +74,40 @@ def supplier_risk(lead_time_std: float, defect_rate: float,
     if not (0 <= on_time_rate <= 1) or defect_rate < 0 or lead_time_std < 0:
         return {"error": "invalid_input",
                 "detail": "on_time_rate in [0,1]; defect_rate, lead_time_std >= 0"}
+
+    if mlflow_models is not None:
+        try:
+            model = mlflow_models.load_registered_model("supplier_risk")
+            X = np.array([[lead_time_std, defect_rate, on_time_rate]], dtype=float)
+            proba = model.predict_proba(X)[0]
+            risk_score = float(proba[1]) * 100 if len(proba) > 1 else float(proba[0]) * 100
+            grade = "A" if risk_score < 25 else "B" if risk_score < 50 \
+                    else "C" if risk_score < 75 else "D"
+            return {
+                "risk_score": round(risk_score, 1),
+                "risk_grade": grade,
+                "method": "logreg_mlflow",
+                "components": {
+                    "lead_time_variability": round(min(lead_time_std / 15.0, 1.0) * 30, 1),
+                    "defect_rate": round(min(defect_rate / 0.10, 1.0) * 40, 1),
+                    "on_time": round((1.0 - on_time_rate) * 30, 1),
+                },
+            }
+        except Exception:  # noqa: BLE001 — fallback below
+            pass
+
+    # Fallback deterministic rule-based
     score = (
-        min(lead_time_std / 15.0, 1.0) * 30.0        # 30% weight
-        + min(defect_rate / 0.10, 1.0) * 40.0        # 40% weight
-        + (1.0 - on_time_rate) * 30.0                # 30% weight
+        min(lead_time_std / 15.0, 1.0) * 30.0
+        + min(defect_rate / 0.10, 1.0) * 40.0
+        + (1.0 - on_time_rate) * 30.0
     )
-    grade = ("A" if score < 25 else "B" if score < 50
-             else "C" if score < 75 else "D")
+    grade = "A" if score < 25 else "B" if score < 50 \
+            else "C" if score < 75 else "D"
     return {
         "risk_score": round(float(score), 1),
         "risk_grade": grade,
+        "method": "rule_based_fallback",
         "components": {
             "lead_time_variability": round(min(lead_time_std / 15.0, 1.0) * 30, 1),
             "defect_rate": round(min(defect_rate / 0.10, 1.0) * 40, 1),
@@ -117,15 +168,37 @@ def optimize_route(distance_matrix: list[list[float]],
             "method": "nearest_neighbor_2opt"}
 
 
-# ----------------------------------------------------------------------
-# Anomaly detection (thay IsolationForest bằng robust modified z-score)
-# ----------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Anomaly detection — IsolationForest MLflow, fallback modified z-score
+# ---------------------------------------------------------------------
 
 def detect_anomalies(values: list[float], threshold: float = 3.0) -> dict:
     """Modified z-score anomaly detection trên chuỗi giá trị."""
     arr = np.asarray(values, dtype=float)
     if len(arr) < 5:
         return {"error": "insufficient_data", "detail": "cần ít nhất 5 điểm"}
+
+    if mlflow_models is not None:
+        try:
+            model = mlflow_models.load_registered_model("anomaly_detection")
+            X = arr.reshape(-1, 1)
+            preds = model.predict(X)  # -1 anomaly, 1 normal
+            decision = model.decision_function(X)
+            anomalies = [
+                {"index": int(i), "value": float(arr[i]),
+                 "score": round(float(decision[i]), 2)}
+                for i in range(len(arr)) if preds[i] == -1
+            ]
+            return {
+                "anomalies": anomalies,
+                "count": len(anomalies),
+                "threshold": threshold,
+                "method": "isolation_forest_mlflow",
+            }
+        except Exception:  # noqa: BLE001 — fallback below
+            pass
+
+    # Fallback: modified z-score
     median = np.median(arr)
     mad = np.median(np.abs(arr - median)) or 1e-9
     z = 0.6745 * (arr - median) / (1.4826 * mad)
@@ -133,8 +206,12 @@ def detect_anomalies(values: list[float], threshold: float = 3.0) -> dict:
         {"index": int(i), "value": float(arr[i]), "z": round(float(z[i]), 2)}
         for i in range(len(arr)) if abs(z[i]) > threshold
     ]
-    return {"anomalies": anomalies, "count": len(anomalies),
-            "threshold": threshold, "method": "modified_z_score"}
+    return {
+        "anomalies": anomalies,
+        "count": len(anomalies),
+        "threshold": threshold,
+        "method": "modified_z_score_fallback",
+    }
 
 
 # ----------------------------------------------------------------------

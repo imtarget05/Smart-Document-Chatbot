@@ -101,3 +101,7 @@ finetune/llama.cpp/
 finetune/qwen3-vi-f16.gguf
 finetune/qwen3-vi-fused/
 llm-router/.venv/
+supply-chain-module/api/.venv/
+supply-chain-module/.venv/
+supply-chain-module/mlruns/
+mlruns/
