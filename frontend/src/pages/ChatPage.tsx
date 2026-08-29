@@ -130,8 +130,8 @@ export default function ChatPage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-    } catch (err: any) {
-      setUploadError(err.message || "Error uploading document");
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error uploading document");
     }
   };
 
@@ -262,13 +262,13 @@ export default function ChatPage() {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === streamingPlaceholderId
             ? {
                 ...msg,
-                aiResponse: `❌ Error: ${error.message}`,
+                aiResponse: `❌ Error: ${error instanceof Error ? error.message : "Unknown error"}`,
                 isStreaming: false,
               }
             : msg,

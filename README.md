@@ -390,9 +390,9 @@ public SseEmitter askStream(@RequestBody ChatRequest request) {
 
 ## Security, Testing & Operations
 
-* `POST /api/auth/register` và `POST /api/auth/login` cấp JWT ký bằng secret cấu hình; login có khóa tài khoản tạm thời sau 5 lần sai trong 15 phút (in-memory). **Ghi chú trung thực:** rate limiting cho upload/chat đang là roadmap ở backend Java; Agent Service có rate limiting Redis thật (`agent/rate_limiter.py`).
+* `POST /api/auth/register` và `POST /api/auth/login` cấp JWT ký bằng secret cấu hình; login có khóa tài khoản tạm thời sau 5 lần sai trong 15 phút (in-memory). Upload/chat/auth endpoints được bảo vệ bằng token-bucket rate limiting thực tế (`RateLimitInterceptor` + `WebMvcConfig`, cấu hình `ratelimit.*`); Agent Service có rate limiting Redis thật (`agent/rate_limiter.py`).
 * `/api/actuator/prometheus` được bảo vệ bằng `X-Internal-Token` (`INTERNAL_SERVICE_TOKEN`); chỉ health/info public. **Fail-fast:** staging/production từ chối khởi động nếu `JWT_SECRET` rỗng hoặc vẫn dùng secret dev mặc định (`SecretStrengthValidator`).
-* Backend dùng JUnit + Mockito + JaCoCo (23 test bao phủ CRAG flow, abstention, prompt-injection, JWT, secret validation); frontend dùng Vitest + Testing Library và Playwright smoke test; agent/llm-router dùng pytest. GitHub Actions chạy test, build và scan image/IaC (Trivy).
+* Backend dùng JUnit + Mockito + JaCoCo (**187 test** bao phủ CRAG flow, abstention, prompt-injection, JWT, secret validation, rate-limit, filter); frontend dùng Vitest + Testing Library và Playwright smoke test (**25 unit test** + e2e); agent/llm-router dùng pytest. GitHub Actions chạy test, build và scan image/IaC (Trivy). Backend chat/upload/auth endpoints được bảo vệ bằng token-bucket rate limiting thực tế (`RateLimitInterceptor` + `WebMvcConfig`).
 * Structured logging JSON mọi request ghi nhận: `requestId`, `method`, `path`, `status`, `durationMs` (`RequestIdFilter` + LogstashEncoder). Prometheus thu metrics RAG (`chat.requests.total{strategy,confidence}`, `chat.abstentions`, `chat.injection.blocked`, `chat.latency`) qua `/actuator/prometheus`.
 * Prompt-injection defense: heuristic kiểm tra câu hỏi người dùng trước mọi lời gọi LLM (`PromptInjectionDetector`); câu trả lời chỉ dựa trên context khi không đủ bằng chứng (safe abstention, `CRAG_ABSTAIN_ENABLED=true`).
 

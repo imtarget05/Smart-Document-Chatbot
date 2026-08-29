@@ -40,8 +40,8 @@ export default function LoginPage() {
 
       setAuthUsername("");
       setAuthPassword("");
-    } catch (err: any) {
-      setAuthError(err.message || "Something went wrong");
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setAuthLoading(false);
     }

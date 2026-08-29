@@ -82,6 +82,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return null;
         }
         if (path.equals("/api/chat/ask") || path.startsWith("/api/chat/ask/")
+                || path.equals("/api/chat/ask-stream") || path.startsWith("/api/chat/ask-stream/")
                 || path.equals("/api/chat/stream") || path.startsWith("/api/chat/stream/")) {
             return "chat";
         }
