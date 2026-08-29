@@ -1,6 +1,5 @@
 package com.smartdocchat.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -9,11 +8,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CsrfController {
 
     @GetMapping("/api/csrf")
-    public CsrfToken csrf(HttpServletRequest request) {
-        Object attr = request.getAttribute(CsrfToken.class.getName());
-        if (attr == null) {
-            attr = request.getAttribute("_csrf");
-        }
-        return (CsrfToken) attr;
+    public CsrfToken csrf(CsrfToken token) {
+        // Injecting CsrfToken as a method argument forces Spring Security 6's
+        // deferred token to resolve, so the XSRF-TOKEN cookie gets written and
+        // the token value is returned. Reading request attributes directly
+        // (previous impl) returned null and broke the SPA login flow.
+        return token;
     }
 }

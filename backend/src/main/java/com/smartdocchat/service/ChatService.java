@@ -16,6 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -232,6 +233,19 @@ public class ChatService {
         return new CragResult(List.of(), List.of(), 0.0, strategy);
     }
 
+    /**
+     * Null-tolerant Map.of for Langfuse trace/span metadata: unlike Map.of,
+     * this accepts null values (e.g. documentId when no document selected).
+     * Expects key/value pairs: traceMeta("a", 1, "b", "x").
+     */
+    private static Map<String, Object> traceMeta(Object... keyValuePairs) {
+        Map<String, Object> metadata = new HashMap<>();
+        for (int i = 0; i < keyValuePairs.length; i += 2) {
+            metadata.put((String) keyValuePairs[i], keyValuePairs[i + 1]);
+        }
+        return metadata;
+    }
+
     public List<ChatMessage> getChatHistory(String ownerUsername, String sessionId) {
         return historyService.getChatHistory(ownerUsername, sessionId);
     }
@@ -253,8 +267,10 @@ public class ChatService {
     // ------------------------------------------------------------------
 
     private CragResult runCrag(String ownerUsername, Long documentId, String query, boolean webSearchRequested) {
+        // traceMeta (not Map.of) because documentId is null when the user chats
+        // without selecting a document — Map.of rejects null values with NPE.
         String traceId = langfuse.startTrace("crag_request", ownerUsername,
-                Map.of("documentId", documentId, "query", query));
+                traceMeta("documentId", documentId, "query", query));
         long requestStart = System.currentTimeMillis();
 
         String retrieveSpan = langfuse.startSpan("retrieve_chunks",
@@ -283,7 +299,7 @@ public class ChatService {
 
         if (passedJudge) {
             langfuse.updateTrace(
-                    Map.of("strategy", "direct", "confidence", round(confidence),
+                    traceMeta("strategy", "direct", "confidence", round(confidence),
                             "chunkCount", results.size(), "documentId", documentId),
                     Map.of("query", query));
             langfuse.flush();
@@ -320,7 +336,7 @@ public class ChatService {
         if (confidence >= cragConfig.getConfidenceThreshold()
                 && hasLexicalSupport(query, topMerged)) {
             langfuse.updateTrace(
-                    Map.of("strategy", "corrective", "confidence", round(confidence),
+                    traceMeta("strategy", "corrective", "confidence", round(confidence),
                             "chunkCount", topMerged.size(), "documentId", documentId,
                             "reformulated", true),
                     Map.of("query", query, "variants", variants));
@@ -339,7 +355,7 @@ public class ChatService {
                 langfuse.endSpan(webSpan, "web snippets retrieved",
                         Map.of("snippetCount", web.get().size(), "strategy", "web_search"));
                 langfuse.updateTrace(
-                        Map.of("strategy", "web_search", "confidence", round(confidence),
+                        traceMeta("strategy", "web_search", "confidence", round(confidence),
                                 "documentId", documentId, "webSearch", true),
                         Map.of("query", query));
                 langfuse.flush();
@@ -350,14 +366,14 @@ public class ChatService {
         }
         if (cragConfig.isAbstainEnabled()) {
             langfuse.updateTrace(
-                    Map.of("strategy", "no_evidence", "confidence", round(confidence),
+                    traceMeta("strategy", "no_evidence", "confidence", round(confidence),
                             "documentId", documentId, "abstained", true),
                     Map.of("query", query));
             langfuse.flush();
             return new CragResult(List.of(), List.of(), confidence, "no_evidence");
         }
         langfuse.updateTrace(
-                Map.of("strategy", "general_knowledge", "confidence", round(confidence),
+                traceMeta("strategy", "general_knowledge", "confidence", round(confidence),
                         "documentId", documentId),
                 Map.of("query", query));
         langfuse.flush();
