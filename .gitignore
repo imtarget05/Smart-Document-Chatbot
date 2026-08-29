@@ -105,3 +105,4 @@ supply-chain-module/api/.venv/
 supply-chain-module/.venv/
 supply-chain-module/mlruns/
 mlruns/
+ab_history/
