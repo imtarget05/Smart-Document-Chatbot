@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.slf4j.MDC;
+
 @RestController
 @RequestMapping("/documents")
 @RequiredArgsConstructor
@@ -24,6 +26,21 @@ import java.util.stream.Collectors;
 public class DocumentController {
     private final DocumentService documentService;
 
+    /** Emit one structured audit line per document read (owner-scoped). */
+    private void auditDocumentAccess(String action, Long id, String owner, boolean granted) {
+        try {
+            MDC.put("auditAction", action);
+            MDC.put("documentId", String.valueOf(id));
+            MDC.put("owner", owner != null ? owner : "anonymous");
+            MDC.put("granted", String.valueOf(granted));
+            log.info("document access");
+        } finally {
+            MDC.remove("auditAction");
+            MDC.remove("documentId");
+            MDC.remove("owner");
+            MDC.remove("granted");
+        }
+    }
     /**
      * Structured legal evidence units for a document (Decision 14 navigation).
      * Owner isolation is enforced in DocumentService: another user's document
@@ -35,6 +52,7 @@ public class DocumentController {
             Document document = documentService.getDocumentById(id, principal.getName());
             List<com.smartdocchat.entity.LegalChunk> chunks =
                     documentService.getLegalChunks(id, principal.getName());
+            auditDocumentAccess("document.read", id, principal.getName(), true);
             Map<String, Object> body = new java.util.LinkedHashMap<>();
             body.put("documentId", id);
             body.put("fileName", document.getFileName());
@@ -58,6 +76,7 @@ public class DocumentController {
             return ResponseEntity.ok(body);
         } catch (RuntimeException e) {
             // Not found OR not owned by the caller — indistinguishable by design.
+            auditDocumentAccess("document.read", id, principal.getName(), false);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(java.util.Map.of("message", "Document not found"));
         }
@@ -119,8 +138,10 @@ public class DocumentController {
     public ResponseEntity<DocumentDTO> getDocumentById(@PathVariable Long id, Principal principal) {
         try {
             Document document = documentService.getDocumentById(id, principal.getName());
+            auditDocumentAccess("document.read", id, principal.getName(), true);
             return ResponseEntity.ok(convertToDTO(document));
         } catch (RuntimeException e) {
+            auditDocumentAccess("document.read", id, principal.getName(), false);
             return ResponseEntity.notFound().build();
         }
     }

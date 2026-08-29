@@ -11,12 +11,18 @@ Output (MLX chat format):
 """
 
 import json
+import os
 import random
 from pathlib import Path
 
-ROOT = Path.home() / "Downloads" / "Smart-Document-Chatbot"
-OUT = ROOT / "finetune" / "data"
-DOC = Path("/tmp/diag_doc_vi_v2.txt")
+# Portable paths: env override, else repo-relative (script lives in finetune/).
+ROOT = Path(os.environ.get("FINETUNE_ROOT", "")).expanduser() or (
+    Path(__file__).resolve().parent
+)
+OUT = ROOT / "data"
+DOC = Path(os.environ.get("FINETUNE_DOC", "")).expanduser() or (
+    ROOT.parent / "eval" / "questions.json"
+).with_name("diag_doc_vi_v2.txt")
 
 SYSTEM = (
     "Bạn là trợ lý AI của hệ thống Smart Document Chatbot. "
@@ -64,7 +70,7 @@ def doc_context_pairs():
 def benchmark_pairs():
     """The 31 eval questions with their expected answers — the most valuable
     supervised signal since these define project success."""
-    questions = json.loads((ROOT / "eval" / "questions.json").read_text(encoding="utf-8"))
+    questions = json.loads((ROOT.parent / "eval" / "questions.json").read_text(encoding="utf-8"))
     qs = questions if isinstance(questions, list) else questions.get("questions", [])
 
     # Ground-truth answers written from the domain document content.
