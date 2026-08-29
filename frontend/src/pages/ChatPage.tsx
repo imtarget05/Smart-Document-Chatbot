@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
-import { useAuth, API_BASE_URL } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../context/apiConfig";
 import { csrfHeaders } from "../csrf";
 import type { Document, ChatMessage as ChatMessageType, SourceCitation } from "../types";
 import SourceCitations from "../components/SourceCitations";

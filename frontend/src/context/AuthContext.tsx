@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useContext,
@@ -19,11 +20,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-// Use relative path in development so Vite proxy handles requests.
-// In production, set VITE_API_URL to the full backend URL.
-const API_BASE_URL =
-  (import.meta.env.VITE_API_URL as string) || "/api";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
@@ -76,5 +72,3 @@ export function useAuth() {
   }
   return ctx;
 }
-
-export { API_BASE_URL };

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useAuth, API_BASE_URL } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../context/apiConfig";
 import { csrfHeaders } from "../csrf";
 
 export default function LoginPage() {

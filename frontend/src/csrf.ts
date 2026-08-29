@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./context/AuthContext";
+import { API_BASE_URL } from "./context/apiConfig";
 
 let csrfToken: string | null = null;
 

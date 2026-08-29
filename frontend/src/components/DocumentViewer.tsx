@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { API_BASE_URL } from "../context/AuthContext";
+import { API_BASE_URL } from "../context/apiConfig";
 import type { LegalDocumentDetail, SourceCitation } from "../types";
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {

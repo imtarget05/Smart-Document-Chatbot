@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import { cleanup, render, screen, act } from "@testing-library/react";
 
 afterEach(cleanup);
-import { AuthProvider, useAuth, API_BASE_URL } from "../context/AuthContext";
+import { AuthProvider, useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../context/apiConfig";
 
 function AuthProbe() {
   const { token, username, role, login, logout, isAuthenticated, isAdmin, isEngineer, isViewer } =
