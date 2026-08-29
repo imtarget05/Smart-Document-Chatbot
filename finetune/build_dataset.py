@@ -3,11 +3,14 @@
 
 Sources:
   - eval/questions.json            → 31 benchmark Q/A pairs (ground truth)
-  - /tmp/diag_doc_vi_v2.txt        → domain document (chunked into Q-style pairs)
+  - FINETUNE_DOC or <repo>/eval/diag_doc_vi_v2.txt → domain document (chunked)
 
 Output (MLX chat format):
-  ~/Downloads/Smart-Document-Chatbot/finetune/data/{train,valid}.jsonl
+  finetune/data/{train,valid}.jsonl   (relative to FINETUNE_ROOT, default = this dir)
   Each line: {"messages": [{role, content}, ...]} — 90% train / 10% valid.
+
+Paths are portable: override via env FINETUNE_ROOT / FINETUNE_DOC, else resolved
+relative to this script's directory (no hardcoded ~/Downloads).
 """
 
 import json
