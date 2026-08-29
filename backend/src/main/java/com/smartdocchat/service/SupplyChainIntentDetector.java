@@ -1,47 +1,113 @@
 package com.smartdocchat.service;
 
+import java.util.List;
 import java.util.Set;
 
 /**
- * Detect supply chain intent từ user message.
+ * Phát hiện supply-chain intent từ user message (chain #4: backend → agent).
  *
- * Chain cho #4: backend → agent integration.
- * Khi message chứa supply chain keywords, agent handle thay vì CRAG.
+ * Nâng cấp từ keyword-only đơn giản lên classifier nhẹ:
+ * - Mỗi keyword có trọng số (STRONG / WEAK).
+ * - Các cụm phủ định (negation/idiom) như "order of magnitude", "in order to",
+ *   "out of order" không được tính là supply-chain intent.
+ * - Chỉ trả true khi có ít nhất 1 STRONG keyword (hoặc tổng điểm vượt ngưỡng),
+ *   tránh false-positive do từ "order"/"delivery" xuất hiện trong ngữ cảnh khác.
+ *
+ * Không dùng LLM để giữ latency thấp trên luồng chat chính.
  */
 public class SupplyChainIntentDetector {
 
-    private static final Set<String> SUPPLY_CHAIN_KEYWORDS = Set.of(
-            // Vietnamese
-            "dự báo", "dự báo nhu cầu", "forecast", "dự đoán",
-            "tuyến", "tuyến giao hàng", "route", "optimal route", "vrp",
-            "rủi ro", "supplier", "nhà cung cấp", "nhà cung cấp rủi ro",
-            "tồn kho", "inventory", "eoq", "safety stock", "reorder",
-            "đạo đột", "anomaly", "phát hiện bất thường",
-            "đặt hàng", "order", "po", "purchase order",
-            "invoice", "hóa đơn",
-            "demand", "xuất nhập khẩu", "supply chain",
-            "warehouse", "kho", "slotting",
-            "lead time", "thời gian dẫn", "defect", "lỗi",
-            "on-time", "đúng hạn", "delivery", "giao hàng",
-            // English
-            "demand forecast", "supply", "optimization", "shipping",
-            "logistics", "procurement", "supplier risk", "anomaly detection"
+    /** Keyword rõ ràng, domain-specific — 1 hit là đủ kết luận intent. */
+    private static final Set<String> STRONG_KEYWORDS = Set.of(
+            "dự báo nhu cầu", "dự báo", "demand forecast", "forecast demand",
+            "tuyến giao hàng", "optimal route", "vrp", "vehicle routing",
+            "nhà cung cấp rủi ro", "supplier risk", "supplier risk analysis",
+            "eoq", "economic order quantity", "safety stock", "reorder point",
+            "phát hiện bất thường", "anomaly detection", "bất thường chuỗi cung",
+            "lead time", "thời gian dẫn", "warehouse slotting", "slotting",
+            "xuất nhập khẩu", "supply chain", "chuỗi cung ứng",
+            "procurement", "tồn kho an toàn", "inventory optimization",
+            "logistics optimization", "tối ưu chuỗi cung", "đặt hàng tự động"
     );
 
+    /** Keyword yếu — dễ false-positive, chỉ cộng điểm, không tự kết luận. */
+    private static final Set<String> WEAK_KEYWORDS = Set.of(
+            "tồn kho", "inventory", "kho", "warehouse",
+            "đặt hàng", "purchase order", "po ",
+            "hóa đơn", "invoice", "giao hàng", "delivery",
+            "đúng hạn", "on-time", "defect", "lỗi", "supplier", "nhà cung cấp",
+            "forecast", "dự đoán", "tuyến", "route", "rủi ro", "risk",
+            "anomaly", "đạo đột", "lead", "order", "shipping", "logistics"
+    );
+
+    /** Cụm phủ định / idiom chứa từ yếu nhưng KHÔNG phải supply-chain. */
+    private static final List<String> NEGATION_PHRASES = List.of(
+            "order of magnitude",
+            "in order to",
+            "out of order",
+            "on the order of",
+            "order by",
+            "made to order",
+            "custom order"
+    );
+
+    private static final int WEAK_THRESHOLD = 2;
+
     /**
-     * True khi message chứa supply chain intent.
-     * Chỉ check keywords — không dùng LLM để avoid latency.
+     * @return true nếu message mang supply-chain intent (dùng cho routing agent).
      */
     public static boolean isSupplyChainIntent(String message) {
+        return detect(message).isSupplyChain();
+    }
+
+    /** Kết quả có điểm số — tiện mở rộng (logging, threshold động). */
+    public static Result detect(String message) {
         if (message == null || message.isBlank()) {
-            return false;
+            return new Result(false, 0);
         }
         String lower = message.toLowerCase();
-        for (String keyword : SUPPLY_CHAIN_KEYWORDS) {
-            if (lower.contains(keyword.toLowerCase())) {
-                return true;
+
+        // Loại các cụm phủ định trước khi đếm từ yếu.
+        String stripped = lower;
+        for (String phrase : NEGATION_PHRASES) {
+            stripped = stripped.replace(phrase, " ");
+        }
+
+        int score = 0;
+        boolean hasStrong = false;
+
+        for (String kw : STRONG_KEYWORDS) {
+            if (lower.contains(kw)) {
+                score += 3;
+                hasStrong = true;
             }
         }
-        return false;
+        for (String kw : WEAK_KEYWORDS) {
+            if (stripped.contains(kw)) {
+                score += 1;
+            }
+        }
+
+        // STRONG ⇒ intent chắc chắn. Ngược lại cần đủ nhiều WEAK để kết luận.
+        boolean isSupplyChain = hasStrong || score >= WEAK_THRESHOLD;
+        return new Result(isSupplyChain, score);
+    }
+
+    public static final class Result {
+        private final boolean supplyChain;
+        private final int score;
+
+        Result(boolean supplyChain, int score) {
+            this.supplyChain = supplyChain;
+            this.score = score;
+        }
+
+        public boolean isSupplyChain() {
+            return supplyChain;
+        }
+
+        public int score() {
+            return score;
+        }
     }
 }
