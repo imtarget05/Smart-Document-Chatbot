@@ -62,28 +62,41 @@ public class RetrievalService {
 
         // Owner isolation check first: throws when the document does not belong
         // to ownerUsername, so private chunks are never exposed cross-user.
+        // We deliberately PROPAGATE this exception so the controller can return
+        // a 404 (with audit log) rather than silently treating a forbidden doc
+        // as "no evidence" — these are different security signals.
         documentService.getDocumentById(documentId, ownerUsername);
 
-        Set<String> terms = normalizer.matchTerms(query);
-        // Sub-3-char Vietnamese tokens ("ăn", "bò", "an") are too ambiguous for
-        // pure lexical evidence — they match unrelated words at word boundaries.
-        // Structured references (Điều/khoản/điểm/số hiệu) never rely on them.
-        // Benchmark-justified (Decision 15): removes the only irrelevant-query
-        // false positive without lowering any legitimate query's score.
-        terms.removeIf(t -> t.length() < 3);
-        java.util.Optional<com.smartdocchat.util.LegalQueryNormalizer.ArticleRef> ref =
-                normalizer.extractArticleRef(query);
-        java.util.Optional<String> docNumber = normalizer.extractDocumentNumber(query);
-
-        List<LegalChunk> legalChunks = legalChunkRepository.findByDocumentIdOrderByOrdinalAsc(documentId);
-        if (legalChunks != null && !legalChunks.isEmpty()) {
-            return scoreAndTopK(legalChunks.stream()
-                    .map(c -> new Candidate(c.getContent(), c.getId(),
-                            c.getArticleNumber(), c.getClauseNumber(), c.getPointLabel()))
-                    .toList(), terms, ref, docNumber, topK);
+        Set<String> terms;
+        java.util.Optional<com.smartdocchat.util.LegalQueryNormalizer.ArticleRef> ref;
+        java.util.Optional<String> docNumber;
+        try {
+            terms = normalizer.matchTerms(query);
+            ref = normalizer.extractArticleRef(query);
+            docNumber = normalizer.extractDocumentNumber(query);
+        } catch (RuntimeException e) {
+            log.warn("retrieval aborted: query normalisation failed for doc={}: {}",
+                    documentId, e.getMessage());
+            return List.of();
         }
+        terms.removeIf(t -> t.length() < 3);
 
-        List<String> allChunks = documentService.getDocumentChunks(documentId, ownerUsername);
+        List<LegalChunk> legalChunks;
+        List<String> allChunks;
+        try {
+            legalChunks = legalChunkRepository.findByDocumentIdOrderByOrdinalAsc(documentId);
+            if (legalChunks != null && !legalChunks.isEmpty()) {
+                return scoreAndTopK(legalChunks.stream()
+                        .map(c -> new Candidate(c.getContent(), c.getId(),
+                                c.getArticleNumber(), c.getClauseNumber(), c.getPointLabel()))
+                        .toList(), terms, ref, docNumber, topK);
+            }
+            allChunks = documentService.getDocumentChunks(documentId, ownerUsername);
+        } catch (RuntimeException e) {
+            log.warn("retrieval aborted: backend source failed for doc={} owner={}: {}",
+                    documentId, ownerUsername, e.getMessage());
+            return List.of();
+        }
         if (allChunks.isEmpty()) {
             return List.of();
         }

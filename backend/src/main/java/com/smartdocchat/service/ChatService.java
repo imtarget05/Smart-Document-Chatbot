@@ -98,19 +98,32 @@ public class ChatService {
                     messageHandler.buildInjectionBlockedResponse(), null);
             response = toResponse(ownerUsername, blocked, emptyCrag("blocked"));
         } else {
-            CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+            try {
+                CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
 
-            String aiResponse = "no_evidence".equals(crag.strategy())
-                    ? messageHandler.buildAbstentionResponse()
-                    : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
-            ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
-            response = toResponse(ownerUsername, saved, crag);
+                String aiResponse = "no_evidence".equals(crag.strategy())
+                        ? messageHandler.buildAbstentionResponse()
+                        : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
+                ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
+                response = toResponse(ownerUsername, saved, crag);
 
-            if ("no_evidence".equals(crag.strategy())) {
+                if ("no_evidence".equals(crag.strategy())) {
+                    ragMetrics.recordAbstention();
+                }
+                ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+                ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
+            } catch (RuntimeException e) {
+                // CRAG orchestration failure (retrieval down, reformulator bug, web
+                // search exception, etc.) must NEVER escape as 5xx. Return a safe
+                // abstention labelled "error" so the frontend can show a clear
+                // "không thể trả lời" instead of a generic failure, and we keep
+                // an audit trail via ragMetrics + log.
+                log.error("CRAG path failed, serving safe abstention: {}", e.getMessage(), e);
+                String abstain = messageHandler.buildAbstentionResponse();
+                ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstain, null);
+                response = toResponse(ownerUsername, saved, emptyCrag("error"));
                 ragMetrics.recordAbstention();
             }
-            ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
-            ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
         }
 
         ragMetrics.recordLatency(System.currentTimeMillis() - started);
@@ -137,7 +150,32 @@ public class ChatService {
                     return;
                 }
 
-                CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+                CragResult crag;
+                try {
+                    crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+                } catch (RuntimeException e) {
+                    log.error("CRAG stream path failed, serving safe abstention: {}", e.getMessage(), e);
+                    ragMetrics.recordAbstention();
+                    String abstain = messageHandler.buildAbstentionResponse();
+                    Map<String, Object> errMeta = new LinkedHashMap<>();
+                    errMeta.put("ragStrategy", "error");
+                    errMeta.put("confidence", "low");
+                    errMeta.put("confidenceScore", 0.0);
+                    try {
+                        emitter.send(SseEmitter.event().name("metadata").data(errMeta));
+                        emitter.send(SseEmitter.event().name("chunk").data(abstain));
+                    } catch (IOException ignored) {
+                        // client may already be gone; we still try to complete cleanly
+                    }
+                    ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstain, null);
+                    try {
+                        emitter.send(SseEmitter.event().name("complete").data(toResponse(ownerUsername, saved, emptyCrag("error"))));
+                    } catch (IOException ignored) {
+                        // ignore
+                    }
+                    emitter.complete();
+                    return;
+                }
 
                 // Send metadata (sources + strategy) up front, before the token stream.
                 Map<String, Object> metaEvent = new LinkedHashMap<>();
