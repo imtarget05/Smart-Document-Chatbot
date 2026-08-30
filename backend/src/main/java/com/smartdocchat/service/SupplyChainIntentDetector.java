@@ -32,12 +32,12 @@ public class SupplyChainIntentDetector {
 
     /** Keyword yếu — dễ false-positive, chỉ cộng điểm, không tự kết luận. */
     private static final Set<String> WEAK_KEYWORDS = Set.of(
-            "tồn kho", "inventory", "kho", "warehouse",
+            "tồn kho", "inventory", "warehouse",
             "đặt hàng", "purchase order", "po ",
             "hóa đơn", "invoice", "giao hàng", "delivery",
             "đúng hạn", "on-time", "defect", "lỗi", "supplier", "nhà cung cấp",
             "forecast", "dự đoán", "tuyến", "route", "rủi ro", "risk",
-            "anomaly", "đạo đột", "lead", "order", "shipping", "logistics"
+            "anomaly", "đạo đột", "lead", "shipping", "logistics"
     );
 
     /** Cụm phủ định / idiom chứa từ yếu nhưng KHÔNG phải supply-chain. */

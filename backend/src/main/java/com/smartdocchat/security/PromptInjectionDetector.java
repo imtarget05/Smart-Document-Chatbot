@@ -61,6 +61,7 @@ public class PromptInjectionDetector {
         }
 
         String normalized = input.toLowerCase();
+        normalized = normalizeLookalikes(normalized);
         for (Pattern pattern : HIGH_SIGNATURES) {
             if (pattern.matcher(normalized).find()) {
                 return Severity.HIGH;
@@ -75,6 +76,36 @@ public class PromptInjectionDetector {
             return Severity.MEDIUM;
         }
         return Severity.NONE;
+    }
+
+    /**
+     * Maps common Unicode look-alike characters (Cyrillic, Greek) that visually
+     * resemble Latin letters onto their ASCII equivalents, so obfuscated
+     * injections like "іgnore" (Cyrillic і) cannot slip past the regex matcher.
+     */
+    private static String normalizeLookalikes(String text) {
+        if (text == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            switch (c) {
+                case 'і': case 'І': sb.append('i'); break;
+                case 'е': case 'Е': sb.append('e'); break;
+                case 'а': case 'А': sb.append('a'); break;
+                case 'о': case 'О': sb.append('o'); break;
+                case 'с': case 'С': sb.append('c'); break;
+                case 'р': case 'Р': sb.append('p'); break;
+                case 'ѕ': case 'Ѕ': sb.append('s'); break;
+                case 'х': case 'Х': sb.append('x'); break;
+                case 'у': case 'У': sb.append('u'); break;
+                case 'п': case 'П': sb.append('n'); break;
+                case 'м': case 'М': sb.append('m'); break;
+                default: sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /** Detects encoded payloads: base64 markers, hex blobs, heavy URL encoding. */
