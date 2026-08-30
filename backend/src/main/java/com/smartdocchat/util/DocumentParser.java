@@ -111,6 +111,15 @@ public class DocumentParser {
     }
 
     public List<String> chunkText(String text, int chunkSize) {
+        return chunkText(text, chunkSize, 0);
+    }
+
+    /**
+     * Token-based sentence-aware chunking with optional overlap: the last
+     * {@code chunkOverlap} tokens of a chunk are repeated at the start of the
+     * next chunk so sentences spanning a boundary keep local context.
+     */
+    public List<String> chunkText(String text, int chunkSize, int chunkOverlap) {
         List<String> chunks = new ArrayList<>();
         String[] sentences = text.split("(?<=[.!?])\\s+");
 
@@ -126,6 +135,8 @@ public class DocumentParser {
             sentences = parts.toArray(new String[0]);
         }
 
+        int safeOverlap = Math.max(0, Math.min(chunkOverlap, chunkSize / 2));
+
         StringBuilder chunk = new StringBuilder();
         int tokenCount = 0;
 
@@ -134,19 +145,41 @@ public class DocumentParser {
 
             if (tokenCount + sentenceTokens > chunkSize && chunk.length() > 0) {
                 chunks.add(chunk.toString().trim());
-                chunk = new StringBuilder();
-                tokenCount = 0;
+                // Start the next chunk with an overlap of the tail of this one.
+                String overlapPrefix = extractTail(chunk.toString(), safeOverlap);
+                chunk = new StringBuilder(overlapPrefix);
+                tokenCount = estimateTokens(overlapPrefix);
             }
 
             chunk.append(sentence).append(" ");
             tokenCount += sentenceTokens;
         }
 
-        if (chunk.length() > 0) {
-            chunks.add(chunk.toString().trim());
+        if (chunk.length() > 0 && (chunks.isEmpty() || tokenCount > 0)) {
+            String trimmed = chunk.toString().trim();
+            // Avoid duplicating the overlap tail as a standalone final chunk.
+            if (chunks.isEmpty() || !trimmed.equals(chunks.get(chunks.size() - 1))) {
+                chunks.add(trimmed);
+            }
         }
 
         return chunks;
+    }
+
+    /** Returns the last ~{@code maxTokens} tokens (words) of {@code text}. */
+    private String extractTail(String text, int maxTokens) {
+        if (maxTokens <= 0) {
+            return "";
+        }
+        String[] words = text.trim().split("\\s+");
+        if (words.length <= maxTokens) {
+            return text.trim();
+        }
+        StringBuilder tail = new StringBuilder();
+        for (int i = words.length - maxTokens; i < words.length; i++) {
+            tail.append(words[i]).append(" ");
+        }
+        return tail.toString().trim();
     }
 
     private int estimateTokens(String text) {

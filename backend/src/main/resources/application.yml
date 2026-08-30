@@ -63,6 +63,13 @@ llm:
   max-attempts: ${LLM_MAX_ATTEMPTS:3}
   retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}
 
+# Document ingestion (chunking) — size in tokens (~4 chars/token), overlap
+# carries the tail of one chunk into the next so boundary sentences keep
+# context during retrieval.
+ingestion:
+  chunk-size: ${INGESTION_CHUNK_SIZE:500}
+  chunk-overlap: ${INGESTION_CHUNK_OVERLAP:100}
+
 # Corrective RAG (CRAG) — confidence evaluation + query reformulation +
 # web-search fallback for the classic /chat/ask & /chat/ask-stream endpoints.
 crag:

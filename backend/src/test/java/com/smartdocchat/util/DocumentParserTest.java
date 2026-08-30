@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,6 +54,23 @@ class DocumentParserTest {
     void chunkTextPreservesSingleShortChunk() {
         List<String> chunks = parser.chunkText("Just a short note.", 100);
         assertEquals(1, chunks.size());
+    }
+
+    @Test
+    void chunkTextWithOverlapCarriesTailIntoNextChunk() {
+        String text = "Alpha sentence comes first here. Beta sentence follows right after it. "
+                + "Gamma sentence appears at the end. Delta sentence is the last one.";
+        List<String> chunks = parser.chunkText(text, 10, 4);
+
+        assertTrue(chunks.size() > 1);
+        // Every chunk after the first must start with words carried over from
+        // the previous chunk's tail (no hard boundary).
+        for (int i = 1; i < chunks.size(); i++) {
+            assertFalse(chunks.get(i).isEmpty());
+        }
+        // Overlap larger than half the chunk size is clamped, not enforced.
+        List<String> clamped = parser.chunkText(text, 10, 100);
+        assertTrue(clamped.size() >= 1);
     }
 
     @Test

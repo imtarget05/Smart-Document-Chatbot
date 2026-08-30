@@ -46,7 +46,8 @@ class DocumentServiceIdempotencyTest {
     @BeforeEach
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
-                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient);
+                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient,
+                new com.smartdocchat.config.IngestionConfig());
     }
 
     private MockMultipartFile txtFile(String name, String content) {
@@ -58,7 +59,7 @@ class DocumentServiceIdempotencyTest {
         lenient().when(storageService.upload(anyString(), any())).thenReturn("uploads/report.txt");
         lenient().when(storageService.download(anyString())).thenReturn(new File("report.txt"));
         lenient().when(documentParser.extractText(any(File.class), anyString())).thenReturn("extracted text");
-        lenient().when(documentParser.chunkText("extracted text", 500)).thenReturn(List.of("chunk1"));
+        lenient().when(documentParser.chunkText("extracted text", 500, 100)).thenReturn(List.of("chunk1"));
     }
 
     @Test

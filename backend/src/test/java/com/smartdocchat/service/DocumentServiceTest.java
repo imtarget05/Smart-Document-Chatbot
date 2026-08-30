@@ -44,7 +44,8 @@ class DocumentServiceTest {
     @BeforeEach
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
-                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient);
+                legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient,
+                new com.smartdocchat.config.IngestionConfig());
     }
 
     private Document document(long id, String chunks) {
@@ -67,7 +68,7 @@ class DocumentServiceTest {
         when(storageService.upload(anyString(), any())).thenReturn("uploads/report.txt");
         when(storageService.download("uploads/report.txt")).thenReturn(new File("report.txt"));
         when(documentParser.extractText(any(File.class), anyString())).thenReturn("extracted text");
-        when(documentParser.chunkText("extracted text", 500)).thenReturn(List.of("chunk1", "chunk2"));
+        when(documentParser.chunkText("extracted text", 500, 100)).thenReturn(List.of("chunk1", "chunk2"));
         when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Document saved = documentService.uploadDocument(file, "alice");
@@ -113,7 +114,7 @@ class DocumentServiceTest {
         when(storageService.upload(anyString(), any())).thenReturn("uploads/real.pdf");
         when(storageService.download(anyString())).thenReturn(new File("real.pdf"));
         when(documentParser.extractText(any(File.class), anyString())).thenReturn("pdf text");
-        when(documentParser.chunkText(anyString(), anyInt())).thenReturn(List.of("chunk"));
+        when(documentParser.chunkText(anyString(), anyInt(), anyInt())).thenReturn(List.of("chunk"));
         when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Document saved = documentService.uploadDocument(file, "alice");
@@ -128,7 +129,7 @@ class DocumentServiceTest {
         when(storageService.upload(anyString(), any())).thenReturn("uploads/real.docx");
         when(storageService.download(anyString())).thenReturn(new File("real.docx"));
         when(documentParser.extractText(any(File.class), anyString())).thenReturn("docx text");
-        when(documentParser.chunkText(anyString(), anyInt())).thenReturn(List.of("chunk"));
+        when(documentParser.chunkText(anyString(), anyInt(), anyInt())).thenReturn(List.of("chunk"));
         when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Document saved = documentService.uploadDocument(file, "alice");
@@ -141,7 +142,7 @@ class DocumentServiceTest {
         when(storageService.upload(anyString(), any())).thenReturn("uploads/README.txt");
         when(storageService.download(anyString())).thenReturn(new File("README.txt"));
         when(documentParser.extractText(any(File.class), anyString())).thenReturn("text");
-        when(documentParser.chunkText(anyString(), anyInt())).thenReturn(List.of("chunk"));
+        when(documentParser.chunkText(anyString(), anyInt(), anyInt())).thenReturn(List.of("chunk"));
         when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Document saved = documentService.uploadDocument(file, "alice");

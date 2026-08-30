@@ -35,6 +35,7 @@ public class DocumentService {
     private final com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
     private final com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
     private final DocumentWorkflowClient documentWorkflowClient;
+    private final com.smartdocchat.config.IngestionConfig ingestionConfig;
 
     /** Matches an explicit "Số: NN/YYYY/AAA" document-number line only. */
     private static final Pattern DOCUMENT_NUMBER =
@@ -66,7 +67,8 @@ public class DocumentService {
         // Parse and chunk locally
         File savedFile = storageService.download(storagePath);
         String extractedText = documentParser.extractText(savedFile, fileExtension);
-        List<String> chunks = documentParser.chunkText(extractedText, 500);
+        List<String> chunks = documentParser.chunkText(
+                extractedText, ingestionConfig.getChunkSize(), ingestionConfig.getChunkOverlap());
 
         log.info("Document '{}' extracted with {} chunks", originalFileName, chunks.size());
 

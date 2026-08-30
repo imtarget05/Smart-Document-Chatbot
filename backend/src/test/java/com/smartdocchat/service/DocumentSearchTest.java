@@ -36,7 +36,8 @@ class DocumentSearchTest {
     @BeforeEach
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
-                legalStructureParser, legalChunkRepository, new LegalQueryNormalizer(), legalDateExtractor, documentWorkflowClient);
+                legalStructureParser, legalChunkRepository, new LegalQueryNormalizer(), legalDateExtractor, documentWorkflowClient,
+                new com.smartdocchat.config.IngestionConfig());
     }
 
     private Document doc(long id, String fileName, String title, String number) {
