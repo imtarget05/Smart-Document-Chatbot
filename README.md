@@ -101,6 +101,9 @@ docker compose -f docker-compose.yml up -d
 
 Dịch vụ Python Agent (LangGraph multi-agent) chạy độc lập trên cổng 9000, với các endpoint `/v1/agent/invoke`, `/v1/agent/invoke-stream`, connector ingestion (Google Drive/Gmail/Slack/SharePoint), memory dài hạn trong PostgreSQL, Qdrant retrieval, và các endpoint thử nghiệm ADK/A2A/MCP (custom implementation lấy cảm hứng từ các khái niệm tương ứng — **không phải** Google ADK / A2A / MCP chính thức). Xem [`docs/agent_architecture.md`](docs/agent_architecture.md).
 
+### Agent Service Wiring (current state)
+Agent Service (Python, port 9000) được nối vào luồng chat CHỈ khi `SupplyChainIntentDetector.isSupplyChainIntent()` trả true — message supply-chain kích hoạt agent path (gọi `AgentClient.invokeAgent` → `/v1/agent/invoke` với body `query`/`session_id`/`user_id`), sau đó fallback RAG nếu agent lỗi. Các câu hỏi CRUD/general knowledge vẫn dùng CRAG path hoàn toàn, không đi qua agent. Xem [`docs/adr/0002-supply-chain-routing.md`](docs/adr/0002-supply-chain-routing.md) và [`docs/adr/0003-agent-fallback-strategy.md`](docs/adr/0003-agent-fallback-strategy.md).
+
 ---
 
 ## 🛠️ Tech Stack & Quyết định Công nghệ
@@ -315,9 +318,18 @@ Mỗi response từ `/chat/ask` và SSE `complete` event đều trả về cấu
 
 ## 📊 Evaluation Pipeline
 
-Hệ thống tích hợp pipeline đánh giá chất lượng RAG tự động:
+Hệ thống tích hợp pipeline đánh giá chất lượng RAG tự động, phân biệt 2 track:
 
-Ngoài script classic RAG cho `/chat/ask`, agent workflow có evaluation riêng tại `eval/agent_eval.py` để đo intent routing, retrieval, answer completeness, hallucination, latency và source citation rate trên `/agent/invoke`.
+### Track 1 — Classic RAG evaluation (`/chat/ask`)
+Script `eval/eval.py` đánh giá luồng CRAG Java chính qua deterministic lexical grading (không LLM-judge):
+
+- **Concept coverage (AND-logic)**: mỗi câu hỏi có `expected_concepts` với approved surface forms; answer phải cover TẤT cả concepts mới được tính correct (tránh false-positive từ keyword-only answers).
+- **Legacy keyword fallback**: nếu không có structured concepts, dùng `expected_answer_contains` — chỉ cần 1 keyword hit.
+- **Retrieval accuracy**: `expected_source_keywords` phải xuất hiện trong `sourceChunks`.
+- **Provider-error filter**: các response chứa strings failure contract (`temporarily unavailable`, `cloudflare_error`, v.v.) được tách riêng, không tính vào answer-correctness/retrieval denominators.
+- **Hallucination heuristic**: answer confident (≥ medium) + retrieval không có source keywords + answer không chứa "không tìm thấy" → flag potential hallucination. Đây là heuristic, không LLM-judge.
+
+Kết quả: `retrieval_accuracy`, `answer_correctness`, `hallucination_rate`, `avg_latency_ms`, `p95_latency_ms`, `error_count`. Results lưu `eval/results/eval_results.json`.
 
 ```bash
 # Chạy evaluation (cần JWT token và document đã upload)
@@ -327,20 +339,22 @@ python eval/eval.py \
   --document-id 1
 ```
 
-**Output mẫu:**
+### Track 2 — Agent evaluation (`/agent/invoke`)
+Script `eval/agent_eval.py` đo agent workflow riêng: intent routing accuracy, retrieval accuracy, answer completeness (keyword AND-logic), hallucination rate, source citation rate, latency. Có confusion matrix cho từng metric. Target có thể là Spring Boot proxy (cần JWT) hoặc agent service trực tiếp (cần `X-Internal-Token`).
+
+```bash
+# Direct agent mode (không qua backend)
+python eval/agent_eval.py \
+  --base-url http://localhost:9000 \
+  --internal-token <token> \
+  --direct-agent \
+  --document-ids doc_collection_1
 ```
-📊 EVALUATION RESULTS
-============================================================
-  Total Questions:      20
-  Retrieval Accuracy:   85.00%
-  Answer Correctness:   80.00%
-  Hallucination Cases:  2
-  Hallucination Rate:   10.00%
-  Avg Latency:          1420ms
-  P95 Latency:          3200ms
-  Errors:               0
-============================================================
-```
+
+### Evaluation current state & roadmap (honest gap)
+- **Đã có**: deterministic lexical evaluation, structured concept coverage, provider-error filtering, hallucination heuristic, eval scripts cho cả 2 track, question set 28 câu (eval/questions.json) + agent questions (eval/agent_questions.json).
+- **Chưa có (gap)**: không có **golden reference answer** (chỉ keywords/concepts → đo retrieval và coverage, không đo semantic correctness hoàn toàn); không có **LLM-judge supplement** để đo semantic correctness/hallucination chính xác hơn; evaluation **chưa có CI job chạy thực tế** (chỉ có `--validate-only` mode kiểm tra cấu trúc question set, chạy được tanpa backend).
+- **Plan**: (1) Thêm CI job `eval-validate` chạy `python eval/eval.py --validate-only` để evaluation-as-code green trong CI (xem `.github/workflows/ci.yml`). (2) Tìm hiểu LLM-judge supplement (ví dụ grading LLM đo semantic alignment) cho Q3 roadmap. (3) Xây golden reference dataset cho subset câu hỏi quan trọng.
 
 Kết quả chi tiết được lưu tại `eval/results/eval_results.json`.
 
@@ -392,7 +406,7 @@ public SseEmitter askStream(@RequestBody ChatRequest request) {
 
 * `POST /api/auth/register` và `POST /api/auth/login` cấp JWT ký bằng secret cấu hình; login có khóa tài khoản tạm thời sau 5 lần sai trong 15 phút (in-memory). Upload/chat/auth endpoints được bảo vệ bằng token-bucket rate limiting thực tế (`RateLimitInterceptor` + `WebMvcConfig`, cấu hình `ratelimit.*`); Agent Service có rate limiting Redis thật (`agent/rate_limiter.py`).
 * `/api/actuator/prometheus` được bảo vệ bằng `X-Internal-Token` (`INTERNAL_SERVICE_TOKEN`); chỉ health/info public. **Fail-fast:** staging/production từ chối khởi động nếu `JWT_SECRET` rỗng hoặc vẫn dùng secret dev mặc định (`SecretStrengthValidator`).
-* Backend dùng JUnit + Mockito + JaCoCo (**187 test** bao phủ CRAG flow, abstention, prompt-injection, JWT, secret validation, rate-limit, filter); frontend dùng Vitest + Testing Library và Playwright smoke test (**25 unit test** + e2e); agent/llm-router dùng pytest. GitHub Actions chạy test, build và scan image/IaC (Trivy). Backend chat/upload/auth endpoints được bảo vệ bằng token-bucket rate limiting thực tế (`RateLimitInterceptor` + `WebMvcConfig`).
+* Backend dùng JUnit + Mockito + JaCoCo (**222 test** bao phủ CRAG flow, abstention, prompt-injection, JWT, secret validation, rate-limit, filter, supply-chain classifier, agent fallback, CRAG exception graceful degradation); frontend dùng Vitest + Testing Library và Playwright smoke test (**35 unit test** + e2e); agent/llm-router dùng pytest. GitHub Actions chạy test, build và scan image (Trivy). Backend chat/upload/auth endpoints được bảo vệ bằng token-bucket rate limiting thực tế (`RateLimitInterceptor` + `WebMvcConfig`).
 * Structured logging JSON mọi request ghi nhận: `requestId`, `method`, `path`, `status`, `durationMs` (`RequestIdFilter` + LogstashEncoder). Mỗi lần đọc tài liệu (`GET /documents/{id}`, `GET /documents/{id}/legal-chunks`) phát ra 1 dòng audit có `auditAction=document.read`, `documentId`, `owner`, `granted` (true/false theo owner isolation) để truy vết ai truy cập tài liệu nào. Prometheus thu metrics RAG (`chat.requests.total{strategy,confidence}`, `chat.abstentions`, `chat.injection.blocked`, `chat.latency`) qua `/actuator/prometheus`.
 * Prompt-injection defense: heuristic kiểm tra câu hỏi người dùng trước mọi lời gọi LLM (`PromptInjectionDetector`); câu trả lời chỉ dựa trên context khi không đủ bằng chứng (safe abstention, `CRAG_ABSTAIN_ENABLED=true`).
 * **Batch ingestion automation**: DAG Airflow thực tế `airflow/dags/document_ingestion_pipeline.py` (schedule daily 02:00) quét thư mục `inbound/`, login lấy JWT, gọi `POST /api/documents/upload` để đẩy tài liệu qua pipeline ingest chính (parse → chunk → embed → index PostgreSQL). Chạy qua `airflow-webserver` + `airflow-scheduler` + `airflow-postgres` trong `docker/docker-compose.yml` (LocalExecutor, không load example DAGs). Credentials qua Airflow Variables/Connections + env, không hardcode.

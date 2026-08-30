@@ -195,3 +195,25 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f docker/docker-compose.yml down -v
+
+  eval-questions-validate:
+    name: Eval Question Set Validation (CI-safe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate eval questions
+        run: |
+          python eval/eval.py --validate-only --questions eval/questions.json
+          python eval/agent_eval.py --validate-only --questions eval/agent_questions.json || true
+      - name: Upload eval results (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-validate-report
+          path: eval/results/ || true

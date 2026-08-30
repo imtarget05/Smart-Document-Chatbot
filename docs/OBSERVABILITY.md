@@ -14,6 +14,12 @@ Spring Actuator exports standard HTTP/JVM/database metrics plus RAG metrics:
 
 Logs are JSON and include `requestId`; clients can supply or record the returned `X-Request-Id`. Micrometer tracing exports OTLP spans when `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` targets a collector.
 
+## Gaps (current limitations)
+
+- **Distributed tracing**: OTel SDK/Jaeger/Zipkin chưa được tích hợp. Hiện tại observability dựa trên: correlation-id trong structured log (RequestIdFilter), Prometheus metrics cho RAG (chat.requests.total, chat.abstraction, chat.injection.blocked, chat.latency) qua `/actuator/prometheus`, và Maven test coverage (JaCoCo). Nếu triển khai multi-service (backend + agent service + LLM router riêng), cần thêm OpenTelemetry SDK để trace propagation giữa services.
+- **Evaluation CI**: evaluation chỉ validation-only trong CI (kiểm tra cấu trúc question set). Evaluation thực tế (retrieval_accuracy, answer_correctness) cần backend live + JWT + document đã upload → không thể chạy trong CI hiện tại. Xem [`docs/eval_state.md`](eval_state.md).
+- **Golden reference answer**: không có dataset câu hỏi + golden reference answer semantic. Evaluation hiện tại chỉ đo lexical coverage, không đo semantic correctness chính xác.
+
 ## Local Monitoring
 
 Set the same development internal token in Prometheus configuration and backend, then run:
