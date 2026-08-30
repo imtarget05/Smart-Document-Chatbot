@@ -207,10 +207,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Validate eval questions
-        run: |
-          python eval/eval.py --validate-only --questions eval/questions.json
-          python eval/agent_eval.py --validate-only --questions eval/agent_questions.json || true
+      - name: Validate eval questions (classic RAG)
+        run: python eval/eval.py --validate-only --questions eval/questions.json
       - name: Upload eval results (if any)
         if: always()
         uses: actions/upload-artifact@v4
