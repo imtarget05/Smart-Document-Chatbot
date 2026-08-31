@@ -73,4 +73,24 @@ public class JwtTokenProvider {
         }
         return false;
     }
+
+    /**
+     * Generate JWT from OIDC principal attributes.
+     */
+    public String generateTokenFromPrincipal(org.springframework.security.oauth2.core.oidc.user.OidcUser principal) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("sub", principal.getEmail());
+        claims.put("email", principal.getEmail());
+        claims.put("name", principal.getFullName());
+        claims.put("role", "ROLE_USER"); // Default role for SSO users
+        claims.put("authType", "OAUTH2");
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(principal.getEmail())
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
+                .signWith(key)
+                .compact();
+    }
 }

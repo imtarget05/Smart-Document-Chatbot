@@ -111,7 +111,7 @@ public class DocumentService {
         Document saved = documentRepository.save(document);
 
         // Document versioning (V10): record version 1 for the initial upload.
-        documentVersionService.createVersion(saved, ownerUsername, "initial upload");
+        documentVersionService.createVersion(saved, ownerUsername, "Initial upload");
 
         // Phase 2 wiring (#7): fire document workflow (classify → extract → map → match)
         // to llm-router asynchronously. Không block upload response; nếu lỗi, upload
@@ -166,12 +166,8 @@ public class DocumentService {
             return current;
         }
 
-        // Archive the current state as an immutable snapshot; the live row
-        // keeps its id (history/citations stay stable) and advances one version.
-        com.smartdocchat.entity.DocumentVersion superseded =
-                documentVersionService.createVersion(current, actorUsername,
-                        "superseded by " + originalFileName);
-        current.setVersionNumber(superseded.getVersionNumber() + 1);
+        // Archive current version before replacing
+        documentVersionService.createVersion(current, actorUsername, "Document updated");
 
         String storagePath = storageService.upload(UUID.randomUUID() + "." + fileExtension, file);
         File savedFile = storageService.download(storagePath);
@@ -217,6 +213,9 @@ public class DocumentService {
                         .build());
             }
         }
+
+        // Advance version number
+        current.setVersionNumber(current.getVersionNumber() != null ? current.getVersionNumber() + 1 : 2);
 
         Document saved = documentRepository.save(current);
         log.info("Document {} replaced → version {} with {} chunks",
@@ -361,6 +360,7 @@ public class DocumentService {
                 .effectiveDate(d.getEffectiveDate())
                 .sourceType(d.getSourceType() != null ? d.getSourceType().name() : null)
                 .versionNumber(d.getVersionNumber())
+                .versionCount(documentVersionService.getVersionCount(d.getId()))
                 .build();
     }
 
