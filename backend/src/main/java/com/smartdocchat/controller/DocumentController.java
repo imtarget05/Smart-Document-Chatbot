@@ -38,7 +38,6 @@ public class DocumentController {
     private final AuditLogService auditLogService;
     private final DocumentVersionService documentVersionService;
 
-    /** Resolve the caller's Role from the JWT authentication set up by JwtAuthenticationFilter. */
     private Role currentRole() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) {
@@ -52,12 +51,10 @@ public class DocumentController {
                 .orElse(Role.ROLE_USER);
     }
 
-    /** Persist one immutable audit trail entry (best-effort, never breaks the request). */
     private void audit(String action, String username, String resourceType, String resourceId, String detail) {
         auditLogService.record(username, action, resourceType, resourceId, null, detail);
     }
 
-    /** Emit one structured audit line per document read (owner-scoped). */
     private void auditDocumentAccess(String action, Long id, String owner, boolean granted) {
         try {
             MDC.put("auditAction", action);
@@ -72,11 +69,7 @@ public class DocumentController {
             MDC.remove("granted");
         }
     }
-    /**
-     * Structured legal evidence units for a document (Decision 14 navigation).
-     * Owner isolation is enforced in DocumentService: another user's document
-     * returns 404, never its chunks.
-     */
+
     @GetMapping("/{id}/legal-chunks")
     public ResponseEntity<?> getLegalChunks(@PathVariable Long id, Principal principal) {
         try {
@@ -106,7 +99,6 @@ public class DocumentController {
             }).collect(Collectors.toList()));
             return ResponseEntity.ok(body);
         } catch (RuntimeException e) {
-            // Not found OR not owned by the caller — indistinguishable by design.
             auditDocumentAccess("document.read", id, principal.getName(), false);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(java.util.Map.of("message", "Document not found"));
@@ -126,9 +118,6 @@ public class DocumentController {
                 );
             }
 
-            // Document RBAC (production requirement #3): only ADMIN/ENGINEER
-            // may upload. ROLE_USER viewers get 403 (AccessDeniedException is
-            // mapped to FORBIDDEN by GlobalExceptionHandler).
             documentAccessService.checkUpload(currentRole());
 
             Document document = documentService.uploadDocument(file, principal.getName());
@@ -168,7 +157,6 @@ public class DocumentController {
         return ResponseEntity.ok(dtos);
     }
 
-    /** Legal document search (Decision 15). Owner-scoped; never exposes other users' documents. */
     @GetMapping("/search")
     public ResponseEntity<List<DocumentDTO>> searchDocuments(@RequestParam("q") String query, Principal principal) {
         return ResponseEntity.ok(documentService.searchDocuments(principal.getName(), query));
@@ -194,8 +182,6 @@ public class DocumentController {
         try {
             Document document =
                     documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
-            // Document RBAC (production requirement #3): ADMIN may delete any
-            // document; others only their own. Viewers cannot delete at all.
             documentAccessService.checkDelete(currentRole(), document.getOwnerUsername(), principal.getName());
             documentService.deleteDocument(id, principal.getName());
             audit("document.delete", principal.getName(), "document", String.valueOf(id), "granted=true");
@@ -206,11 +192,6 @@ public class DocumentController {
         }
     }
 
-    /**
-     * Replace a document's content with a new file version (document
-     * versioning, V10). The previous state is archived immutably and the live
-     * row advances to the next version number.
-     */
     @PutMapping("/{id}")
     public ResponseEntity<?> replaceDocument(@PathVariable Long id,
                                              @RequestParam("file") MultipartFile file,
@@ -236,7 +217,6 @@ public class DocumentController {
         }
     }
 
-    /** Amendment history of a legal document, newest first. */
     @GetMapping("/{id}/versions")
     public ResponseEntity<?> getDocumentVersions(@PathVariable Long id, Principal principal) {
         try {
@@ -244,11 +224,10 @@ public class DocumentController {
             List<DocumentVersion> versions = documentVersionService.getVersions(id);
             return ResponseEntity.ok(versions);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
         }
     }
 
-    /** Get a specific version of a document. */
     @GetMapping("/{id}/versions/{versionNumber}")
     public ResponseEntity<?> getDocumentVersion(
             @PathVariable Long id,

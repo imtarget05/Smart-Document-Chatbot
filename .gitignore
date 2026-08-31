@@ -1,108 +1,125 @@
-# Ignore IDE and OS files
+# ═══════════════════════════════════════════════════════════════
+# ENVIRONMENT & SECRETS
+# ═══════════════════════════════════════════════════════════════
+.env
+.env.local
+.env.*.local
+.env.production
+*.p12
+*.key
+*.pem
+*.secret
+secrets/
+
+# ═══════════════════════════════════════════════════════════════
+# INTERNAL DOCS & NOTES
+# ═══════════════════════════════════════════════════════════════
+PLAN.md
+AGENTS.md
+SMART_DOCUMENT_CHATBOT_NAB_READY_BLUEPRINT.md
+*.backup
+.hermes/
+ab_history/
+mlruns/
+benchmark/
+eval_framework/
+
+# Internal docs
+docs/SC_ACCELERATION_PLAN.md
+docs/TEST_PLAN_TOP_P.md
+docs/INTERVIEW_PREP.md
+
+# ═══════════════════════════════════════════════════════════════
+# PYTHON
+# ═══════════════════════════════════════════════════════════════
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.eggs/
+*.egg-info/
+dist/
+build/
+*.egg
+htmlcov/
+.coverage
+coverage.xml
+.tox/
+.nox/
+
+# ═══════════════════════════════════════════════════════════════
+# JAVA / MAVEN
+# ═══════════════════════════════════════════════════════════════
+target/
+*.class
+*.jar
+*.war
+*.ear
 .idea/
+*.iml
+.factorypath
+.springbeans
+
+# ═══════════════════════════════════════════════════════════════
+# NODE / FRONTEND
+# ═══════════════════════════════════════════════════════════════
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ═══════════════════════════════════════════════════════════════
+# IDE & OS
+# ═══════════════════════════════════════════════════════════════
 .vscode/
 *.swp
 *.swo
 *~
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Ignore project build files
-target/
-build/
-dist/
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
+# ═══════════════════════════════════════════════════════════════
+# DOCKER
+# ═══════════════════════════════════════════════════════════════
+docker-compose.override.yml
+.docker/
 
-# Ignore dependency directories
-node_modules/
-npm-debug.log
-yarn-error.log
-
-# Frontend test artifacts
-frontend/coverage/
-frontend/test-results/
-frontend/playwright-report/
-
-# Ignore Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Ignore environment files
-.env
-.env.local
-.env.*.local
-
-# Ignore database files
-*.sqlite
-*.sqlite3
-*.db
-
-# Ignore uploaded files
-uploads/
-/uploads
-
-# Local test-upload documents (PDF/DOCX/TXT fixtures)
-/Document/*.pdf
-/Document/*.docx
-/Document/*.txt
-
-# Ignore IDE specific files
-*.iml
-.gradle/
-.classpath
-.project
-.settings/
-
-# Ignore cache
-.cache/
-
-# Ignore logs
+# ═══════════════════════════════════════════════════════════════
+# TEMPORARY FILES
+# ═══════════════════════════════════════════════════════════════
+*.tmp
+*.temp
+*.bak
+*.orig
 *.log
 logs/
-
-# Ignore temporary files
 tmp/
 temp/
 
-# Docker volumes & data
-postgres_data/
-qdrant_data/
-grafana_data/
-prometheus_data/
-
-# Backups
-backups/
-*.sql.bak
-
-# Monitoring data
-docker/monitoring/grafana/data/
-
-# Production env files (keep .env.example as template)
-.env.production
-.env.staging
-
-# Evaluation results (regenerated per run)
-eval/results/*.json
-!eval/results/.gitkeep.json
-
-# Raw uploaded data
-data/raw/
-data/processed/
-
+# ═══════════════════════════════════════════════════════════════
+# LARGE FILES & MODEL WEIGHTS
+# ═══════════════════════════════════════════════════════════════
+backend/uploads/
 finetune/llama.cpp/
-finetune/qwen3-vi-f16.gguf
 finetune/qwen3-vi-fused/
-llm-router/.venv/
-supply-chain-module/api/.venv/
-supply-chain-module/.venv/
-supply-chain-module/mlruns/
-mlruns/
-ab_history/
+supply-chain-module/mlops/mlflow.db
+frontend/coverage/
+frontend/test-results/
+*.db

@@ -1,0 +1,140 @@
+{
+  "name": "02 - AI Chat with Confidence Routing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-question",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "chat-webhook",
+      "name": "Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/api/chat/ask",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$json.token}}"},
+            {"name": "X-XSRF-TOKEN", "value": "{{$json.csrf}}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "sessionId", "value": "{{$json.sessionId}}"},
+            {"name": "documentId", "value": "{{$json.documentId}}"},
+            {"name": "message", "value": "{{$json.message}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "call-chat-api",
+      "name": "Call Chat API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeOptions": {}
+          },
+          "conditions": [
+            {
+              "id": "confidence-check",
+              "leftValue": "={{$json.confidence}}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-confidence",
+      "name": "Check Confidence",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\"status\": \"answered\", \"answer\": \"{{$json.aiResponse}}\", \"confidence\": \"{{$json.confidence}}\", \"sources\": {{$json.sources}}}}"
+      },
+      "id": "respond-answer",
+      "name": "Return Answer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO escalation_queue (session_id, question, confidence, status, created_at) VALUES ('{{$json.sessionId}}', '{{$json.message}}', '{{$json.confidence}}', 'pending_review', NOW())",
+        "additionalFields": {}
+      },
+      "id": "save-escalation",
+      "name": "Escalate to Human",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [850, 400],
+      "credentials": {
+        "postgres": {
+          "id": "local-postgres",
+          "name": "Local Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\"status\": \"escalated\", \"message\": \"Question escalated to human review\", \"confidence\": \"{{$json.confidence}}\"}}"
+      },
+      "id": "respond-escalated",
+      "name": "Respond Escalated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 400]
+    }
+  ],
+  "connections": {
+    "Chat Webhook": {
+      "main": [[{"node": "Call Chat API", "type": "main", "index": 0}]]
+    },
+    "Call Chat API": {
+      "main": [[{"node": "Check Confidence", "type": "main", "index": 0}]]
+    },
+    "Check Confidence": {
+      "main": [
+        [{"node": "Return Answer", "type": "main", "index": 0}],
+        [{"node": "Escalate to Human", "type": "main", "index": 0}]
+      ]
+    },
+    "Escalate to Human": {
+      "main": [[{"node": "Respond Escalated", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-08-31T16:00:00.000Z",
+  "versionId": "1"
+}

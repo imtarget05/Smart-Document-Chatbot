@@ -178,3 +178,24 @@ test-top-p: ## top_p propagation unit tests (backend LLM tests + llm-router)
 
 e2e-top-p: ## Localhost end-to-end verification of top_p (mock provider + real router)
 	cd llm-router && .venv/bin/python ../scripts/local_top_p_e2e.py
+
+# ========================
+# Local Dev with Ollama + Router
+# ========================
+
+local-start: ## Start full local stack with Ollama + Router
+	bash scripts/start_local.sh
+
+local-ollama-pull: ## Pull required Ollama models
+	ollama pull llama3.2
+	ollama pull nomic-embed-text
+
+local-status: ## Check status of local services
+	@echo "Service Status:"
+	@echo "  Ollama:     $$(curl -s http://localhost:11434/api/version | grep -o '"version":"[^"]*"' || echo 'NOT RUNNING')"
+	@echo "  Backend:    $$(curl -s http://localhost:8080/api/actuator/health | grep -o '"status":"[^"]*"' || echo 'NOT RUNNING')"
+	@echo "  Router:     $$(curl -s http://localhost:8001/health | grep -o '"status":"[^"]*"' || echo 'NOT RUNNING')"
+	@echo "  Frontend:   $$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000 || echo 'NOT RUNNING')"
+	@echo "  Postgres:   $$(pg_isready -h localhost -p 5434 2>/dev/null || echo 'NOT RUNNING')"
+	@echo "  Qdrant:     $$(curl -s http://localhost:6333/health | head -c 50 || echo 'NOT RUNNING')"
+	@echo "  Redis:      $$(docker exec sdc-redis-dev redis-cli ping 2>/dev/null || echo 'NOT RUNNING')"

@@ -8,14 +8,13 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -32,9 +31,13 @@ public class SecurityConfig {
     private final OidcProperties oidcProperties;
     private final com.smartdocchat.security.CustomOidcUserService customOidcUserService;
     private final com.smartdocchat.security.OidcLoginSuccessHandler oidcLoginSuccessHandler;
+    private final com.smartdocchat.service.OAuth2UserService oAuth2UserService;
 
     @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:8080,http://127.0.0.1:3000}")
     private String allowedOrigins;
+
+    @Value("${oauth2.issuer-uri:}")
+    private String oauth2IssuerUri;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -47,8 +50,6 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .headers(headers -> headers
-                // The backend is also exposed directly on Render (no nginx in
-                // front), so these must not rely on the edge proxy.
                 .contentSecurityPolicy(csp -> csp.policyDirectives(
                     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                         + "img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"))
@@ -62,11 +63,9 @@ public class SecurityConfig {
             )
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository)
-                .csrfTokenRequestHandler(new XorCsrfTokenRequestAttributeHandler())
+                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
             )
             .sessionManagement(session -> session.sessionCreationPolicy(
-                    // OIDC authorization-code flow needs a session during the
-                    // handshake; pure-JWT deployments stay fully stateless.
                     oidcProperties.isEnabled()
                             ? SessionCreationPolicy.IF_REQUIRED
                             : SessionCreationPolicy.STATELESS))
@@ -80,8 +79,7 @@ public class SecurityConfig {
                     "/swagger-ui.html"
                 ).permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
-                .requestMatchers("/actuator/prometheus").permitAll() // guarded by InternalTokenFilter
-                // Immutable audit trail API — administrators only.
+                .requestMatchers("/actuator/prometheus").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/documents/**").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/documents/**").authenticated()
@@ -91,12 +89,14 @@ public class SecurityConfig {
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         if (oidcProperties.isEnabled()) {
-            // SSO/OIDC: corporate identity (Keycloak/Entra/Okta). Registration
-            // metadata comes from the issuer's discovery endpoint; users are
-            // auto-provisioned by CustomOidcUserService and issued the same
-            // app JWT via OidcLoginSuccessHandler.
             http.oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(userInfo -> userInfo.oidcUserService(customOidcUserService))
+                .successHandler(oidcLoginSuccessHandler));
+        }
+
+        if (!oidcProperties.isEnabled() && oauth2IssuerUri != null && !oauth2IssuerUri.isBlank()) {
+            http.oauth2Login(oauth2 -> oauth2
+                .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oAuth2UserService))
                 .successHandler(oidcLoginSuccessHandler));
         }
 

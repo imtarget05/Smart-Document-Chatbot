@@ -1,6 +1,7 @@
 package com.smartdocchat.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -16,12 +17,14 @@ public class ChatRequest {
     @NotBlank(message = "Session ID must not be blank")
     @Size(max = 100, message = "Session ID must be at most 100 characters")
     private String sessionId;
-    
+
+    @Positive(message = "Document ID must be a positive number")
     private Long documentId;
+
     private List<Long> documentIds;
-    
+
     @NotBlank(message = "Message must not be blank")
-    @Size(max = 8000, message = "Message must be at most 8000 characters")
+    @Size(max = 2000, message = "Message must be at most 2000 characters")
     private String message;
 
     private boolean deepThinking;

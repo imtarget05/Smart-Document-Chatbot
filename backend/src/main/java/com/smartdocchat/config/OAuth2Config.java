@@ -1,5 +1,6 @@
 package com.smartdocchat.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -9,34 +10,36 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.IdTokenClaimNames;
 
+/**
+ * Alternative OIDC client registration from oauth2.* environment variables.
+ * Supports any OIDC-compliant provider (Keycloak, Azure AD, Okta, Auth0, etc.)
+ *
+ * Required env vars:
+ * - OAUTH2_CLIENT_ID: OAuth2 client ID
+ * - OAUTH2_CLIENT_SECRET: OAuth2 client secret
+ * - OAUTH2_ISSUER_URI: OIDC issuer URI (e.g., https://keycloak.example.com/realms/myrealm)
+ *
+ * Optional:
+ * - OAUTH2_REDIRECT_URI: Redirect URI (default: http://localhost:8080/api/login/oauth2/code/{registrationId})
+ * - OAUTH2_SCOPES: Comma-separated scopes (default: openid,profile,email)
+ *
+ * This config is only active when oauth2.issuer-uri is set AND sso.oidc.enabled
+ * is false/unset, providing an alternative registration path that doesn't
+ * conflict with the primary OidcClientConfig.
+ */
 @Configuration
+@ConditionalOnExpression("\'${oauth2.issuer-uri:}\' != ''")
 public class OAuth2Config {
 
-    /**
-     * OIDC client registration for corporate SSO (Keycloak, Azure AD, Okta, Auth0...).
-     *
-     * Properties (oauth2.* takes precedence, sso.oidc.* is the fallback):
-     * - oauth2.client-id     / sso.oidc.client-id
-     * - oauth2.client-secret / sso.oidc.client-secret
-     * - oauth2.issuer-uri    / sso.oidc.issuer-uri
-     * - oauth2.redirect-uri  (default: http://localhost:8080/api/login/oauth2/code/oidc)
-     * - oauth2.scopes        (default: openid,profile,email)
-     *
-     * When nothing is configured an EMPTY repository is registered so local
-     * JWT deployments start exactly as before. The oauth2Login flow itself is
-     * only wired into the security chain when sso.oidc.enabled=true
-     * (see SecurityConfig).
-     */
     @Bean
     public ClientRegistrationRepository clientRegistrationRepository(
-            @org.springframework.beans.factory.annotation.Value("${oauth2.client-id:${sso.oidc.client-id:}}") String clientId,
-            @org.springframework.beans.factory.annotation.Value("${oauth2.client-secret:${sso.oidc.client-secret:}}") String clientSecret,
-            @org.springframework.beans.factory.annotation.Value("${oauth2.issuer-uri:${sso.oidc.issuer-uri:}}") String issuerUri,
+            @org.springframework.beans.factory.annotation.Value("${oauth2.client-id:}") String clientId,
+            @org.springframework.beans.factory.annotation.Value("${oauth2.client-secret:}") String clientSecret,
+            @org.springframework.beans.factory.annotation.Value("${oauth2.issuer-uri:}") String issuerUri,
             @org.springframework.beans.factory.annotation.Value("${oauth2.redirect-uri:}") String redirectUri,
             @org.springframework.beans.factory.annotation.Value("${oauth2.scopes:openid,profile,email}") String scopes) {
 
         if (clientId.isBlank() || clientSecret.isBlank() || issuerUri.isBlank()) {
-            // Return empty repository if not configured
             return new InMemoryClientRegistrationRepository();
         }
 

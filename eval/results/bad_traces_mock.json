@@ -1,0 +1,53 @@
+{
+  "exported_at": "2026-08-27T13:30:00+07:00",
+  "count": 4,
+  "traces": [
+    {
+      "trace_id": "t-001",
+      "timestamp": "2026-08-27T12:00:00Z",
+      "failure_reason": "strategy:no_evidence",
+      "strategy": "no_evidence",
+      "confidence": 0.12,
+      "document_id": 12,
+      "query": "Không có thông tin nào về chủ đề này",
+      "observations": []
+    },
+    {
+      "trace_id": "t-002",
+      "timestamp": "2026-08-27T12:05:00Z",
+      "failure_reason": "strategy:general_knowledge",
+      "strategy": "general_knowledge",
+      "confidence": 0.41,
+      "document_id": 12,
+      "query": "Framework frontend dùng gì",
+      "observations": [
+        {"name": "retrieve_chunks", "type": "SPAN", "model": "bge-base-en", "metadata": {"chunkCount": 1}, "output": "Backend dùng Spring Boot."}
+      ]
+    },
+    {
+      "trace_id": "t-003",
+      "timestamp": "2026-08-27T12:10:00Z",
+      "failure_reason": "llm_error, circuit_open=False",
+      "strategy": "direct",
+      "confidence": 0.91,
+      "document_id": 12,
+      "query": "Điều 5 nói về gì",
+      "observations": [
+        {"name": "generate_answer", "type": "GENERATION", "model": "llama-3.3-70b", "metadata": {"error": "llm_timeout"}, "status": "ERROR", "error": "llm_timeout"}
+      ]
+    },
+    {
+      "trace_id": "t-004",
+      "timestamp": "2026-08-27T12:15:00Z",
+      "failure_reason": "",
+      "strategy": "direct",
+      "confidence": 0.78,
+      "document_id": 12,
+      "query": "Quyền của người kiểm thử là gì",
+      "observations": [
+        {"name": "retrieve_chunks", "type": "SPAN", "model": null, "metadata": {"chunkCount": 2}, "output": "Điều 2. Người kiểm thử có quyền..."},
+        {"name": "generate_answer", "type": "GENERATION", "model": "llama-3.3-70b", "metadata": {"latencyMs": 1800}, "status": "COMPLETED", "output": "Người kiểm thử có quyền..."}
+      ]
+    }
+  ]
+}

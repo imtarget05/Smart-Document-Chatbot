@@ -2,6 +2,7 @@ package com.smartdocchat.controller;
 
 import com.smartdocchat.dto.AuthRequest;
 import com.smartdocchat.dto.AuthResponse;
+import com.smartdocchat.dto.RegisterRequest;
 import com.smartdocchat.entity.Role;
 import com.smartdocchat.entity.User;
 import com.smartdocchat.repository.UserRepository;
@@ -43,6 +44,10 @@ class AuthControllerTest {
         return AuthRequest.builder().username(username).password(password).build();
     }
 
+    private RegisterRequest registerRequest(String username, String password, String email) {
+        return RegisterRequest.builder().username(username).password(password).email(email).build();
+    }
+
     private User enabledUser(String username, String encoded) {
         return User.builder().username(username).password(encoded).role(Role.ROLE_USER).enabled(true).build();
     }
@@ -55,7 +60,7 @@ class AuthControllerTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(tokenProvider.generateToken("alice", "ROLE_USER")).thenReturn("jwt-token");
 
-        ResponseEntity<?> response = controller.registerUser(request("alice", "password123456"));
+        ResponseEntity<?> response = controller.registerUser(registerRequest("alice", "password123456", "alice@example.com"));
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         AuthResponse body = (AuthResponse) response.getBody();
@@ -69,7 +74,7 @@ class AuthControllerTest {
         controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.existsByUsername("alice")).thenReturn(true);
 
-        ResponseEntity<?> response = controller.registerUser(request("alice", "password123456"));
+        ResponseEntity<?> response = controller.registerUser(registerRequest("alice", "password123456", "alice@example.com"));
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("Username is already taken!", response.getBody());

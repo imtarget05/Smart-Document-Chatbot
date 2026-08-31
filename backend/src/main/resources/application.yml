@@ -46,6 +46,14 @@ server:
   servlet:
     context-path: /api
   shutdown: graceful
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${SSL_KEY_STORE:classpath:keystore.p12}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:changeit}
+    key-store-type: ${SSL_KEY_STORE_TYPE:PKCS12}
+    key-alias: ${SSL_KEY_ALIAS:smartdoc}
+    protocol: TLS
+    enabled-protocols: TLSv1.2,TLSv1.3
 
 jwt:
   # DEV-ONLY fallback so local development works without configuration.
@@ -189,6 +197,16 @@ sso:
     client-secret: ${SSO_OIDC_CLIENT_SECRET:}
     post-login-redirect: ${SSO_OIDC_POST_LOGIN_REDIRECT:http://localhost:3000}
     admin-usernames: ${SSO_OIDC_ADMIN_USERNAMES:}
+
+# OAuth2/OIDC alternative configuration (oauth2.* properties).
+# Used when OAUTH2_ISSUER_URI is set, providing a simpler setup path
+# that doesn't require the full sso.oidc.* configuration.
+oauth2:
+  client-id: ${OAUTH2_CLIENT_ID:}
+  client-secret: ${OAUTH2_CLIENT_SECRET:}
+  issuer-uri: ${OAUTH2_ISSUER_URI:}
+  redirect-uri: ${OAUTH2_REDIRECT_URI:}
+  scopes: ${OAUTH2_SCOPES:openid,profile,email}
 
 # Langfuse observability (traces per CRAG request). Opt-in: when
 # LANGFUSE_PUBLIC_KEY is empty the tracer is disabled and the app runs

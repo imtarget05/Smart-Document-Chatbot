@@ -45,6 +45,28 @@ services:
       timeout: 5s
       retries: 15
 
+  llm-router:
+    image: python:3.11-slim
+    container_name: smartdoc-local-llm-router
+    working_dir: /app
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             uvicorn main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ../llm-router:/app
+    ports:
+      - "8001:8000"
+    environment:
+      - LOCAL_OLLAMA_URL=http://host.docker.internal:11434
+      - LOCAL_OLLAMA_MODEL=llama3.2
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+      - INTERNAL_TOKEN=dev-internal-token-local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - ollama
+
 volumes:
   pgdata_local:
   qdrant_local:

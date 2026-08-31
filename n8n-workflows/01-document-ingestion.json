@@ -1,0 +1,126 @@
+{
+  "name": "01 - Document Ingestion Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-uploaded",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "doc-ingest-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/api/documents/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$json.token}}"},
+            {"name": "X-XSRF-TOKEN", "value": "{{$json.csrf}}"}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "file", "value": "{{$json.file_url}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "upload-document",
+      "name": "Upload to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "amount": 5
+      },
+      "id": "wait-processing",
+      "name": "Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:8080/api/documents/{{$json.documentId}}/legal-chunks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$node['Webhook Trigger'].json.token}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-chunks",
+      "name": "Get Document Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO document_analytics (document_id, chunk_count, processed_at) VALUES ({{$json.documentId}}, {{$json.chunk_count}}, NOW()) ON CONFLICT (document_id) DO UPDATE SET chunk_count = {{$json.chunk_count}}, processed_at = NOW()",
+        "additionalFields": {}
+      },
+      "id": "save-analytics",
+      "name": "Save to Analytics DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [1050, 300],
+      "credentials": {
+        "postgres": {
+          "id": "local-postgres",
+          "name": "Local Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\"status\": \"success\", \"documentId\": {{$json.documentId}}, \"chunks\": {{$json.chunk_count}}}}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "Upload to Backend", "type": "main", "index": 0}]]
+    },
+    "Upload to Backend": {
+      "main": [[{"node": "Wait for Processing", "type": "main", "index": 0}]]
+    },
+    "Wait for Processing": {
+      "main": [[{"node": "Get Document Chunks", "type": "main", "index": 0}]]
+    },
+    "Get Document Chunks": {
+      "main": [[{"node": "Save to Analytics DB", "type": "main", "index": 0}]]
+    },
+    "Save to Analytics DB": {
+      "main": [[{"node": "Respond Success", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-08-31T16:00:00.000Z",
+  "versionId": "1"
+}

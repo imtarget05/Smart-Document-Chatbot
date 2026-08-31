@@ -2,6 +2,7 @@ package com.smartdocchat.controller;
 
 import com.smartdocchat.dto.AuthRequest;
 import com.smartdocchat.dto.AuthResponse;
+import com.smartdocchat.dto.RegisterRequest;
 import com.smartdocchat.entity.Role;
 import com.smartdocchat.entity.User;
 import com.smartdocchat.repository.UserRepository;
@@ -32,21 +33,22 @@ public class AuthController {
     private final AuditLogService auditLogService;
 
     private static final String JWT_COOKIE_NAME = "jwt_token";
-    private static final int JWT_COOKIE_MAX_AGE_SECONDS = 86400; // 24h
+    private static final int JWT_COOKIE_MAX_AGE_SECONDS = 86400;
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@Valid @RequestBody AuthRequest authRequest) {
-        log.info("Registering user: {}", authRequest.getUsername());
+    public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
+        log.info("Registering user: {}", registerRequest.getUsername());
 
-        if (userRepository.existsByUsername(authRequest.getUsername())) {
+        if (userRepository.existsByUsername(registerRequest.getUsername())) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body("Username is already taken!");
         }
 
         User user = User.builder()
-                .username(authRequest.getUsername())
-                .password(passwordEncoder.encode(authRequest.getPassword()))
+                .username(registerRequest.getUsername())
+                .password(passwordEncoder.encode(registerRequest.getPassword()))
+                .email(registerRequest.getEmail())
                 .role(Role.ROLE_USER)
                 .enabled(true)
                 .build();
@@ -71,7 +73,6 @@ public class AuthController {
         String username = authRequest.getUsername();
         log.info("Authenticating user: {} from ip: {}", username, clientIp);
 
-        // Check account lockout
         if (loginAuditService.isAccountLocked(username)) {
             log.warn("Login attempt for locked account: {}", username);
             return ResponseEntity
@@ -83,13 +84,11 @@ public class AuthController {
                 .filter(User::getEnabled)
                 .filter(user -> passwordEncoder.matches(authRequest.getPassword(), user.getPassword()))
                 .<ResponseEntity<?>>map(user -> {
-                    // Success – record audit, clear failures, set httpOnly cookie
                     loginAuditService.recordSuccess(username, clientIp);
                     auditLogService.record(username, "auth.login", "user", username, clientIp, "success");
 
                     String token = tokenProvider.generateToken(user.getUsername(), user.getRole().name());
 
-                    // httpOnly + SameSite cookie (Secure only on HTTPS)
                     Cookie jwtCookie = new Cookie(JWT_COOKIE_NAME, token);
                     jwtCookie.setHttpOnly(true);
                     jwtCookie.setPath("/");
@@ -98,7 +97,6 @@ public class AuthController {
                     jwtCookie.setSecure("https".equalsIgnoreCase(System.getProperty("server.scheme", "http")));
                     response.addCookie(jwtCookie);
 
-                    // Also return token in body for non-browser clients (mobile apps, CLI)
                     return ResponseEntity.ok(AuthResponse.builder()
                             .token(token)
                             .username(user.getUsername())
@@ -106,7 +104,6 @@ public class AuthController {
                             .build());
                 })
                 .orElseGet(() -> {
-                    // Failed – record audit
                     loginAuditService.recordFailure(username, clientIp);
                     auditLogService.record(username, "auth.login.failed", "user", username, clientIp, "invalid credentials");
                     return ResponseEntity

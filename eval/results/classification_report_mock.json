@@ -1,0 +1,111 @@
+{
+  "report_at": "2026-08-27T14:08:00.001033",
+  "total_traces": 4,
+  "by_category": {
+    "retrieval_weak": 0,
+    "hallucination": 0,
+    "wrong_tool": 1,
+    "direct_ok": 3
+  },
+  "by_category_pct": {
+    "retrieval_weak": 0.0,
+    "hallucination": 0.0,
+    "wrong_tool": 25.0,
+    "direct_ok": 75.0
+  },
+  "reasons": {
+    "No failure detected — trace completed normally": 3,
+    "LLM or router failure: llm_timeout": 1
+  },
+  "strategy_distribution": {
+    "unknown": 4
+  },
+  "per_category": {
+    "retrieval_weak": {
+      "count": 0,
+      "pct": 0.0,
+      "examples": [],
+      "suggestions": [],
+      "strategies": {}
+    },
+    "hallucination": {
+      "count": 0,
+      "pct": 0.0,
+      "examples": [],
+      "suggestions": [],
+      "strategies": {}
+    },
+    "wrong_tool": {
+      "count": 1,
+      "pct": 25.0,
+      "examples": [
+        "Điều 5 nói về gì"
+      ],
+      "suggestions": [
+        "Circuit breaker open or LLM returned invalid structure — enable local Ollama fallback (qwen3:8b)",
+        "If transient Cloudflare Workers AI error, request retry loop already in place; verify on staging"
+      ],
+      "strategies": {
+        "unknown": 1
+      }
+    },
+    "direct_ok": {
+      "count": 3,
+      "pct": 75.0,
+      "examples": [
+        "Không có thông tin nào về chủ đề này",
+        "Framework frontend dùng gì",
+        "Quyền của người kiểm thử là gì"
+      ],
+      "suggestions": [],
+      "strategies": {
+        "unknown": 3
+      }
+    }
+  },
+  "classifications": [
+    {
+      "trace_id": "t-001",
+      "query": "Không có thông tin nào về chủ đề này",
+      "strategy": "unknown",
+      "confidence": null,
+      "document_id": null,
+      "category": "direct_ok",
+      "reason": "No failure detected — trace completed normally",
+      "suggestions": []
+    },
+    {
+      "trace_id": "t-002",
+      "query": "Framework frontend dùng gì",
+      "strategy": "unknown",
+      "confidence": null,
+      "document_id": null,
+      "category": "direct_ok",
+      "reason": "No failure detected — trace completed normally",
+      "suggestions": []
+    },
+    {
+      "trace_id": "t-003",
+      "query": "Điều 5 nói về gì",
+      "strategy": "unknown",
+      "confidence": null,
+      "document_id": null,
+      "category": "wrong_tool",
+      "reason": "LLM or router failure: llm_timeout",
+      "suggestions": [
+        "Circuit breaker open or LLM returned invalid structure — enable local Ollama fallback (qwen3:8b)",
+        "If transient Cloudflare Workers AI error, request retry loop already in place; verify on staging"
+      ]
+    },
+    {
+      "trace_id": "t-004",
+      "query": "Quyền của người kiểm thử là gì",
+      "strategy": "unknown",
+      "confidence": null,
+      "document_id": null,
+      "category": "direct_ok",
+      "reason": "No failure detected — trace completed normally",
+      "suggestions": []
+    }
+  ]
+}

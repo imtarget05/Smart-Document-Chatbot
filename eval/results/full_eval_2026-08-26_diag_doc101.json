@@ -1,0 +1,644 @@
+{
+  "timestamp": "2026-08-26T11:08:14.141020+00:00",
+  "base_url": "https://smart-doc-backend-h4mt.onrender.com/api",
+  "document_id": 101,
+  "total_questions": 31,
+  "successful_requests": 31,
+  "retrieval_accuracy": 0.7097,
+  "answer_correctness": 0.7097,
+  "hallucination_cases": 3,
+  "hallucination_rate": 0.0968,
+  "average_latency_ms": 2685,
+  "p95_latency_ms": 5242,
+  "min_latency_ms": 856,
+  "max_latency_ms": 8675,
+  "error_count": 0,
+  "provider_errors": 0,
+  "provider_error_rate": 0.0,
+  "genuine_llm_responses": 31,
+  "details": [
+    {
+      "question_id": 1,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "spring boot",
+        "fastapi"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "backend",
+        "framework",
+        "spring"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 3645,
+      "confidence": "high",
+      "confidence_score": 1.0,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 2,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "qdrant"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "qdrant",
+        "vector",
+        "embedding"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1027,
+      "confidence": "high",
+      "confidence_score": 1.0,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 3,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "@cf/baai/bge-base-en-v1.5"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "embed",
+        "embedding"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1252,
+      "confidence": "high",
+      "confidence_score": 1.0,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 4,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "reformulation",
+        "re-retrieval",
+        "web search",
+        "fallback"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "confidence",
+        "crag",
+        "fallback",
+        "agentic"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 2758,
+      "confidence": "high",
+      "confidence_score": 1.0,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 5,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "0.45"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "confidence",
+        "0.45"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1071,
+      "confidence": "high",
+      "confidence_score": 0.92,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 6,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "upload",
+        "chunking",
+        "index"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "pipeline",
+        "etl",
+        "chunk",
+        "airflow"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1928,
+      "confidence": "high",
+      "confidence_score": 0.91,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 7,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "tanstack query"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "tanstack",
+        "cache"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1379,
+      "confidence": "medium",
+      "confidence_score": 0.6,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 7.5,
+      "difficulty": "medium",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": false,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": false,
+      "latency_ms": 1212,
+      "confidence": "medium",
+      "confidence_score": 0.69,
+      "rag_strategy": "no_evidence",
+      "status": "success"
+    },
+    {
+      "question_id": 8,
+      "difficulty": "hard",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "web search"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "fallback",
+        "web search"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 5091,
+      "confidence": "high",
+      "confidence_score": 0.79,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 10,
+      "difficulty": "easy",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "llm"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1975,
+      "confidence": "high",
+      "confidence_score": 0.91,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 12,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "pdf",
+        "docx",
+        "txt"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "upload"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 2638,
+      "confidence": "high",
+      "confidence_score": 0.83,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 15,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "jwt",
+        "token"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "jwt",
+        "auth",
+        "token"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1401,
+      "confidence": "high",
+      "confidence_score": 0.74,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 16,
+      "difficulty": "hard",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "parallel"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "retrieval"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 4551,
+      "confidence": "high",
+      "confidence_score": 0.74,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 17,
+      "difficulty": "easy",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "postgresql",
+        "database"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "postgresql",
+        "chat"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 2988,
+      "confidence": "high",
+      "confidence_score": 0.77,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 18,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "prometheus",
+        "grafana"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "prometheus",
+        "grafana"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1222,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 18.5,
+      "difficulty": "hard",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "document"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "document"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 4986,
+      "confidence": "medium",
+      "confidence_score": 0.62,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 19,
+      "difficulty": "easy",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "web",
+        "search"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 2623,
+      "confidence": "high",
+      "confidence_score": 1.0,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 20,
+      "difficulty": "hard",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "hallucination",
+        "confidence"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 4054,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "corrective",
+      "status": "success"
+    },
+    {
+      "question_id": 21,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "upload",
+        "chat"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "rate",
+        "limit"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 960,
+      "confidence": "high",
+      "confidence_score": 0.9,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 22,
+      "difficulty": "medium",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": true,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": false,
+      "latency_ms": 6657,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 23,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "pii"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "pii"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1584,
+      "confidence": "medium",
+      "confidence_score": 0.62,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 24,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "role-based",
+        "rbac"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "rbac"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 3665,
+      "confidence": "high",
+      "confidence_score": 0.79,
+      "rag_strategy": "corrective",
+      "status": "success"
+    },
+    {
+      "question_id": 25,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "backup",
+        "postgresql"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": true,
+      "latency_ms": 3727,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 25.5,
+      "difficulty": "medium",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": false,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": false,
+      "latency_ms": 1026,
+      "confidence": "high",
+      "confidence_score": 0.77,
+      "rag_strategy": "no_evidence",
+      "status": "success"
+    },
+    {
+      "question_id": 26,
+      "difficulty": "hard",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": false,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": false,
+      "latency_ms": 1390,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "no_evidence",
+      "status": "success"
+    },
+    {
+      "question_id": 27,
+      "difficulty": "hard",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": false,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": false,
+      "latency_ms": 876,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "no_evidence",
+      "status": "success"
+    },
+    {
+      "question_id": 27.5,
+      "difficulty": "hard",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "acid",
+        "transaction"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "acid",
+        "transaction"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 5242,
+      "confidence": "medium",
+      "confidence_score": 0.69,
+      "rag_strategy": "corrective",
+      "status": "success"
+    },
+    {
+      "question_id": 28,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "retry",
+        "timeout"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": true,
+      "latency_ms": 8675,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 29,
+      "difficulty": "easy",
+      "answer_correct": false,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": false,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": false,
+      "latency_ms": 856,
+      "confidence": "medium",
+      "confidence_score": 0.61,
+      "rag_strategy": "no_evidence",
+      "status": "success"
+    },
+    {
+      "question_id": 29.5,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "review"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": false,
+      "source_hits": [],
+      "is_hallucination": true,
+      "latency_ms": 1388,
+      "confidence": "high",
+      "confidence_score": 0.74,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": 30,
+      "difficulty": "medium",
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "ci/cd",
+        "github actions"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "ci/cd"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 1398,
+      "confidence": "medium",
+      "confidence_score": 0.65,
+      "rag_strategy": "direct",
+      "status": "success"
+    }
+  ]
+}

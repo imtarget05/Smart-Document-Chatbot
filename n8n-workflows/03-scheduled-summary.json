@@ -1,0 +1,112 @@
+{
+  "name": "03 - Scheduled Document Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": [
+          {"interval": [{"field": "cronExpression", "expression": "0 9 * * *"}]}
+        ]
+      },
+      "id": "schedule-trigger",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$json.token}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-documents",
+      "name": "Get All Documents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "documents",
+        "options": {}
+      },
+      "id": "split-documents",
+      "name": "Split Per Document",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/api/chat/ask",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "sessionId", "value": "n8n-summary-{{$now.toISO()}}"},
+            {"name": "documentId", "value": "{{$json.id}}"},
+            {"name": "message", "value": "Tóm tắt nội dung chính của tài liệu này trong 3-5 câu."}
+          ]
+        },
+        "options": {}
+      },
+      "id": "generate-summary",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO document_summaries (document_id, summary, generated_at) VALUES ({{$json.documentId}}, '{{$json.aiResponse}}', NOW())",
+        "additionalFields": {}
+      },
+      "id": "save-summary",
+      "name": "Save Summary",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [1050, 300],
+      "credentials": {
+        "postgres": {
+          "id": "local-postgres",
+          "name": "Local Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [[{"node": "Get All Documents", "type": "main", "index": 0}]]
+    },
+    "Get All Documents": {
+      "main": [[{"node": "Split Per Document", "type": "main", "index": 0}]]
+    },
+    "Split Per Document": {
+      "main": [[{"node": "Generate Summary", "type": "main", "index": 0}]]
+    },
+    "Generate Summary": {
+      "main": [[{"node": "Save Summary", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-08-31T16:00:00.000Z",
+  "versionId": "1"
+}

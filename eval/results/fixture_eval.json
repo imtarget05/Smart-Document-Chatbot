@@ -1,0 +1,193 @@
+{
+  "summary": {
+    "timestamp": "2026-08-25T14:14:21.564645+00:00",
+    "base_url": "https://smart-doc-backend-h4mt.onrender.com/api",
+    "document_id": 68,
+    "total_questions": 3,
+    "successful_requests": 3,
+    "retrieval_accuracy": 1.0,
+    "answer_correctness": 1.0,
+    "hallucination_cases": 0,
+    "hallucination_rate": 0.0,
+    "average_latency_ms": 12594,
+    "p95_latency_ms": 5688,
+    "min_latency_ms": 3147,
+    "max_latency_ms": 28947,
+    "error_count": 0,
+    "provider_errors": 0,
+    "provider_error_rate": 0.0,
+    "genuine_llm_responses": 3,
+    "details": [
+      {
+        "question_id": "agent-001",
+        "difficulty": null,
+        "answer_correct": true,
+        "provider_error": false,
+        "keywords_found": [
+          "root cause",
+          "corrective",
+          "verification"
+        ],
+        "evidence_supported": true,
+        "retrieval_accurate": true,
+        "source_hits": [
+          "failure",
+          "root cause",
+          "corrective"
+        ],
+        "is_hallucination": false,
+        "latency_ms": 28947,
+        "confidence": "high",
+        "confidence_score": 0.83,
+        "rag_strategy": "direct",
+        "status": "success"
+      },
+      {
+        "question_id": "agent-002",
+        "difficulty": null,
+        "answer_correct": true,
+        "provider_error": false,
+        "keywords_found": [
+          "risk"
+        ],
+        "evidence_supported": true,
+        "retrieval_accurate": true,
+        "source_hits": [
+          "risk"
+        ],
+        "is_hallucination": false,
+        "latency_ms": 3147,
+        "confidence": "high",
+        "confidence_score": 0.83,
+        "rag_strategy": "direct",
+        "status": "success"
+      },
+      {
+        "question_id": "agent-003",
+        "difficulty": null,
+        "answer_correct": true,
+        "provider_error": false,
+        "keywords_found": [],
+        "evidence_supported": true,
+        "retrieval_accurate": true,
+        "source_hits": [
+          "failure",
+          "action"
+        ],
+        "is_hallucination": false,
+        "latency_ms": 5688,
+        "confidence": "high",
+        "confidence_score": 0.83,
+        "rag_strategy": "direct",
+        "status": "success",
+        "concepts_expected": 2,
+        "concepts_covered": 2,
+        "concept_details": [
+          {
+            "concept": "compares failure causes",
+            "covered": true,
+            "matched_forms": [
+              "failure cause",
+              "root cause"
+            ]
+          },
+          {
+            "concept": "compares mitigation actions",
+            "covered": true,
+            "matched_forms": [
+              "mitigation action",
+              "mitigation"
+            ]
+          }
+        ],
+        "grading_mode": "structured_concepts"
+      }
+    ]
+  },
+  "details": [
+    {
+      "question_id": "agent-001",
+      "difficulty": null,
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "root cause",
+        "corrective",
+        "verification"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "failure",
+        "root cause",
+        "corrective"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 28947,
+      "confidence": "high",
+      "confidence_score": 0.83,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": "agent-002",
+      "difficulty": null,
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [
+        "risk"
+      ],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "risk"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 3147,
+      "confidence": "high",
+      "confidence_score": 0.83,
+      "rag_strategy": "direct",
+      "status": "success"
+    },
+    {
+      "question_id": "agent-003",
+      "difficulty": null,
+      "answer_correct": true,
+      "provider_error": false,
+      "keywords_found": [],
+      "evidence_supported": true,
+      "retrieval_accurate": true,
+      "source_hits": [
+        "failure",
+        "action"
+      ],
+      "is_hallucination": false,
+      "latency_ms": 5688,
+      "confidence": "high",
+      "confidence_score": 0.83,
+      "rag_strategy": "direct",
+      "status": "success",
+      "concepts_expected": 2,
+      "concepts_covered": 2,
+      "concept_details": [
+        {
+          "concept": "compares failure causes",
+          "covered": true,
+          "matched_forms": [
+            "failure cause",
+            "root cause"
+          ]
+        },
+        {
+          "concept": "compares mitigation actions",
+          "covered": true,
+          "matched_forms": [
+            "mitigation action",
+            "mitigation"
+          ]
+        }
+      ],
+      "grading_mode": "structured_concepts"
+    }
+  ]
+}
