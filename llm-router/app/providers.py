@@ -118,6 +118,7 @@ class CloudflareProvider:
                 if isinstance(m.content, str)
             ],
             "stream": False,
+            **{k: request.options[k] for k in ("top_p", "temperature") if k in (request.options or {}) and isinstance(request.options[k], (int, float))},
         }
         try:
             async with asyncio.timeout(self.settings.cloudflare_timeout_seconds):
@@ -160,6 +161,7 @@ class CloudflareProvider:
                 if isinstance(m.content, str)
             ],
             "stream": True,
+            **{k: request.options[k] for k in ("top_p", "temperature") if k in (request.options or {}) and isinstance(request.options[k], (int, float))},
         }
         try:
             async with self.client.stream(
@@ -311,6 +313,7 @@ class LocalOllamaProvider:
         }
         options = dict(request.options or {})
         options.setdefault("temperature", 0.3)
+        options.setdefault("top_p", 0.95)
         body["options"] = options
         return body
 

@@ -10,6 +10,25 @@ fallback).
 - `GET /health`: reports service provider configuration status.
 
 ## Routing
+## Testing
+
+The router has its **own virtualenv** at `llm-router/.venv` — the repo-root
+`.venv` does not contain `pdfplumber`, so running pytest with the root
+interpreter fails during collection of `tests/test_document_graph.py`.
+Always run tests through the local venv:
+
+```bash
+make test-router          # equivalent to the command below
+cd llm-router && .venv/bin/python -m pytest -q
+```
+
+For the top_p sampling end-to-end chain (mock Ollama + real router app):
+
+```bash
+make e2e-top-p            # runs scripts/local_top_p_e2e.py (10 checks)
+```
+
+## Routing
 
 The router serves **Cloudflare Workers AI** as the only provider. The routing
 logic still classifies request complexity for observability (logs include the
