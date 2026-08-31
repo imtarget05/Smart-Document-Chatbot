@@ -79,7 +79,7 @@ public class LlmClient {
                 Map.of("role", "system", "content", systemPrompt),
                 Map.of("role", "user", "content", userPrompt)));
         requestBody.put("options",
-                Map.of("temperature", llmConfig.getTemperature(), "num_predict", 2048));
+                Map.of("temperature", llmConfig.getTemperature(), "top_p", llmConfig.getTopP(), "num_predict", 2048));
         requestBody.put("stream", false);
 
         log.info("Calling local LLM model: {}", llmConfig.getChatModel());

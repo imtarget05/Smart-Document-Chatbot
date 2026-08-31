@@ -9,6 +9,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
@@ -155,5 +156,25 @@ class LlmClientTest {
                 SYS, USER, new ResourceAccessException("timeout")));
         assertEquals(LlmClient.NO_RESPONSE_PLACEHOLDER, llmClient.chatFallback(
                 SYS, USER, new LlmClient.UnexpectedResponseException("bad body")));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void chatSendsTopPSamplingInOptions() {
+        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("message", Map.of("content", "answer"))));
+
+        assertEquals("answer", guardedChat());
+
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor =
+                ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST),
+                captor.capture(), eq(Map.class));
+        Map<String, Object> body = captor.getValue().getBody();
+        Map<String, Object> options = (Map<String, Object>) body.get("options");
+        assertEquals(0.95, ((Number) options.get("top_p")).doubleValue());
+        assertEquals(0.3, ((Number) options.get("temperature")).doubleValue());
+        assertEquals(2048, ((Number) options.get("num_predict")).intValue());
     }
 }

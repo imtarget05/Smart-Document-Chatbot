@@ -24,5 +24,6 @@ class LlmConfigTest {
         assertTrue(config.getMaxAttempts() >= 1);
         assertTrue(config.getRetryBackoffMs() > 0);
         assertEquals(0.3, config.getTemperature());
+        assertEquals(0.95, config.getTopP());
     }
 }

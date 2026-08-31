@@ -16,6 +16,7 @@ public class LlmConfig {
     private String chatModel = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
     private String embeddingModel = "@cf/baai/bge-base-en-v1.5";
     private double temperature = 0.3;
+    private double topP = 0.95;
     
     // Retry configurations
     private int maxAttempts = 3;
