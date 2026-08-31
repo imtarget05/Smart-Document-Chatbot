@@ -3,10 +3,12 @@ package com.smartdocchat.controller;
 import com.smartdocchat.dto.DocumentDTO;
 import com.smartdocchat.dto.UploadResponse;
 import com.smartdocchat.entity.Document;
+import com.smartdocchat.entity.DocumentVersion;
 import com.smartdocchat.entity.Role;
 import com.smartdocchat.service.AuditLogService;
 import com.smartdocchat.service.DocumentAccessService;
 import com.smartdocchat.service.DocumentService;
+import com.smartdocchat.service.DocumentVersionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,6 +36,7 @@ public class DocumentController {
     private final DocumentService documentService;
     private final DocumentAccessService documentAccessService;
     private final AuditLogService auditLogService;
+    private final DocumentVersionService documentVersionService;
 
     /** Resolve the caller's Role from the JWT authentication set up by JwtAuthenticationFilter. */
     private Role currentRole() {
@@ -202,6 +206,63 @@ public class DocumentController {
         }
     }
 
+    /**
+     * Replace a document's content with a new file version (document
+     * versioning, V10). The previous state is archived immutably and the live
+     * row advances to the next version number.
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<?> replaceDocument(@PathVariable Long id,
+                                             @RequestParam("file") MultipartFile file,
+                                             Principal principal) {
+        try {
+            Document document =
+                    documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
+            documentAccessService.checkReplace(currentRole(), document.getOwnerUsername(), principal.getName());
+            Document replaced = documentService.replaceDocument(document, file, principal.getName());
+            audit("document.replace", principal.getName(), "document", String.valueOf(id),
+                    "version=" + replaced.getVersionNumber());
+            return ResponseEntity.ok(convertToDTO(replaced));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", e.getMessage()));
+        } catch (IOException e) {
+            log.error("Error replacing document", e);
+            audit("document.replace.failed", principal.getName(), "document", String.valueOf(id), e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(java.util.Map.of("message", "Unable to replace the document"));
+        } catch (RuntimeException e) {
+            audit("document.replace.denied", principal.getName(), "document", String.valueOf(id), "granted=false");
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Amendment history of a legal document, newest first. */
+    @GetMapping("/{id}/versions")
+    public ResponseEntity<?> getDocumentVersions(@PathVariable Long id, Principal principal) {
+        try {
+            documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
+            List<DocumentVersion> versions = documentVersionService.getVersions(id);
+            return ResponseEntity.ok(versions);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Get a specific version of a document. */
+    @GetMapping("/{id}/versions/{versionNumber}")
+    public ResponseEntity<?> getDocumentVersion(
+            @PathVariable Long id,
+            @PathVariable Integer versionNumber,
+            Principal principal) {
+        try {
+            documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
+            DocumentVersion version = documentVersionService.getVersion(id, versionNumber);
+            return ResponseEntity.ok(version);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     private DocumentDTO convertToDTO(Document document) {
         return DocumentDTO.builder()
                 .id(document.getId())
@@ -218,6 +279,8 @@ public class DocumentController {
                 .effectiveDate(document.getEffectiveDate())
                 .sourceType(document.getSourceType() != null
                         ? document.getSourceType().name() : null)
+                .versionNumber(document.getVersionNumber())
+                .versionCount(documentVersionService.getVersionCount(document.getId()))
                 .workflowResult(document.getWorkflowResult())
                 .build();
     }

@@ -29,6 +29,9 @@ import java.util.Arrays;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final OidcProperties oidcProperties;
+    private final com.smartdocchat.security.CustomOidcUserService customOidcUserService;
+    private final com.smartdocchat.security.OidcLoginSuccessHandler oidcLoginSuccessHandler;
 
     @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:8080,http://127.0.0.1:3000}")
     private String allowedOrigins;
@@ -61,10 +64,16 @@ public class SecurityConfig {
                 .csrfTokenRepository(csrfTokenRepository)
                 .csrfTokenRequestHandler(new XorCsrfTokenRequestAttributeHandler())
             )
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionManagement(session -> session.sessionCreationPolicy(
+                    // OIDC authorization-code flow needs a session during the
+                    // handshake; pure-JWT deployments stay fully stateless.
+                    oidcProperties.isEnabled()
+                            ? SessionCreationPolicy.IF_REQUIRED
+                            : SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/api/csrf").permitAll()
+                .requestMatchers("/csrf").permitAll()
+                .requestMatchers("/login/oauth2/**", "/oauth2/**").permitAll()
                 .requestMatchers(
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
@@ -80,6 +89,16 @@ public class SecurityConfig {
             );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        if (oidcProperties.isEnabled()) {
+            // SSO/OIDC: corporate identity (Keycloak/Entra/Okta). Registration
+            // metadata comes from the issuer's discovery endpoint; users are
+            // auto-provisioned by CustomOidcUserService and issued the same
+            // app JWT via OidcLoginSuccessHandler.
+            http.oauth2Login(oauth2 -> oauth2
+                .userInfoEndpoint(userInfo -> userInfo.oidcUserService(customOidcUserService))
+                .successHandler(oidcLoginSuccessHandler));
+        }
 
         return http.build();
     }

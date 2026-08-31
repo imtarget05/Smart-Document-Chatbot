@@ -27,6 +27,17 @@ spring:
     enabled: ${FLYWAY_ENABLED:true}
     baseline-on-migrate: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
@@ -154,7 +165,7 @@ resilience4j:
           - org.springframework.web.client.HttpServerErrorException
           - com.smartdocchat.service.LlmClient.UnexpectedResponseException
 
-# API rate limiting (bucket4j, see RateLimitInterceptor).
+# API rate limiting (Redis-backed sliding window, see RateLimitInterceptor).
 ratelimit:
   enabled: ${RATE_LIMIT_ENABLED:true}
   chat-per-minute: 30
@@ -165,6 +176,19 @@ ratelimit:
 agent:
   base-url: ${AGENT_BASE_URL:http://localhost:9000}
   timeout-ms: ${AGENT_TIMEOUT_MS:15000}
+
+# SSO/OIDC — corporate identity federation (Keycloak / Entra ID / Okta).
+# Disabled by default; set SSO_OIDC_ENABLED=true plus issuer/credentials to
+# activate. First login auto-provisions the user (see CustomOidcUserService)
+# and issues the standard app JWT (see OidcLoginSuccessHandler).
+sso:
+  oidc:
+    enabled: ${SSO_OIDC_ENABLED:false}
+    issuer-uri: ${SSO_OIDC_ISSUER_URI:}
+    client-id: ${SSO_OIDC_CLIENT_ID:}
+    client-secret: ${SSO_OIDC_CLIENT_SECRET:}
+    post-login-redirect: ${SSO_OIDC_POST_LOGIN_REDIRECT:http://localhost:3000}
+    admin-usernames: ${SSO_OIDC_ADMIN_USERNAMES:}
 
 # Langfuse observability (traces per CRAG request). Opt-in: when
 # LANGFUSE_PUBLIC_KEY is empty the tracer is disabled and the app runs

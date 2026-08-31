@@ -76,6 +76,14 @@ public class Document {
     private SourceType sourceType = SourceType.USER;
 
     /**
+     * Live version number (document versioning, V10). Bumped on every
+     * replacement upload; historical states live in document_versions.
+     */
+    @Column(name = "version_number", nullable = false)
+    @Builder.Default
+    private Integer versionNumber = 1;
+
+    /**
      * SHA-256 hex digest of the uploaded file content (Blueprint #17,
      * idempotent ingestion). Null for legacy rows ingested before this
      * field existed.

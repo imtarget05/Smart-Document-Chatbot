@@ -68,4 +68,14 @@ public class DocumentAccessService {
         }
         throw new SecurityException("Document not found with id");
     }
+
+    /** Replace (new version) requires upload rights; ownership unless admin. */
+    public void checkReplace(Role role, String ownerUsername, String callerUsername) {
+        if (!canUpload(role)) {
+            throw new AccessDeniedException("ROLE_USER cannot replace documents");
+        }
+        if (!isAdmin(role) && (ownerUsername == null || !ownerUsername.equals(callerUsername))) {
+            throw new SecurityException("Document not found with id");
+        }
+    }
 }

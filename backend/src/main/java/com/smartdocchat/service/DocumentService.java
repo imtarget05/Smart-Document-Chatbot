@@ -37,6 +37,7 @@ public class DocumentService {
     private final com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
     private final DocumentWorkflowClient documentWorkflowClient;
     private final com.smartdocchat.config.IngestionConfig ingestionConfig;
+    private final DocumentVersionService documentVersionService;
 
     /** Matches an explicit "Số: NN/YYYY/AAA" document-number line only. */
     private static final Pattern DOCUMENT_NUMBER =
@@ -109,6 +110,9 @@ public class DocumentService {
         }
         Document saved = documentRepository.save(document);
 
+        // Document versioning (V10): record version 1 for the initial upload.
+        documentVersionService.createVersion(saved, ownerUsername, "initial upload");
+
         // Phase 2 wiring (#7): fire document workflow (classify → extract → map → match)
         // to llm-router asynchronously. Không block upload response; nếu lỗi, upload
         // vẫn thành công và workflowResult giữ null (graceful degradation).
@@ -140,6 +144,83 @@ public class DocumentService {
                     originalFileName, legalUnits.size());
         }
 
+        return saved;
+    }
+
+    /**
+     * Replace a document's content in place (document versioning, V10): the
+     * previous state is archived as an immutable snapshot, the live row keeps
+     * its id (history/citations stay stable) and version_number is advanced.
+     * RBAC is enforced by the caller (DocumentController) before this runs.
+     */
+    public Document replaceDocument(Document current, MultipartFile file, String actorUsername) throws IOException {
+        String originalFileName = sanitizeFileName(file.getOriginalFilename());
+        String fileExtension = getFileExtension(originalFileName);
+        validateUpload(file, fileExtension);
+
+        // Re-uploading identical content is a no-op, not a new version.
+        String newHash = sha256Hex(file.getBytes());
+        if (newHash.equals(current.getContentHash())) {
+            log.info("Replacement upload '{}' identical to version {} of document {} — ignored",
+                    originalFileName, current.getVersionNumber(), current.getId());
+            return current;
+        }
+
+        // Archive the current state as an immutable snapshot; the live row
+        // keeps its id (history/citations stay stable) and advances one version.
+        com.smartdocchat.entity.DocumentVersion superseded =
+                documentVersionService.createVersion(current, actorUsername,
+                        "superseded by " + originalFileName);
+        current.setVersionNumber(superseded.getVersionNumber() + 1);
+
+        String storagePath = storageService.upload(UUID.randomUUID() + "." + fileExtension, file);
+        File savedFile = storageService.download(storagePath);
+        String extractedText = documentParser.extractText(savedFile, fileExtension);
+        List<String> chunks = documentParser.chunkText(
+                extractedText, ingestionConfig.getChunkSize(), ingestionConfig.getChunkOverlap());
+        String chunksJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(chunks);
+
+        current.setFileName(originalFileName);
+        current.setFilePath(storagePath);
+        current.setFileType(fileExtension);
+        current.setFileSize(file.getSize());
+        current.setChunkCount(chunks.size());
+        current.setChunks(chunksJson);
+        current.setContentHash(newHash);
+
+        // Re-extract legal metadata from the new content (never carried over).
+        current.setDocumentNumber(null);
+        current.setIssueDate(null);
+        current.setEffectiveDate(null);
+        Matcher numberMatch = DOCUMENT_NUMBER.matcher(extractedText);
+        if (numberMatch.find()) {
+            current.setDocumentNumber(numberMatch.group(1));
+        }
+        LegalDateExtractor.LegalDateMetadata dates = legalDateExtractor.extract(extractedText);
+        current.setIssueDate(dates.issueDate());
+        current.setEffectiveDate(dates.effectiveDate());
+
+        // Rebuild structured legal units from the new content.
+        legalChunkRepository.deleteByDocumentId(current.getId());
+        List<LegalStructureParser.StructuredUnit> legalUnits = legalStructureParser.parse(extractedText);
+        if (!legalUnits.isEmpty()) {
+            int ordinal = 0;
+            for (LegalStructureParser.StructuredUnit unit : legalUnits) {
+                legalChunkRepository.save(LegalChunk.builder()
+                        .documentId(current.getId())
+                        .ordinal(ordinal++)
+                        .content(unit.text())
+                        .chapterNumber(unit.chapter())
+                        .articleNumber(unit.article())
+                        .clauseNumber(unit.clause())
+                        .pointLabel(unit.point())
+                        .build());
+            }
+        }
+
+        Document saved = documentRepository.save(current);
+        log.info("Document {} replaced → version {} with {} chunks",
+                saved.getId(), saved.getVersionNumber(), chunks.size());
         return saved;
     }
 
@@ -279,6 +360,7 @@ public class DocumentService {
                 .issueDate(d.getIssueDate())
                 .effectiveDate(d.getEffectiveDate())
                 .sourceType(d.getSourceType() != null ? d.getSourceType().name() : null)
+                .versionNumber(d.getVersionNumber())
                 .build();
     }
 

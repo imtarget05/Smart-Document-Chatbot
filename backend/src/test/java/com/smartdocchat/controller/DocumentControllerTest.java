@@ -39,6 +39,7 @@ class DocumentControllerTest {
     @Mock private DocumentService documentService;
     @Mock private com.smartdocchat.service.DocumentAccessService documentAccessService;
     @Mock private com.smartdocchat.service.AuditLogService auditLogService;
+    @Mock private com.smartdocchat.service.DocumentVersionService documentVersionService;
 
     private DocumentController controller;
 
@@ -74,7 +75,7 @@ class DocumentControllerTest {
 
     @Test
     void uploadRejectsEmptyFile() throws Exception {
-        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
         MultipartFile empty = new MockMultipartFile("file", "empty.txt", "text/plain", new byte[0]);
 
         ResponseEntity<UploadResponse> response = controller.uploadDocument(empty, principal());
@@ -86,7 +87,7 @@ class DocumentControllerTest {
 
     @Test
     void uploadReturnsDocumentDetails() throws Exception {
-        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
         MultipartFile file = new MockMultipartFile("file", "report.txt", "text/plain", "data".getBytes());
         when(documentService.uploadDocument(any(MultipartFile.class), eq("alice"))).thenReturn(document());
 
@@ -100,7 +101,7 @@ class DocumentControllerTest {
 
     @Test
     void uploadHandlesIllegalArgumentAndIoExceptions() throws Exception {
-        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
         MultipartFile file = new MockMultipartFile("file", "bad.exe", "application/octet-stream", "x".getBytes());
         when(documentService.uploadDocument(any(MultipartFile.class), anyString()))
                 .thenThrow(new IllegalArgumentException("Unsupported document type"));
@@ -114,7 +115,7 @@ class DocumentControllerTest {
 
     @Test
     void getAllDocumentsReturnsDtos() {
-        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
         when(documentService.getAllDocumentsForRole("alice", com.smartdocchat.entity.Role.ROLE_ENGINEER))
                 .thenReturn(List.of(document()));
 
@@ -127,7 +128,7 @@ class DocumentControllerTest {
 
     @Test
     void getDocumentByIdReturnsDtoOrNotFound() {
-        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
         when(documentService.getDocumentByIdForRole(1L, "alice",
                 com.smartdocchat.entity.Role.ROLE_ENGINEER)).thenReturn(document());
         when(documentService.getDocumentByIdForRole(9L, "alice",
@@ -139,7 +140,7 @@ class DocumentControllerTest {
 
     @Test
     void deleteDocumentReturnsOkOrNotFound() {
-        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
         when(documentService.getDocumentByIdForRole(1L, "alice",
                 com.smartdocchat.entity.Role.ROLE_ENGINEER)).thenReturn(document());
         when(documentService.getDocumentByIdForRole(5L, "alice",

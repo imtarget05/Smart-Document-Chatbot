@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class CsrfController {
 
-    @GetMapping("/api/csrf")
+    @GetMapping("/csrf")
     public CsrfToken csrf(CsrfToken token) {
         // Injecting CsrfToken as a method argument forces Spring Security 6's
         // deferred token to resolve, so the XSRF-TOKEN cookie gets written and

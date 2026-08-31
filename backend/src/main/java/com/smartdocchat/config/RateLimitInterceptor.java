@@ -1,10 +1,8 @@
 package com.smartdocchat.config;
 
-import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -13,26 +11,17 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 
-/**
- * Token-bucket rate limiting on the expensive and abuse-prone API surface:
- *
- * - per-user limits for chat asks and document uploads (LLM calls cost money)
- * - a stricter per-IP limit for credential endpoints (brute-force damping,
- *   complementary to the account lockout in LoginAuditService)
- *
- * Buckets live in a ConcurrentHashMap; a size guard clears it if an attacker
- * sprays unique identities, trading fairness for bounded memory.
- */
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class RateLimitInterceptor implements HandlerInterceptor {
 
     static final String RETRY_AFTER_HEADER = "Retry-After";
+    static final String REMAINING_HEADER = "X-RateLimit-Remaining";
 
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final RedisRateLimitStore rateLimitStore;
 
     @Value("${ratelimit.enabled:true}")
     private boolean enabled;
@@ -42,45 +31,52 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private int uploadPerMinute;
     @Value("${ratelimit.auth-per-minute:10}")
     private int authPerMinute;
+    @Value("${ratelimit.window-seconds:60}")
+    private int windowSeconds;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
-        if (!enabled) {
-            return true;
-        }
+        if (!enabled) return true;
         String path = request.getRequestURI();
         String scope = scopeFor(path);
-        if (scope == null) {
-            return true;
-        }
+        if (scope == null) return true;
 
         String identity = switch (scope) {
             case "chat", "upload" -> "u:" + currentUser().orElse(clientIp(request));
             default -> "ip:" + clientIp(request);
         };
         String key = scope + ":" + identity;
+        int capacity = capacityFor(scope);
+        Duration window = Duration.ofSeconds(windowSeconds);
 
-        Bucket bucket = buckets.computeIfAbsent(key, k -> newBucket(scope));
-        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
-        if (probe.isConsumed()) {
-            return true;
-        }
+        boolean allowed = rateLimitStore.isAllowed(key, capacity, window);
+        long remaining = rateLimitStore.getRemaining(key, capacity, window);
 
-        long waitSeconds = Math.max(1, probe.getNanosToWaitForRefill() / Duration.ofSeconds(1).toNanos());
+        response.setHeader(REMAINING_HEADER, String.valueOf(remaining));
+
+        if (allowed) return true;
+
+        long waitSeconds = windowSeconds;
         log.warn("Rate limit exceeded for {} {} (retry after {}s)", request.getMethod(), path, waitSeconds);
         response.setStatus(429);
         response.setHeader(RETRY_AFTER_HEADER, String.valueOf(waitSeconds));
         response.setContentType("application/json");
         response.getWriter().write("{\"error\":\"rate_limit_exceeded\",\"message\":"
-                + "\"Too many requests. Please slow down.\"}");
+                + "\"Too many requests. Please slow down.\",\"retry_after\":" + waitSeconds + "}");
         return false;
     }
 
+    private int capacityFor(String scope) {
+        return switch (scope) {
+            case "chat" -> chatPerMinute;
+            case "upload" -> uploadPerMinute;
+            default -> authPerMinute;
+        };
+    }
+
     private String scopeFor(String path) {
-        if (path == null) {
-            return null;
-        }
+        if (path == null) return null;
         if (path.equals("/api/chat/ask") || path.startsWith("/api/chat/ask/")
                 || path.equals("/api/chat/ask-stream") || path.startsWith("/api/chat/ask-stream/")
                 || path.equals("/api/chat/stream") || path.startsWith("/api/chat/stream/")) {
@@ -95,24 +91,13 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         return null;
     }
 
-    Bucket newBucket(String scope) {
-        int capacity = switch (scope) {
-            case "chat" -> chatPerMinute;
-            case "upload" -> uploadPerMinute;
-            default -> authPerMinute;
-        };
-        return Bucket.builder()
-                .addLimit(Bandwidth.classic(capacity, io.github.bucket4j.Refill.greedy(capacity, Duration.ofMinutes(1))))
-                .build();
-    }
-
-    private java.util.Optional<String> currentUser() {
+    private Optional<String> currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated() && auth.getName() != null
                 && !"anonymousUser".equals(auth.getName())) {
-            return java.util.Optional.of(auth.getName());
+            return Optional.of(auth.getName());
         }
-        return java.util.Optional.empty();
+        return Optional.empty();
     }
 
     private String clientIp(HttpServletRequest request) {
@@ -122,10 +107,5 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
         }
         return request.getRemoteAddr() != null ? request.getRemoteAddr() : "unknown";
-    }
-
-    /** Visible-for-testing: drop all accumulated buckets. */
-    void clearBuckets() {
-        buckets.clear();
     }
 }

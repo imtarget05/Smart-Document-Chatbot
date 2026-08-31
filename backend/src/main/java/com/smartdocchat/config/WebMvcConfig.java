@@ -13,6 +13,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/**");
+        // NOTE: interceptor patterns are matched against the path *inside* the
+        // servlet context (server.servlet.context-path=/api), so "/api/**"
+        // never matched and rate limiting was silently dead. Use "/**" and let
+        // the interceptor itself decide which paths to limit.
+        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/**");
     }
 }

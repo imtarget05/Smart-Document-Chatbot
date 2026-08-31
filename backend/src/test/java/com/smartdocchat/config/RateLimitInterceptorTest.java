@@ -2,25 +2,44 @@ package com.smartdocchat.config;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class RateLimitInterceptorTest {
+
+    @Mock
+    private RedisRateLimitStore rateLimitStore;
 
     private RateLimitInterceptor interceptor;
 
     @BeforeEach
     void setUp() throws Exception {
-        interceptor = new RateLimitInterceptor();
+        // Default: Redis allows everything; individual tests override per key.
+        lenient().when(rateLimitStore.isAllowed(anyString(), anyInt(), any(Duration.class))).thenReturn(true);
+        lenient().when(rateLimitStore.getRemaining(anyString(), anyInt(), any(Duration.class))).thenReturn(99L);
+        interceptor = new RateLimitInterceptor(rateLimitStore);
         setField("enabled", true);
         setField("chatPerMinute", 2);
         setField("uploadPerMinute", 1);
         setField("authPerMinute", 1);
+        setField("windowSeconds", 60);
     }
 
     private void setField(String name, Object value) throws Exception {
@@ -42,6 +61,9 @@ class RateLimitInterceptorTest {
 
     @Test
     void allowsTrafficBelowTheLimitAndBlocksAboveIt() throws Exception {
+        when(rateLimitStore.isAllowed(eq("chat:u:1.2.3.4"), eq(2), any(Duration.class)))
+                .thenReturn(true, true, false);
+
         assertTrue(interceptor.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), response(), new Object()));
         assertTrue(interceptor.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), response(), new Object()));
 
@@ -53,8 +75,19 @@ class RateLimitInterceptorTest {
     }
 
     @Test
+    void exposesRemainingHeaderOnAllowedRequests() throws Exception {
+        when(rateLimitStore.getRemaining(eq("chat:u:1.2.3.4"), eq(2), any(Duration.class))).thenReturn(1L);
+
+        MockHttpServletResponse resp = response();
+        assertTrue(interceptor.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), resp, new Object()));
+        assertEquals("1", resp.getHeader(RateLimitInterceptor.REMAINING_HEADER));
+    }
+
+    @Test
     void unauthenticatedChatIsLimitedPerIp() throws Exception {
-        // chatPerMinute=2: two anonymous asks from one IP pass, the third is blocked.
+        when(rateLimitStore.isAllowed(eq("chat:u:9.9.9.9"), eq(2), any(Duration.class)))
+                .thenReturn(true, true, false);
+
         assertTrue(interceptor.preHandle(request("POST", "/api/chat/ask", "9.9.9.9"), response(), new Object()));
         assertTrue(interceptor.preHandle(request("POST", "/api/chat/ask", "9.9.9.9"), response(), new Object()));
         assertFalse(interceptor.preHandle(request("POST", "/api/chat/ask", "9.9.9.9"),
@@ -63,6 +96,9 @@ class RateLimitInterceptorTest {
 
     @Test
     void authEndpointsAreKeyedByForwardedIp() throws Exception {
+        when(rateLimitStore.isAllowed(eq("auth:ip:203.0.113.7"), eq(1), any(Duration.class)))
+                .thenReturn(true, false);
+
         MockHttpServletRequest first = request("POST", "/api/auth/login", "10.0.0.1");
         first.addHeader("X-Forwarded-For", "203.0.113.7, 70.41.3.18");
         assertTrue(interceptor.preHandle(first, response(), new Object()));

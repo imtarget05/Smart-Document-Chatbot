@@ -1,18 +1,46 @@
 package com.smartdocchat.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Field;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class LoginAuditServiceTest {
 
-    private LoginAuditService service = new LoginAuditService();
+    @Mock
+    private RedisTemplate<String, String> redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOps;
+
+    @Mock
+    private HashOperations<String, String, String> hashOps;
+
+    private LoginAuditService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().doReturn(valueOps).when(redisTemplate).opsForValue();
+        lenient().doReturn(hashOps).when(redisTemplate).opsForHash();
+        service = new LoginAuditService(redisTemplate);
+    }
 
     @Test
     void recordsFailuresAndLocksAccountAfterThreshold() {
+        // Counter starts at 0; each recordFailure increments.
+        java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger();
+        when(valueOps.get("login:failures:alice")).thenAnswer(inv -> String.valueOf(count.get()));
+        when(valueOps.increment("login:failures:alice")).thenAnswer(inv -> count.incrementAndGet());
+
         assertFalse(service.isAccountLocked("alice"));
 
         for (int i = 0; i < 4; i++) {
@@ -25,33 +53,35 @@ class LoginAuditServiceTest {
 
     @Test
     void successfulLoginClearsFailureCount() {
+        when(valueOps.increment("login:failures:bob")).thenReturn(1L);
+        when(valueOps.get("login:failures:bob")).thenReturn("1");
+
         service.recordFailure("bob", "10.0.0.2");
         service.recordSuccess("BOB", "10.0.0.2");
+
         assertFalse(service.isAccountLocked("bob"));
+        verify(redisTemplate).delete("login:failures:bob");
+        verify(redisTemplate).delete("login:last_failure:bob");
     }
 
     @Test
-    void lockoutExpiresAfterDuration() throws Exception {
-        service.recordFailure("carol", "10.0.0.3");
-        service.recordFailure("carol", "10.0.0.3");
-        service.recordFailure("carol", "10.0.0.3");
-        service.recordFailure("carol", "10.0.0.3");
-        service.recordFailure("carol", "10.0.0.3");
+    void accountLockedAfterMaxFailedAttempts() {
+        when(valueOps.get("login:failures:carol")).thenReturn("5");
+
         assertTrue(service.isAccountLocked("carol"));
-
-        Field attemptsField = LoginAuditService.class.getDeclaredField("attempts");
-        attemptsField.setAccessible(true);
-        Object record = ((java.util.Map<?, ?>) attemptsField.get(service)).get("carol");
-        Field lastField = record.getClass().getDeclaredField("lastFailureTime");
-        lastField.setAccessible(true);
-        lastField.set(record, java.time.Instant.now().minusSeconds(16 * 60));
-
-        assertFalse(service.isAccountLocked("carol"));
-        assertFalse(service.isAccountLocked("carol"));
     }
 
     @Test
     void unknownUserIsNeverLocked() {
+        when(valueOps.get("login:failures:nobody")).thenReturn(null);
+
         assertFalse(service.isAccountLocked("nobody"));
+    }
+
+    @Test
+    void redisFailureFailsOpen() {
+        when(valueOps.get(anyString())).thenThrow(new RuntimeException("Redis down"));
+
+        assertFalse(service.isAccountLocked("dave"));
     }
 }

@@ -54,6 +54,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+        <!-- Spring Data Redis for distributed sliding-window rate limiting.
+             Fail-open: if Redis is unreachable, requests are allowed. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- SSO/OIDC: corporate identity federation (Keycloak/Entra/Okta).
+             Inactive unless sso.oidc.enabled=true. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
 
         <!-- JWT for stateless authentication -->
         <dependency>
@@ -79,13 +91,6 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>2.3.0</version>
-        </dependency>
-
-        <!-- Bucket4j for Rate Limiting -->
-        <dependency>
-            <groupId>com.bucket4j</groupId>
-            <artifactId>bucket4j-core</artifactId>
-            <version>8.10.1</version>
         </dependency>
 
         <!-- Resilience4j for Circuit Breaker + Time Limiter (Day 1) -->

@@ -25,6 +25,10 @@ public class DocumentDTO {
     private java.time.LocalDate issueDate;
     private java.time.LocalDate effectiveDate;
     private String sourceType;
+    // Live version number (document versioning, V10).
+    private Integer versionNumber;
+    // Total number of versions for this document.
+    private Long versionCount;
     // Document workflow result (Phase 2 agentic pipeline: classify → extract → map → match).
     private String workflowResult;
 }

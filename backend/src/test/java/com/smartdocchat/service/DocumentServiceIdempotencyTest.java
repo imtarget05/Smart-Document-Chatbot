@@ -34,6 +34,7 @@ class DocumentServiceIdempotencyTest {
 
     @Mock private DocumentRepository documentRepository;
     @Mock private DocumentParser documentParser;
+    @Mock private com.smartdocchat.service.DocumentVersionService documentVersionService;
     @Mock private StorageService storageService;
     @Mock private com.smartdocchat.util.LegalStructureParser legalStructureParser;
     @Mock private com.smartdocchat.repository.LegalChunkRepository legalChunkRepository;
@@ -47,7 +48,7 @@ class DocumentServiceIdempotencyTest {
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
                 legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient,
-                new com.smartdocchat.config.IngestionConfig());
+                new com.smartdocchat.config.IngestionConfig(), documentVersionService);
     }
 
     private MockMultipartFile txtFile(String name, String content) {
