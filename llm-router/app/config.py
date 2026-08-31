@@ -16,6 +16,13 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    val = os.getenv(name, "")
+    if val == "":
+        return default
+    return val.lower() in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class Settings:
     cloudflare_account_id: str = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
@@ -56,6 +63,13 @@ class Settings:
     supply_chain_timeout_seconds: float = _float_env(
         "SUPPLY_CHAIN_TIMEOUT_SECONDS", 15.0
     )
+    # Prompt compression: heuristic-based token reduction before LLM calls.
+    prompt_compression_enabled: bool = _bool_env("PROMPT_COMPRESSION_ENABLED", True)
+    prompt_compression_ratio: float = _float_env("PROMPT_COMPRESSION_RATIO", 0.5)
+    prompt_compression_min_tokens: int = _int_env("PROMPT_COMPRESSION_MIN_TOKENS", 1000)
+    # Response cache: Redis-backed LLM response caching.
+    response_cache_enabled: bool = _bool_env("RESPONSE_CACHE_ENABLED", True)
+    response_cache_ttl_seconds: int = _int_env("RESPONSE_CACHE_TTL_SECONDS", 300)
 
 
 settings = Settings()
