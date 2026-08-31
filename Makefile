@@ -3,7 +3,7 @@
 # Common DevOps commands
 # ============================================
 
-.PHONY: help dev dev-up dev-down build up down restart logs \
+.PHONY: help dev dev-up local-infra-up local-infra-down dev-down build up down restart logs \
         backend-build frontend-build test test-backend test-frontend \
         clean monitoring db-backup db-restore lint
 
@@ -17,13 +17,23 @@ help: ## Show available commands
 # Development
 # ========================
 
-dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant + Local LLM)
+dev-up: ## Start dev infrastructure (PostgreSQL + Qdrant + LLM Router)
 	docker compose -f docker/docker-compose.dev.yml up -d
 	@echo "Dev infrastructure started!"
 	@echo "  PostgreSQL: localhost:5432"
 	@echo "  Qdrant:     localhost:6333"
-	@echo "  Local LLM:  localhost:11434 (pulling Llama and embeddings model)"
-	@echo "  LLM Router: localhost:8001"
+	@echo "  LLM Router: localhost:8001 (Cloudflare Workers AI)"
+	@echo "  Local LLM:  none in dev.yml — run 'make local-infra-up' for Ollama (localhost:11434)"
+
+local-infra-up: ## Start local eval stack (pgvector Postgres + Qdrant + Ollama)
+	docker compose -f docker/docker-compose.local.yml up -d
+	@echo "Local eval stack started!"
+	@echo "  PostgreSQL: localhost:5432 (smartdoc)"
+	@echo "  Qdrant:     localhost:6333"
+	@echo "  Ollama:     localhost:11434 (pull models, e.g. ollama pull llama3.2)"
+
+local-infra-down: ## Stop the local eval stack
+	docker compose -f docker/docker-compose.local.yml down
 
 dev-down: ## Stop dev infrastructure
 	docker compose -f docker/docker-compose.dev.yml down
@@ -44,8 +54,8 @@ dev-agent: ## Run Python agent service locally (requires dev-up)
 dev-agent-install: ## Install Python agent dependencies
 	cd agent && pip install -r requirements.txt
 
-test-router: ## Run LLM router unit tests
-	cd llm-router && pytest -q
+test-router: ## Run LLM router unit tests (MUST use llm-router/.venv — root venv lacks pdfplumber)
+	cd llm-router && .venv/bin/python -m pytest -q
 
 # ========================
 # Production Build & Deploy
@@ -159,3 +169,12 @@ prune: ## Remove unused Docker resources
 	docker system prune -f
 	docker volume prune -f
 	@echo "Pruned unused Docker resources"
+
+# top_p feature verification (LLM_TOP_P)
+.PHONY: test-top-p e2e-top-p
+test-top-p: ## top_p propagation unit tests (backend LLM tests + llm-router)
+	cd backend && mvn -q -Dtest="LlmConfigTest,LlmClientTest" test
+	cd llm-router && pytest -q tests/test_top_p.py
+
+e2e-top-p: ## Localhost end-to-end verification of top_p (mock provider + real router)
+	cd llm-router && .venv/bin/python ../scripts/local_top_p_e2e.py
