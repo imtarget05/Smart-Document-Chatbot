@@ -3,11 +3,17 @@ package com.smartdocchat.controller;
 import com.smartdocchat.dto.DocumentDTO;
 import com.smartdocchat.dto.UploadResponse;
 import com.smartdocchat.entity.Document;
+import com.smartdocchat.entity.Role;
+import com.smartdocchat.service.AuditLogService;
+import com.smartdocchat.service.DocumentAccessService;
 import com.smartdocchat.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +31,27 @@ import org.slf4j.MDC;
 @Slf4j
 public class DocumentController {
     private final DocumentService documentService;
+    private final DocumentAccessService documentAccessService;
+    private final AuditLogService auditLogService;
+
+    /** Resolve the caller's Role from the JWT authentication set up by JwtAuthenticationFilter. */
+    private Role currentRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) {
+            return Role.ROLE_USER;
+        }
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(a -> a.startsWith("ROLE_"))
+                .findFirst()
+                .map(Role::valueOf)
+                .orElse(Role.ROLE_USER);
+    }
+
+    /** Persist one immutable audit trail entry (best-effort, never breaks the request). */
+    private void audit(String action, String username, String resourceType, String resourceId, String detail) {
+        auditLogService.record(username, action, resourceType, resourceId, null, detail);
+    }
 
     /** Emit one structured audit line per document read (owner-scoped). */
     private void auditDocumentAccess(String action, Long id, String owner, boolean granted) {
@@ -49,9 +76,9 @@ public class DocumentController {
     @GetMapping("/{id}/legal-chunks")
     public ResponseEntity<?> getLegalChunks(@PathVariable Long id, Principal principal) {
         try {
-            Document document = documentService.getDocumentById(id, principal.getName());
+            Document document = documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
             List<com.smartdocchat.entity.LegalChunk> chunks =
-                    documentService.getLegalChunks(id, principal.getName());
+                    documentService.getLegalChunksForRole(id, principal.getName(), currentRole());
             auditDocumentAccess("document.read", id, principal.getName(), true);
             Map<String, Object> body = new java.util.LinkedHashMap<>();
             body.put("documentId", id);
@@ -95,7 +122,14 @@ public class DocumentController {
                 );
             }
 
+            // Document RBAC (production requirement #3): only ADMIN/ENGINEER
+            // may upload. ROLE_USER viewers get 403 (AccessDeniedException is
+            // mapped to FORBIDDEN by GlobalExceptionHandler).
+            documentAccessService.checkUpload(currentRole());
+
             Document document = documentService.uploadDocument(file, principal.getName());
+            audit("document.upload", principal.getName(), "document",
+                    String.valueOf(document.getId()), "fileName=" + document.getFileName());
             return ResponseEntity.ok(
                     UploadResponse.builder()
                             .success(true)
@@ -110,6 +144,7 @@ public class DocumentController {
             );
         } catch (IOException e) {
             log.error("Error uploading document", e);
+            audit("document.upload.failed", principal.getName(), "document", null, e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                     UploadResponse.builder()
                             .success(false)
@@ -121,7 +156,8 @@ public class DocumentController {
 
     @GetMapping
     public ResponseEntity<List<DocumentDTO>> getAllDocuments(Principal principal) {
-        List<Document> documents = documentService.getAllDocuments(principal.getName());
+        List<Document> documents =
+                documentService.getAllDocumentsForRole(principal.getName(), currentRole());
         List<DocumentDTO> dtos = documents.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
@@ -137,11 +173,14 @@ public class DocumentController {
     @GetMapping("/{id}")
     public ResponseEntity<DocumentDTO> getDocumentById(@PathVariable Long id, Principal principal) {
         try {
-            Document document = documentService.getDocumentById(id, principal.getName());
+            Document document =
+                    documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
             auditDocumentAccess("document.read", id, principal.getName(), true);
+            audit("document.read", principal.getName(), "document", String.valueOf(id), "granted=true");
             return ResponseEntity.ok(convertToDTO(document));
         } catch (RuntimeException e) {
             auditDocumentAccess("document.read", id, principal.getName(), false);
+            audit("document.read.denied", principal.getName(), "document", String.valueOf(id), "granted=false");
             return ResponseEntity.notFound().build();
         }
     }
@@ -149,9 +188,16 @@ public class DocumentController {
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteDocument(@PathVariable Long id, Principal principal) {
         try {
+            Document document =
+                    documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
+            // Document RBAC (production requirement #3): ADMIN may delete any
+            // document; others only their own. Viewers cannot delete at all.
+            documentAccessService.checkDelete(currentRole(), document.getOwnerUsername(), principal.getName());
             documentService.deleteDocument(id, principal.getName());
+            audit("document.delete", principal.getName(), "document", String.valueOf(id), "granted=true");
             return ResponseEntity.ok("Document deleted successfully");
         } catch (RuntimeException e) {
+            audit("document.delete.denied", principal.getName(), "document", String.valueOf(id), "granted=false");
             return ResponseEntity.notFound().build();
         }
     }

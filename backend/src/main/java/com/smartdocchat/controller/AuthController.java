@@ -5,6 +5,7 @@ import com.smartdocchat.dto.AuthResponse;
 import com.smartdocchat.entity.Role;
 import com.smartdocchat.entity.User;
 import com.smartdocchat.repository.UserRepository;
+import com.smartdocchat.service.AuditLogService;
 import com.smartdocchat.service.LoginAuditService;
 import com.smartdocchat.util.JwtTokenProvider;
 import jakarta.servlet.http.Cookie;
@@ -28,6 +29,7 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final LoginAuditService loginAuditService;
+    private final AuditLogService auditLogService;
 
     private static final String JWT_COOKIE_NAME = "jwt_token";
     private static final int JWT_COOKIE_MAX_AGE_SECONDS = 86400; // 24h
@@ -83,6 +85,7 @@ public class AuthController {
                 .<ResponseEntity<?>>map(user -> {
                     // Success – record audit, clear failures, set httpOnly cookie
                     loginAuditService.recordSuccess(username, clientIp);
+                    auditLogService.record(username, "auth.login", "user", username, clientIp, "success");
 
                     String token = tokenProvider.generateToken(user.getUsername(), user.getRole().name());
 
@@ -105,6 +108,7 @@ public class AuthController {
                 .orElseGet(() -> {
                     // Failed – record audit
                     loginAuditService.recordFailure(username, clientIp);
+                    auditLogService.record(username, "auth.login.failed", "user", username, clientIp, "invalid credentials");
                     return ResponseEntity
                             .status(HttpStatus.UNAUTHORIZED)
                             .body("Invalid username or password");

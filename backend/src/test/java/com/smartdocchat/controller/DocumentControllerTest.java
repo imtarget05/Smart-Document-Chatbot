@@ -4,6 +4,7 @@ import com.smartdocchat.dto.DocumentDTO;
 import com.smartdocchat.dto.UploadResponse;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.service.DocumentService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -11,6 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -33,13 +37,25 @@ import static org.mockito.Mockito.when;
 class DocumentControllerTest {
 
     @Mock private DocumentService documentService;
+    @Mock private com.smartdocchat.service.DocumentAccessService documentAccessService;
+    @Mock private com.smartdocchat.service.AuditLogService auditLogService;
 
     private DocumentController controller;
 
     private Principal principal() {
         Principal principal = mock(Principal.class);
         lenient().when(principal.getName()).thenReturn("alice");
+        // Simulate the JWT authentication set up by JwtAuthenticationFilter so
+        // the controller resolves ROLE_ENGINEER (may upload and manage own docs).
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("alice", "n/a",
+                        List.of(new SimpleGrantedAuthority("ROLE_ENGINEER"))));
         return principal;
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     private Document document() {
@@ -58,7 +74,7 @@ class DocumentControllerTest {
 
     @Test
     void uploadRejectsEmptyFile() throws Exception {
-        controller = new DocumentController(documentService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService);
         MultipartFile empty = new MockMultipartFile("file", "empty.txt", "text/plain", new byte[0]);
 
         ResponseEntity<UploadResponse> response = controller.uploadDocument(empty, principal());
@@ -70,7 +86,7 @@ class DocumentControllerTest {
 
     @Test
     void uploadReturnsDocumentDetails() throws Exception {
-        controller = new DocumentController(documentService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService);
         MultipartFile file = new MockMultipartFile("file", "report.txt", "text/plain", "data".getBytes());
         when(documentService.uploadDocument(any(MultipartFile.class), eq("alice"))).thenReturn(document());
 
@@ -84,7 +100,7 @@ class DocumentControllerTest {
 
     @Test
     void uploadHandlesIllegalArgumentAndIoExceptions() throws Exception {
-        controller = new DocumentController(documentService);
+        controller = new DocumentController(documentService, documentAccessService, auditLogService);
         MultipartFile file = new MockMultipartFile("file", "bad.exe", "application/octet-stream", "x".getBytes());
         when(documentService.uploadDocument(any(MultipartFile.class), anyString()))
                 .thenThrow(new IllegalArgumentException("Unsupported document type"));
@@ -98,8 +114,9 @@ class DocumentControllerTest {
 
     @Test
     void getAllDocumentsReturnsDtos() {
-        controller = new DocumentController(documentService);
-        when(documentService.getAllDocuments("alice")).thenReturn(List.of(document()));
+        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        when(documentService.getAllDocumentsForRole("alice", com.smartdocchat.entity.Role.ROLE_ENGINEER))
+                .thenReturn(List.of(document()));
 
         ResponseEntity<List<DocumentDTO>> response = controller.getAllDocuments(principal());
 
@@ -110,9 +127,11 @@ class DocumentControllerTest {
 
     @Test
     void getDocumentByIdReturnsDtoOrNotFound() {
-        controller = new DocumentController(documentService);
-        when(documentService.getDocumentById(1L, "alice")).thenReturn(document());
-        when(documentService.getDocumentById(9L, "alice")).thenThrow(new RuntimeException("not found"));
+        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        when(documentService.getDocumentByIdForRole(1L, "alice",
+                com.smartdocchat.entity.Role.ROLE_ENGINEER)).thenReturn(document());
+        when(documentService.getDocumentByIdForRole(9L, "alice",
+                com.smartdocchat.entity.Role.ROLE_ENGINEER)).thenThrow(new RuntimeException("not found"));
 
         assertEquals(HttpStatus.OK, controller.getDocumentById(1L, principal()).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, controller.getDocumentById(9L, principal()).getStatusCode());
@@ -120,9 +139,13 @@ class DocumentControllerTest {
 
     @Test
     void deleteDocumentReturnsOkOrNotFound() {
-        controller = new DocumentController(documentService);
-        doNothing().doThrow(new RuntimeException("not found"))
-                .when(documentService).deleteDocument(anyLong(), anyString());
+        controller = new DocumentController(documentService, documentAccessService, auditLogService);
+        when(documentService.getDocumentByIdForRole(1L, "alice",
+                com.smartdocchat.entity.Role.ROLE_ENGINEER)).thenReturn(document());
+        when(documentService.getDocumentByIdForRole(5L, "alice",
+                com.smartdocchat.entity.Role.ROLE_ENGINEER))
+                .thenThrow(new RuntimeException("not found"));
+        doNothing().when(documentService).deleteDocument(anyLong(), anyString());
 
         assertEquals("Document deleted successfully", controller.deleteDocument(1L, principal()).getBody());
         assertEquals(HttpStatus.NOT_FOUND, controller.deleteDocument(5L, principal()).getStatusCode());

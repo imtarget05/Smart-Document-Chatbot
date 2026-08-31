@@ -3,6 +3,7 @@ package com.smartdocchat.service;
 import com.smartdocchat.dto.DocumentDTO;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.entity.LegalChunk;
+import com.smartdocchat.entity.Role;
 import com.smartdocchat.entity.SourceType;
 import com.smartdocchat.repository.DocumentRepository;
 import com.smartdocchat.repository.LegalChunkRepository;
@@ -146,6 +147,17 @@ public class DocumentService {
         return documentRepository.findByOwnerUsernameOrderByCreatedAtDesc(ownerUsername);
     }
 
+    /**
+     * RBAC-aware listing (production requirement #3): admins see every
+     * document; everyone else is restricted to their own (owner isolation).
+     */
+    public List<Document> getAllDocumentsForRole(String callerUsername, Role role) {
+        if (role == Role.ROLE_ADMIN) {
+            return documentRepository.findByOrderByCreatedAtDesc();
+        }
+        return getAllDocuments(callerUsername);
+    }
+
     private List<Document> getDocumentsByOwner(String ownerUsername) {
         return documentRepository.findByOwnerUsernameOrderByCreatedAtDesc(ownerUsername);
     }
@@ -154,6 +166,19 @@ public class DocumentService {
         return documentRepository.findByIdAndOwnerUsername(id, ownerUsername).orElseThrow(
                 () -> new RuntimeException("Document not found with id: " + id)
         );
+    }
+
+    /**
+     * RBAC-aware fetch (production requirement #3): admins may read any
+     * document; other roles remain owner-isolated (same not-found signal).
+     */
+    public Document getDocumentByIdForRole(Long id, String callerUsername, Role role) {
+        if (role == Role.ROLE_ADMIN) {
+            return documentRepository.findById(id).orElseThrow(
+                    () -> new RuntimeException("Document not found with id: " + id)
+            );
+        }
+        return getDocumentById(id, callerUsername);
     }
 
     public void deleteDocument(Long id, String ownerUsername) {
@@ -185,6 +210,12 @@ public class DocumentService {
      */
     public List<LegalChunk> getLegalChunks(Long documentId, String ownerUsername) {
         getDocumentById(documentId, ownerUsername); // owner isolation check
+        return legalChunkRepository.findByDocumentIdOrderByOrdinalAsc(documentId);
+    }
+
+    /** RBAC-aware variant: admins may inspect any document's legal chunks. */
+    public List<LegalChunk> getLegalChunksForRole(Long documentId, String callerUsername, Role role) {
+        getDocumentByIdForRole(documentId, callerUsername, role); // RBAC + owner isolation check
         return legalChunkRepository.findByDocumentIdOrderByOrdinalAsc(documentId);
     }
 

@@ -72,6 +72,8 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/prometheus").permitAll() // guarded by InternalTokenFilter
+                // Immutable audit trail API — administrators only.
+                .requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/documents/**").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/documents/**").authenticated()
                 .anyRequest().authenticated()

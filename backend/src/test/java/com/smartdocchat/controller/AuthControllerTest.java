@@ -35,6 +35,7 @@ class AuthControllerTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtTokenProvider tokenProvider;
     @Mock private LoginAuditService loginAuditService;
+    @Mock private com.smartdocchat.service.AuditLogService auditLogService;
 
     private AuthController controller;
 
@@ -48,7 +49,7 @@ class AuthControllerTest {
 
     @Test
     void registerCreatesUserAndReturnsToken() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.existsByUsername("alice")).thenReturn(false);
         when(passwordEncoder.encode("password123456")).thenReturn("encoded");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -65,7 +66,7 @@ class AuthControllerTest {
 
     @Test
     void registerRejectsDuplicateUsername() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.existsByUsername("alice")).thenReturn(true);
 
         ResponseEntity<?> response = controller.registerUser(request("alice", "password123456"));
@@ -76,7 +77,7 @@ class AuthControllerTest {
 
     @Test
     void loginSucceedsAndSetsHttpOnlyCookie() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.findByUsername("bob")).thenReturn(Optional.of(enabledUser("bob", "encoded")));
         when(passwordEncoder.matches("password123456", "encoded")).thenReturn(true);
         when(tokenProvider.generateToken("bob", "ROLE_USER")).thenReturn("jwt-cookie");
@@ -96,7 +97,7 @@ class AuthControllerTest {
 
     @Test
     void loginFailsWhenAccountLocked() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(loginAuditService.isAccountLocked("bob")).thenReturn(true);
 
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -108,7 +109,7 @@ class AuthControllerTest {
 
     @Test
     void loginUsesForwardedForHeaderWhenPresent() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.findByUsername("bob")).thenReturn(Optional.of(enabledUser("bob", "encoded")));
         when(passwordEncoder.matches("password123456", "encoded")).thenReturn(false);
 
@@ -123,7 +124,7 @@ class AuthControllerTest {
 
     @Test
     void loginRejectsDisabledUser() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.findByUsername("bob"))
                 .thenReturn(Optional.of(User.builder().username("bob").password("encoded")
                         .role(Role.ROLE_USER).enabled(false).build()));
@@ -137,7 +138,7 @@ class AuthControllerTest {
 
     @Test
     void loginRecordsFailureOnBadCredentials() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         when(userRepository.findByUsername("bob")).thenReturn(Optional.of(enabledUser("bob", "encoded")));
         when(passwordEncoder.matches("wrong-password", "encoded")).thenReturn(false);
 
@@ -151,7 +152,7 @@ class AuthControllerTest {
 
     @Test
     void logoutClearsCookie() {
-        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService);
+        controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         ResponseEntity<?> response = controller.logout(servletResponse);
