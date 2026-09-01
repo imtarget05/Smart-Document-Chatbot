@@ -2,8 +2,8 @@ package com.smartdocchat.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.util.Optional;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class RateLimitInterceptor implements HandlerInterceptor {
 
@@ -34,10 +33,18 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Value("${ratelimit.window-seconds:60}")
     private int windowSeconds;
 
+    @Autowired
+    public RateLimitInterceptor(@Autowired(required = false) RedisRateLimitStore rateLimitStore) {
+        this.rateLimitStore = rateLimitStore;
+        if (rateLimitStore == null) {
+            log.warn("Redis not available — rate limiting disabled (all requests allowed)");
+        }
+    }
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
-        if (!enabled) return true;
+        if (!enabled || rateLimitStore == null) return true;
         String path = request.getRequestURI();
         String scope = scopeFor(path);
         if (scope == null) return true;

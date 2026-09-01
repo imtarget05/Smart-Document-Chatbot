@@ -8,6 +8,7 @@ spring:
     enabled: true
   data:
     redis:
+      enabled: ${REDIS_ENABLED:true}
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
@@ -60,3 +61,8 @@ logging:
     name: /var/log/smartdoc/application.log
     max-size: 50MB
     max-history: 60
+
+management:
+  health:
+    redis:
+      enabled: false

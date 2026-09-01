@@ -29,6 +29,7 @@ spring:
     locations: classpath:db/migration
   data:
     redis:
+      enabled: ${REDIS_ENABLED:true}
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
@@ -113,6 +114,9 @@ tavily:
   url: ${TAVILY_URL:https://api.tavily.com/search}
 
 management:
+  health:
+    redis:
+      enabled: false
   endpoints:
     web:
       exposure:

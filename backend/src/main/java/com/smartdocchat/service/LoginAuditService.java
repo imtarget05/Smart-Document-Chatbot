@@ -1,7 +1,7 @@
 package com.smartdocchat.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -10,7 +10,6 @@ import java.time.Instant;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LoginAuditService {
 
     private static final int MAX_FAILED_ATTEMPTS = 5;
@@ -19,7 +18,20 @@ public class LoginAuditService {
 
     private final RedisTemplate<String, String> redisTemplate;
 
+    @Autowired
+    public LoginAuditService(@Autowired(required = false) RedisTemplate<String, String> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+        if (redisTemplate == null) {
+            log.warn("Redis not available — login audit logging disabled (log-only mode)");
+        }
+    }
+
     public void recordFailure(String username, String ipAddress) {
+        if (redisTemplate == null) {
+            log.warn("Failed login attempt for user {} from IP {} (Redis unavailable, log-only)",
+                    username, ipAddress);
+            return;
+        }
         String key = "login:failures:" + username.toLowerCase();
         try {
             Long count = redisTemplate.opsForValue().increment(key);
@@ -38,6 +50,11 @@ public class LoginAuditService {
     }
 
     public void recordSuccess(String username, String ipAddress) {
+        if (redisTemplate == null) {
+            log.info("Successful login for user {} from IP {} (Redis unavailable, log-only)",
+                    username, ipAddress);
+            return;
+        }
         String key = "login:failures:" + username.toLowerCase();
         try {
             redisTemplate.delete(key);
@@ -49,6 +66,9 @@ public class LoginAuditService {
     }
 
     public boolean isAccountLocked(String username) {
+        if (redisTemplate == null) {
+            return false;
+        }
         String key = "login:failures:" + username.toLowerCase();
         try {
             String count = redisTemplate.opsForValue().get(key);
