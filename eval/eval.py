@@ -479,14 +479,17 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
 
     # Initialize LLM judge if requested
     llm_judge = None
-    if args.llm_judge and LLM_JUDGE_AVAILABLE:
+    _llm_judge_enabled = getattr(args, 'llm_judge', False)
+    _llm_judge_url = getattr(args, 'llm_judge_url', None)
+    _llm_judge_model = getattr(args, 'llm_judge_model', None)
+    if _llm_judge_enabled and LLM_JUDGE_AVAILABLE:
         try:
-            llm_judge = LLMJudge(base_url=args.llm_judge_url, model=args.llm_judge_model)
+            llm_judge = LLMJudge(base_url=_llm_judge_url, model=_llm_judge_model)
             print("   + LLM judge enabled")
         except Exception as e:
             print(f"   ! LLM judge initialization failed: {e}")
             llm_judge = None
-    elif args.llm_judge and not LLM_JUDGE_AVAILABLE:
+    elif _llm_judge_enabled and not LLM_JUDGE_AVAILABLE:
         print("   ! LLM judge requested but llm_judge module not available")
     print()
     details = []
