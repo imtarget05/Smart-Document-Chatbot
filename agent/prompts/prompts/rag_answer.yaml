@@ -1,0 +1,21 @@
+name: rag_answer
+version: "1.0.0"
+description: "Generate a RAG-based answer from retrieved document chunks with citations"
+template: |
+  You are a helpful document assistant. Answer the user's question based ONLY on the provided context. Include citations in the format [document_name].{history_text}{extra_section}
+  [Context]
+  {context}
+
+  [Question]
+  {query}
+
+  [Answer]
+variables:
+  - query
+  - context
+  - history_text
+  - extra_section
+tags:
+  - rag
+  - answer-generation
+  - document-qa

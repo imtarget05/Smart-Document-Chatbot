@@ -31,6 +31,23 @@ try:
 except ImportError:
     MLFLOW_AVAILABLE = False
 
+# Optional sentence-transformers for semantic similarity metric
+try:
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
+
+    EMBEDDING_MODEL_AVAILABLE = True
+except ImportError:
+    EMBEDDING_MODEL_AVAILABLE = False
+
+# Optional LLM judge for faithfulness/relevance scoring
+try:
+    from llm_judge import LLMJudge, JudgeScore
+
+    LLM_JUDGE_AVAILABLE = True
+except ImportError:
+    LLM_JUDGE_AVAILABLE = False
+
 
 def load_questions(path: str) -> list[dict]:
     if not os.path.exists(path):
@@ -218,6 +235,64 @@ def normalize_text(text: str) -> str:
     return " ".join(tokens)
 
 
+# ---------------------------------------------------------------------------
+# Semantic similarity metric (issue #20)
+# ---------------------------------------------------------------------------
+
+_EMBEDDING_MODEL = None
+
+
+def _get_embedding_model():
+    """Lazy-load the shared embedding model for semantic similarity scoring."""
+    global _EMBEDDING_MODEL
+    if _EMBEDDING_MODEL is None and EMBEDDING_MODEL_AVAILABLE:
+        model_name = os.getenv("EVAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        _EMBEDDING_MODEL = SentenceTransformer(model_name)
+    return _EMBEDDING_MODEL
+
+
+def _cosine_similarity(a, b) -> float:
+    """Compute cosine similarity between two vectors."""
+    if not EMBEDDING_MODEL_AVAILABLE:
+        return 0.0
+    a = np.array(a)
+    b = np.array(b)
+    norm = np.linalg.norm(a) * np.linalg.norm(b)
+    if norm == 0:
+        return 0.0
+    return float(np.dot(a, b) / norm)
+
+
+def compute_semantic_retrieval_score(query: str, source_chunks: str) -> float:
+    """
+    Compute semantic similarity between the query and retrieved source chunks.
+
+    Returns the max cosine similarity between the query embedding and each
+    chunk embedding. Falls back to 0.0 when sentence-transformers is not
+    installed or source_chunks is empty.
+    """
+    if not EMBEDDING_MODEL_AVAILABLE or not source_chunks:
+        return 0.0
+
+    model = _get_embedding_model()
+    if model is None:
+        return 0.0
+
+    # Split source chunks on the delimiter used by the backend
+    chunks = [c.strip() for c in source_chunks.split("\n---\n") if c.strip()]
+    if not chunks:
+        # Fallback: treat the whole string as one chunk
+        chunks = [source_chunks.strip()]
+
+    try:
+        query_embedding = model.encode(query, convert_to_numpy=True)
+        chunk_embeddings = model.encode(chunks, convert_to_numpy=True)
+        scores = [_cosine_similarity(query_embedding, ce) for ce in chunk_embeddings]
+        return max(scores) if scores else 0.0
+    except Exception:
+        return 0.0
+
+
 def load_concepts_overrides(path: Optional[str] = None) -> dict[str, dict]:
     """Load optional per-question structured concepts from a side file.
 
@@ -332,6 +407,11 @@ def evaluate_answer(result: dict, question: dict, overrides: Optional[dict[str, 
         and result.get("confidence") != "low"
     )
 
+    # Semantic similarity: how semantically close the query is to retrieved chunks
+    semantic_score = compute_semantic_retrieval_score(
+        question.get("question", ""), result.get("source_chunks") or ""
+    )
+
     evaluation = {
         "question_id": question["id"],
         "difficulty": question.get("difficulty"),
@@ -341,6 +421,7 @@ def evaluate_answer(result: dict, question: dict, overrides: Optional[dict[str, 
         "evidence_supported": evidence_supported,
         "retrieval_accurate": retrieval_accurate,
         "source_hits": source_hits,
+        "semantic_retrieval_score": round(semantic_score, 4),
         "is_hallucination": is_hallucination,
         "latency_ms": result["latency_ms"],
         "confidence": result.get("confidence"),
@@ -395,6 +476,19 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
             print(f"  ⚠️  MLflow unavailable: {e}")
             mlflow_run = None
 
+
+    # Initialize LLM judge if requested
+    llm_judge = None
+    if args.llm_judge and LLM_JUDGE_AVAILABLE:
+        try:
+            llm_judge = LLMJudge(base_url=args.llm_judge_url, model=args.llm_judge_model)
+            print("   + LLM judge enabled")
+        except Exception as e:
+            print(f"   ! LLM judge initialization failed: {e}")
+            llm_judge = None
+    elif args.llm_judge and not LLM_JUDGE_AVAILABLE:
+        print("   ! LLM judge requested but llm_judge module not available")
+    print()
     details = []
     for i, q in enumerate(questions, 1):
         print(f"  [{i}/{len(questions)}] {q['question'][:60]}...", end=" ", flush=True)
@@ -412,6 +506,24 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         )
         evaluation = evaluate_answer(result, q, overrides)
         details.append(evaluation)
+
+
+        # LLM judge evaluation
+        if llm_judge and result.get("status") == "success" and not evaluation.get("provider_error"):
+            try:
+                judge_result = llm_judge.evaluate_all(
+                    question=q.get("question", ""),
+                    answer=result.get("answer", ""),
+                    context=result.get("source_chunks", ""),
+                    expected_concepts=[
+                        c.get("concept", "")
+                        for c in question.get("expected_concepts", [])
+                    ] or None,
+                )
+                evaluation["llm_judge"] = judge_result.to_dict()
+                evaluation["llm_judge_score"] = judge_result.average_score
+            except Exception as e:
+                evaluation["llm_judge_error"] = str(e)
 
         status_icon = "⚠️" if evaluation.get("provider_error") else ("✅" if evaluation["answer_correct"] else "❌")
         print(f"{status_icon} ({result['latency_ms']}ms)")
@@ -446,6 +558,33 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     # True application/HTTP errors (excludes provider errors, which are counted separately).
     error_count = total - len(successful) - len(provider_errors)
 
+    # Aggregate semantic retrieval scores
+    semantic_scores = [d["semantic_retrieval_score"] for d in successful if "semantic_retrieval_score" in d]
+    avg_semantic_score = round(sum(semantic_scores) / max(len(semantic_scores), 1), 4)
+
+
+    # Aggregate LLM judge scores
+    llm_judge_scores = [
+        d["llm_judge_score"]
+        for d in details
+        if d.get("llm_judge_score") is not None
+    ]
+    avg_llm_judge_score = round(sum(llm_judge_scores) / max(len(llm_judge_scores), 1), 4) if llm_judge_scores else None
+
+    faithfulness_scores = [
+        d.get("llm_judge", {}).get("faithfulness", {}).get("score")
+        for d in details
+        if d.get("llm_judge") and d["llm_judge"].get("faithfulness")
+    ]
+    avg_faithfulness = round(sum(faithfulness_scores) / max(len(faithfulness_scores), 1), 4) if faithfulness_scores else None
+
+    relevance_scores = [
+        d.get("llm_judge", {}).get("relevance", {}).get("score")
+        for d in details
+        if d.get("llm_judge") and d["llm_judge"].get("relevance")
+    ]
+    avg_relevance = round(sum(relevance_scores) / max(len(relevance_scores), 1), 4) if relevance_scores else None
+
     summary = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "base_url": args.base_url,
@@ -455,6 +594,7 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         "retrieval_accuracy": round(
             len(retrieval_accurate) / max(len(successful), 1), 4
         ),
+        "semantic_retrieval_score": avg_semantic_score,
         "answer_correctness": round(len(correct) / max(len(successful), 1), 4),
         "hallucination_cases": len(hallucinations),
         "hallucination_rate": round(len(hallucinations) / max(len(successful), 1), 4),
@@ -468,6 +608,12 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         "provider_errors": len(provider_errors),
         "provider_error_rate": round(len(provider_errors) / max(total, 1), 4),
         "genuine_llm_responses": len(successful),
+
+        "llm_judge_enabled": llm_judge is not None,
+        "llm_judge_avg_score": avg_llm_judge_score,
+        "llm_judge_avg_faithfulness": avg_faithfulness,
+        "llm_judge_avg_relevance": avg_relevance,
+
         "details": details,
     }
 
@@ -556,6 +702,22 @@ def main():
         action="store_true",
         help="Only validate question set structure (CI-safe, no backend needed)",
     )
+    parser.add_argument(
+        "--llm-judge",
+        action="store_true",
+        help="Enable LLM-judge evaluation (faithfulness + relevance scores)",
+    )
+    parser.add_argument(
+        "--llm-judge-url",
+        default=None,
+        help="LLM judge base URL (defaults to LLM_JUDGE_BASE_URL or LLM_BASE_URL)",
+    )
+    parser.add_argument(
+        "--llm-judge-model",
+        default=None,
+        help="LLM judge model name (defaults to LLM_JUDGE_MODEL or LLM_CHAT_MODEL)",
+    )
+
     args = parser.parse_args()
 
     if args.validate_only or args.token is None or args.document_id is None:
@@ -571,12 +733,24 @@ def main():
     print("=" * 60)
     print(f"  Total Questions:      {summary['total_questions']}")
     print(f"  Retrieval Accuracy:   {summary['retrieval_accuracy']:.2%}")
+    print(f"  Semantic Retr. Score: {summary['semantic_retrieval_score']:.4f}")
     print(f"  Answer Correctness:   {summary['answer_correctness']:.2%}")
     print(f"  Hallucination Cases:  {summary['hallucination_cases']}")
     print(f"  Hallucination Rate:   {summary['hallucination_rate']:.2%}")
     print(f"  Avg Latency:          {summary['average_latency_ms']}ms")
     print(f"  P95 Latency:          {summary['p95_latency_ms']}ms")
     print(f"  Errors:               {summary['error_count']}")
+
+    if summary.get("llm_judge_enabled"):
+        print()
+        print("  LLM Judge Metrics:")
+        if summary.get("llm_judge_avg_faithfulness") is not None:
+            print(f"     Faithfulness:  {summary['llm_judge_avg_faithfulness']:.4f}")
+        if summary.get("llm_judge_avg_relevance") is not None:
+            print(f"     Relevance:     {summary['llm_judge_avg_relevance']:.4f}")
+        if summary.get("llm_judge_avg_score") is not None:
+            print(f"     Overall Score: {summary['llm_judge_avg_score']:.4f}")
+
     print("=" * 60)
 
     # Save results

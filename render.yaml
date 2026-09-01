@@ -115,8 +115,12 @@ services:
 - type: web
   name: smart-doc-agent
   runtime: python
-  buildCommand: cd agent && pip install -r requirements.txt
-  startCommand: cd agent && uvicorn app.main:app --host 0.0.0.0 --port 9000
+  rootDir: agent
+  buildCommand: pip install -r requirements.txt
+  startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+  healthCheckPath: /health
+  autoDeploy: true
+  plan: free
   envVars:
     AGENT_PORT: '9000'
     BACKEND_URL:
@@ -124,5 +128,3 @@ services:
         name: smart-doc-backend
         type: web
         property: host
-  autoDeploy: true
-  plan: free

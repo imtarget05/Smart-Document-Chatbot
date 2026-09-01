@@ -1,15 +1,35 @@
 # ═══════════════════════════════════════════════════════════════
 # ENVIRONMENT & SECRETS
 # ═══════════════════════════════════════════════════════════════
+# Environment files (NEVER commit real credentials)
 .env
 .env.local
 .env.*.local
 .env.production
+.env.*.backup
+
+# Private keys & keystores
 *.p12
+*.pfx
 *.key
 *.pem
+*.jks
+*.keystore
+
+# Secret files & directories
 *.secret
 secrets/
+credentials/
+credentials*.json
+service-account*.json
+*-credentials.json
+gcp-*.json
+
+# SSH private keys (public keys *.pub are safe to commit)
+id_rsa
+id_ed25519
+id_ecdsa
+*.ssh
 
 # ═══════════════════════════════════════════════════════════════
 # INTERNAL DOCS & NOTES

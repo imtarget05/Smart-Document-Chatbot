@@ -30,17 +30,17 @@ from memory.context_summarizer import ContextSummarizer
 from memory.language_handler import detect_language, get_language_instruction
 from settings import settings
 from tools.qdrant_tool import QdrantHybridSearch
+from prompts import render_prompt, PromptNotFoundError
 
 logger = logging.getLogger(__name__)
 
-# CRAG confidence threshold - configurable via env var (issue #18)
-CONFIDENCE_THRESHOLD = float(os.getenv("CRAG_CONFIDENCE_THRESHOLD", "0.6"))
+CRAG_CONFIDENCE_THRESHOLD = float(os.getenv("CRAG_CONFIDENCE_THRESHOLD", "0.6"))
 TOP_K = 5
-LTM_EXTRACT_INTERVAL = 5  # Extract long-term facts every N turns
+LTM_EXTRACT_INTERVAL = 5
 
-# Optional dedicated reranker model (issue #17). When set, the reranker uses
-# a local model (e.g., bge-reranker-v2-m3) instead of the LLM judge prompt.
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "")
+
+MAX_REFORMULATIONS = int(os.getenv("CRAG_MAX_REFORMULATIONS", "2"))
 
 
 class RagAgent:
@@ -50,7 +50,7 @@ class RagAgent:
         self._memory = ShortTermMemory()
         self._long_term_memory = LongTermMemory(llm_router=self._llm)
         self._summarizer = ContextSummarizer(llm_router=self._llm)
-        self._turn_counters: dict = {}  # session_id -> turn count
+        self._turn_counters: dict = {}
         self._reranker = self._init_reranker()
 
     def _resolve_config(self, state: AgentState) -> dict:
@@ -59,10 +59,11 @@ class RagAgent:
         return {
             "top_k": ab_config.get("top_k", TOP_K),
             "confidence_threshold": ab_config.get(
-                "confidence_threshold", CONFIDENCE_THRESHOLD
+                "confidence_threshold", CRAG_CONFIDENCE_THRESHOLD
             ),
             "hybrid": state.get("hybrid_search_enabled", True),
             "rrf_k": ab_config.get("rrf_k", 60),
+            "max_reformulations": ab_config.get("max_reformulations", MAX_REFORMULATIONS),
         }
 
     def _get_top_k(self, state: AgentState) -> int:
@@ -76,7 +77,6 @@ class RagAgent:
         if not RERANKER_MODEL:
             return None
         try:
-            # Try to load a sentence-transformers CrossEncoder
             from sentence_transformers import CrossEncoder
 
             reranker = CrossEncoder(RERANKER_MODEL)
@@ -96,9 +96,6 @@ class RagAgent:
             )
         return None
 
-    # ------------------------------------------------------------------
-    # Main node entry point
-    # ------------------------------------------------------------------
     async def run(self, state: AgentState) -> AgentState:
         query = state["query"]
         document_ids = state.get("document_ids") or []
@@ -118,7 +115,6 @@ class RagAgent:
             cfg["rrf_k"],
         )
 
-        # Language detection
         detected_lang, lang_instruction = (
             detect_language(query),
             get_language_instruction(detect_language(query)),
@@ -127,7 +123,6 @@ class RagAgent:
         state["language_instruction"] = lang_instruction
         logger.info("Detected language: %s", detected_lang)
 
-        # Long-term memory: retrieve facts for this user
         await self._long_term_memory.ensure_table()
         long_term_facts = await self._long_term_memory.retrieve(user_id)
         ltm_context = ""
@@ -141,31 +136,26 @@ class RagAgent:
                 "Loaded %d long-term facts for user %s", len(long_term_facts), user_id
             )
 
-        # Context summarization: compress old history
         recent_history = self._memory.get_recent(session_id, turns=10)
         await self._summarizer.compress(session_id, recent_history)
         context_summary = self._summarizer.get_summary(session_id)
         state["context_summary"] = context_summary
 
-        # 1. Initial hybrid retrieval
         chunks, max_score = await self._retrieve(query, document_ids, hybrid, cfg)
         state["confidence_score"] = max_score
 
-        # 2. CRAG loop if confidence is low
         if max_score < cfg["confidence_threshold"]:
             logger.info(
                 "Low confidence %.2f < %.2f - starting CRAG loop",
                 max_score,
                 cfg["confidence_threshold"],
             )
-            chunks, max_score = await self._crag_loop(query, document_ids, hybrid, cfg)
+            chunks, max_score = await self._crag_loop(query, document_ids, hybrid, cfg, cfg["max_reformulations"])
             state["confidence_score"] = max_score
 
-        # 3. Cross-encoder reranking
         if chunks:
             chunks = await self._rerank(query, chunks)
 
-        # 4. Build answer
         if chunks and max_score >= cfg["confidence_threshold"]:
             answer = await self._generate_answer(
                 query,
@@ -183,7 +173,6 @@ class RagAgent:
             answer = await self._deep_reasoning_fallback(query)
             chunks = []
 
-        # 5. Build citations
         sources = [
             {
                 "document_name": c.get("document_name", "unknown"),
@@ -194,11 +183,9 @@ class RagAgent:
             for c in chunks[: cfg["top_k"]]
         ]
 
-        # 6. Persist to short-term memory
         self._memory.add(session_id, "user", query)
         self._memory.add(session_id, "assistant", answer)
 
-        # 7. Extract long-term facts every N turns
         self._turn_counters[session_id] = self._turn_counters.get(session_id, 0) + 1
         if self._turn_counters[session_id] % LTM_EXTRACT_INTERVAL == 0:
             full_history = self._memory.get_recent(
@@ -214,9 +201,6 @@ class RagAgent:
         state["agent_type"] = "rag"
         return state
 
-    # ------------------------------------------------------------------
-    # Hybrid retrieval (semantic + BM25 -> Reciprocal Rank Fusion)
-    # ------------------------------------------------------------------
     async def _retrieve(
         self, query: str, document_ids: List[str], hybrid: bool, cfg: dict = None
     ) -> Tuple[List[Dict], float]:
@@ -240,7 +224,6 @@ class RagAgent:
                 continue
             all_chunks.extend(r)
 
-        # Deduplicate by text
         seen: Dict[str, Dict] = {}
         for c in all_chunks:
             key = c.get("text", "").strip()[:200]
@@ -251,44 +234,69 @@ class RagAgent:
         max_score = deduped[0]["score"] if deduped else 0.0
         return deduped, max_score
 
-    # ------------------------------------------------------------------
-    # Corrective CRAG loop
-    # ------------------------------------------------------------------
     async def _crag_loop(
-        self, query: str, document_ids: List[str], hybrid: bool, cfg: dict = None
+        self, query: str, document_ids: List[str], hybrid: bool, cfg: dict = None,
+        max_reformulations: int = 2
     ) -> Tuple[List[Dict], float]:
-        # Step 1: reformulate queries
-        variants = await self._reformulate_query(query)
-        all_queries = [query] + variants
-
-        tasks = [self._retrieve(q, document_ids, hybrid, cfg) for q in all_queries]
-        all_results = await asyncio.gather(*tasks, return_exceptions=True)
-
+        """Iteratively reformulate and re-retrieve until confidence is high enough."""
         merged: Dict[str, Dict] = {}
         best_score = 0.0
-        for res in all_results:
-            if isinstance(res, Exception):
-                continue
-            chunks, score = res
-            if score > best_score:
-                best_score = score
-            for c in chunks:
-                key = c.get("text", "").strip()[:200]
-                if key not in merged or merged[key]["score"] < c["score"]:
-                    merged[key] = c
+        current_query = query
+
+        for iteration in range(max_reformulations + 1):
+            if iteration > 0:
+                variants = await self._reformulate_query(current_query)
+                if not variants:
+                    logger.info("CRAG loop: no more reformulations produced at iteration %d", iteration)
+                    break
+                all_queries = [current_query] + variants
+                logger.info("CRAG loop iteration %d: reformulated into %d variants", iteration, len(variants))
+            else:
+                all_queries = [current_query]
+
+            tasks = [self._retrieve(q, document_ids, hybrid, cfg) for q in all_queries]
+            all_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for res in all_results:
+                if isinstance(res, Exception):
+                    continue
+                chunks, score = res
+                if score > best_score:
+                    best_score = score
+                for c in chunks:
+                    key = c.get("text", "").strip()[:200]
+                    if key not in merged or merged[key]["score"] < c["score"]:
+                        merged[key] = c
+
+            confidence_threshold = (cfg or {}).get("confidence_threshold", CRAG_CONFIDENCE_THRESHOLD)
+            if best_score >= confidence_threshold:
+                logger.info("CRAG loop: confidence %.2f >= threshold %.2f at iteration %d — stopping",
+                            best_score, confidence_threshold, iteration)
+                break
+
+            if iteration < max_reformulations:
+                current_query = variants[0] if variants else current_query
 
         final = sorted(merged.values(), key=lambda x: x["score"], reverse=True)
+        logger.info("CRAG loop completed: %d iterations used, best score %.2f", iteration + 1, best_score)
         return final, best_score
 
-    # ------------------------------------------------------------------
-    # Query reformulation via LLM
-    # ------------------------------------------------------------------
     async def _reformulate_query(self, query: str) -> List[str]:
-        prompt = (
-            f"Rewrite the following question into 2 alternative phrasings to improve document retrieval. "
-            f"Output ONLY the two alternatives, one per line, no numbering.\n\nQuestion: {query}"
-        )
         try:
+            prompt = render_prompt("query_reformulation", query=query)
+            response = await self._llm.ainvoke([HumanMessage(content=prompt)])
+            lines = [
+                line.strip()
+                for line in response.content.strip().split("\n")
+                if line.strip()
+            ]
+            return lines[:2]
+        except PromptNotFoundError:
+            logger.warning("query_reformulation prompt not found, using fallback")
+            prompt = (
+                f"Rewrite the following question into 2 alternative phrasings to improve document retrieval. "
+                f"Output ONLY the two alternatives, one per line, no numbering.\n\nQuestion: {query}"
+            )
             response = await self._llm.ainvoke([HumanMessage(content=prompt)])
             lines = [
                 line.strip()
@@ -300,18 +308,13 @@ class RagAgent:
             logger.warning("Query reformulation failed: %s", exc)
             return []
 
-    # ------------------------------------------------------------------
-    # Cross-encoder reranking (issue #17)
-    # ------------------------------------------------------------------
     async def _rerank(self, query: str, chunks: List[Dict]) -> List[Dict]:
         if len(chunks) <= 2:
             return chunks
 
-        # Use dedicated reranker model if available (fast, ~100ms)
         if self._reranker is not None:
             return await self._rerank_dedicated(query, chunks)
 
-        # Fallback: LLM-based reranking (slow, 10-20s)
         return await self._rerank_llm(query, chunks)
 
     async def _rerank_dedicated(self, query: str, chunks: List[Dict]) -> List[Dict]:
@@ -363,15 +366,11 @@ class RagAgent:
                 chunk["rerank_score"] = score
                 chunk["score"] = (chunk["score"] + score) / 2
             except (AttributeError, ValueError, TypeError) as exc:
-                # Log specific exception instead of bare except (issue #64)
                 logger.debug("Rerank score parse failed for chunk %d: %s", i, exc)
             rescored.append(chunk)
 
         return sorted(rescored, key=lambda x: x["score"], reverse=True)
 
-    # ------------------------------------------------------------------
-    # Generate RAG answer
-    # ------------------------------------------------------------------
     async def _generate_answer(
         self,
         query: str,
@@ -402,7 +401,6 @@ class RagAgent:
             )
             history_text = f"\n\n[Conversation history]\n{history_text}\n"
 
-        # Build extra context from new features
         extra_parts = []
         if lang_instruction:
             extra_parts.append(f"[Language Instruction]\n{lang_instruction}")
@@ -413,18 +411,26 @@ class RagAgent:
         extra_context = "\n\n".join(extra_parts)
         extra_section = f"\n\n{extra_context}\n" if extra_context else ""
 
-        prompt = (
-            f"You are a helpful document assistant. Answer the user's question based ONLY on the "
-            f"provided context. Include citations in the format [document_name].{history_text}"
-            f"{extra_section}\n"
-            f"[Context]\n{context}\n\n[Question]\n{query}\n\n[Answer]"
-        )
+        try:
+            prompt = render_prompt(
+                "rag_answer",
+                query=query,
+                context=context,
+                history_text=history_text,
+                extra_section=extra_section,
+            )
+        except PromptNotFoundError:
+            logger.warning("rag_answer prompt not found, using fallback")
+            prompt = (
+                f"You are a helpful document assistant. Answer the user's question based ONLY on the "
+                f"provided context. Include citations in the format [document_name].{history_text}"
+                f"{extra_section}\n"
+                f"[Context]\n{context}\n\n[Question]\n{query}\n\n[Answer]"
+            )
+
         response = await self._llm.ainvoke([HumanMessage(content=prompt)])
         return response.content.strip()
 
-    # ------------------------------------------------------------------
-    # Fallbacks
-    # ------------------------------------------------------------------
     async def _web_search_fallback(self, query: str) -> str:
         from tools.web_search_tool import TavilySearch
 

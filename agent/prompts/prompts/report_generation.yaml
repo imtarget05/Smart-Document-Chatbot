@@ -1,0 +1,27 @@
+name: report_generation
+version: "1.0.0"
+description: "Generate a structured report from document content with sections and analysis"
+template: |
+  You are a professional report writer. Generate a well-structured report based on the provided document content.
+
+  Report Title: {title}
+
+  Document Content:
+  {content}
+
+  Requirements:
+  - Use markdown formatting with ## for section headers
+  - Include an Executive Summary at the top
+  - Organize findings into logical sections
+  - Use bullet points for lists
+  - Bold key terms and important findings
+  - Keep the report concise but comprehensive
+
+  Report:
+variables:
+  - title
+  - content
+tags:
+  - report
+  - document-analysis
+  - summarization

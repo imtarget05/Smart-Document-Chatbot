@@ -17,7 +17,7 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 1. **Upload** legal documents (PDF, DOCX, TXT)
 2. **Ask questions** in natural language (Vietnamese/English)
 3. **Get accurate answers** with source citations
-4. **Trust the output** — 0% hallucination rate through 5-layer verification
+4. **Trust the output** — Hallucination mitigation through 5-layer verification
 
 ## 🏗️ Architecture
 
@@ -37,6 +37,7 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 ┌─────────────────────────┐     ┌─────────────────────────────────┐
 │    PostgreSQL 15        │     │      LLM Router (FastAPI)       │
 │    (metadata + Chunks)  │     │      Task Routing • Caching     │
+│    ► Production path    │     │                                 │
 └─────────────────────────┘     └─────────────────────────────────┘
                                               │
                                     ┌─────────┴─────────┐
@@ -46,6 +47,8 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
                           │  (Local)    │       │  Workers AI  │
                           └─────────────┘       └─────────────┘
 ```
+
+> **Note:** Production chat uses **PostgreSQL lexical search**. Qdrant hybrid search + BM25 + RRF is available in the experimental Python agent service only.
 
 ## ✨ Key Features
 
@@ -70,6 +73,31 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 - **Database Migrations** (Flyway)
 - **Monitoring** (Prometheus + Grafana)
 - **Automated Testing** (251 backend + 35 frontend tests)
+
+## ⚠️ Known Limitations
+
+- **Retrieval accuracy varies significantly by document** (9.68%–96.8% across 5 production runs). The median is ~71%.
+- **Hallucination rate is 3-10%**, not 0%. Every eval run shows 1-3 hallucination cases.
+- **Production chat uses PostgreSQL lexical search**, not Qdrant hybrid search. Qdrant is only in the experimental Python agent service.
+- **Evaluation uses keyword matching**, not semantic similarity (semantic metric added but not yet calibrated).
+- **Deploy step is manual** — CI builds images but doesn't auto-deploy.
+
+## ✅ What's Genuinely Implemented
+
+- Full-stack app: Spring Boot + React + TypeScript + Python
+- JWT auth, CSRF, RBAC, account lockout, audit logging
+- CRAG corrective loop with query reformulation
+- Hybrid search + BM25 + RRF (Python agent)
+- Docker Compose with 11 services, healthchecks, monitoring
+- CI/CD pipeline with tests, security scan, eval
+- Prompt injection defense
+- Legal document parsing with OCR fallback
+- Streaming SSE
+- LangGraph multi-agent orchestration
+- GraphRAG memory prototype
+- MLflow experiment tracking
+- LoRA fine-tuning pipeline
+- LLM-judge evaluation
 
 ## 🚀 Quick Start
 
@@ -114,11 +142,13 @@ npm run dev
 
 | Metric | Value |
 |--------|-------|
-| Hallucination Rate | **0%** |
-| Retrieval Accuracy | **96.8%** |
-| Avg Latency | ~1.5s |
-| P95 Latency | ~4s |
-| Test Coverage | **286 tests** |
+| Retrieval Accuracy (keyword) | 9.68%–96.8% (varies by document) |
+| Retrieval Accuracy (semantic) | Measured via cosine similarity |
+| Hallucination Rate | 3.2%–9.7% (1-3 cases per 31 questions) |
+| Avg Latency | ~1.9s (production) |
+| P95 Latency | ~2.7s (production) |
+| Automated Tests | 286+ passing (251 backend + 35 frontend) |
+| Evaluation Dataset | 31 Vietnamese legal questions |
 
 ## 🧪 Testing
 

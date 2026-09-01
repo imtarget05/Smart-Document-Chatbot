@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "question": "What is the penalty for late delivery according to the contract?",
+    "expected_answer_contains": ["penalty", "late delivery", "5%", "percent"],
+    "expected_source_keywords": ["delivery", "penalty clause", "late"],
+    "difficulty": "medium",
+    "tags": ["contract", "delivery"]
+  },
+  {
+    "id": 2,
+    "question": "What is the maximum liability cap specified in the agreement?",
+    "expected_answer_contains": ["liability", "cap", "limit", "damages"],
+    "expected_source_keywords": ["liability", "limitation", "cap"],
+    "difficulty": "medium",
+    "tags": ["contract", "liability"]
+  },
+  {
+    "id": 3,
+    "question": "How many days does a party have to terminate the contract with written notice?",
+    "expected_answer_contains": ["termination", "notice", "days", "written"],
+    "expected_source_keywords": ["termination", "notice period", "days"],
+    "difficulty": "easy",
+    "tags": ["contract", "termination"]
+  },
+  {
+    "id": 4,
+    "question": "Which governing law applies to disputes under this agreement?",
+    "expected_answer_contains": ["governing law", "jurisdiction", "state", "country"],
+    "expected_source_keywords": ["governing law", "jurisdiction", "dispute"],
+    "difficulty": "easy",
+    "tags": ["contract", "legal"]
+  },
+  {
+    "id": 5,
+    "question": "What happens to confidential information after the agreement ends?",
+    "expected_answer_contains": ["confidential", "return", "destroy", "survive"],
+    "expected_source_keywords": ["confidential", "information", "termination"],
+    "difficulty": "medium",
+    "tags": ["confidentiality", "contract"]
+  },
+  {
+    "id": 6,
+    "question": "What is the payment terms period — net how many days?",
+    "expected_answer_contains": ["payment", "net", "days", "invoice"],
+    "expected_source_keywords": ["payment", "terms", "net", "invoice"],
+    "difficulty": "easy",
+    "tags": ["payment", "contract"]
+  },
+  {
+    "id": 7,
+    "question": "What constitutes a material breach of the agreement?",
+    "expected_answer_contains": ["material breach", "breach", "failure", "default"],
+    "expected_source_keywords": ["breach", "material", "default"],
+    "difficulty": "hard",
+    "tags": ["contract", "breach"]
+  },
+  {
+    "id": 8,
+    "question": "Are there any restrictions on the assignment of rights under this contract?",
+    "expected_answer_contains": ["assignment", "transfer", "consent", "rights"],
+    "expected_source_keywords": ["assignment", "transfer", "consent"],
+    "difficulty": "medium",
+    "tags": ["contract", "assignment"]
+  },
+  {
+    "id": 9,
+    "question": "What is the warranty period for the products or services delivered?",
+    "expected_answer_contains": ["warranty", "period", "defect", "guarantee"],
+    "expected_source_keywords": ["warranty", "defect", "period"],
+    "difficulty": "medium",
+    "tags": ["warranty", "contract"]
+  },
+  {
+    "id": 10,
+    "question": "What dispute resolution mechanism is specified — arbitration or litigation?",
+    "expected_answer_contains": ["arbitration", "dispute", "mediation", "resolution"],
+    "expected_source_keywords": ["arbitration", "dispute", "resolution"],
+    "difficulty": "medium",
+    "tags": ["dispute", "contract"]
+  },
+  {
+    "id": 11,
+    "question": "What insurance requirements must the service provider maintain?",
+    "expected_answer_contains": ["insurance", "coverage", "policy", "maintain"],
+    "expected_source_keywords": ["insurance", "coverage", "requirement"],
+    "difficulty": "medium",
+    "tags": ["insurance", "contract"]
+  },
+  {
+    "id": 12,
+    "question": "What are the intellectual property rights provisions in the agreement?",
+    "expected_answer_contains": ["intellectual property", "IP", "ownership", "rights"],
+    "expected_source_keywords": ["intellectual property", "ownership", "IP"],
+    "difficulty": "hard",
+    "tags": ["ip", "contract"]
+  },
+  {
+    "id": 13,
+    "question": "What is the force majeure clause and what events does it cover?",
+    "expected_answer_contains": ["force majeure", "act of god", "unforeseeable", "event"],
+    "expected_source_keywords": ["force majeure", "clause", "event"],
+    "difficulty": "hard",
+    "tags": ["force-majeure", "contract"]
+  },
+  {
+    "id": 14,
+    "question": "What are the delivery milestones and their corresponding deadlines?",
+    "expected_answer_contains": ["milestone", "deadline", "delivery", "schedule"],
+    "expected_source_keywords": ["milestone", "deadline", "schedule"],
+    "difficulty": "medium",
+    "tags": ["delivery", "milestones"]
+  },
+  {
+    "id": 15,
+    "question": "What happens if one party fails to meet the service level agreement (SLA)?",
+    "expected_answer_contains": ["SLA", "service level", "failure", "remedy"],
+    "expected_source_keywords": ["SLA", "service level", "remedy"],
+    "difficulty": "medium",
+    "tags": ["sla", "contract"]
+  },
+  {
+    "id": 16,
+    "question": "What is the renewal term for the contract after the initial period expires?",
+    "expected_answer_contains": ["renewal", "term", "automatic", "extension"],
+    "expected_source_keywords": ["renewal", "term", "extension"],
+    "difficulty": "easy",
+    "tags": ["renewal", "contract"]
+  },
+  {
+    "id": 17,
+    "question": "What indemnification obligations does each party have?",
+    "expected_answer_contains": ["indemnify", "indemnification", "hold harmless", "loss"],
+    "expected_source_keywords": ["indemnification", "indemnify", "loss"],
+    "difficulty": "hard",
+    "tags": ["indemnification", "contract"]
+  },
+  {
+    "id": 18,
+    "question": "What are the acceptance criteria for deliverables under this agreement?",
+    "expected_answer_contains": ["acceptance", "criteria", "deliverable", "approval"],
+    "expected_source_keywords": ["acceptance", "criteria", "deliverable"],
+    "difficulty": "medium",
+    "tags": ["acceptance", "deliverables"]
+  },
+  {
+    "id": 19,
+    "question": "Is there a non-compete clause and what is its duration?",
+    "expected_answer_contains": ["non-compete", "compete", "restriction", "duration"],
+    "expected_source_keywords": ["non-compete", "restriction", "duration"],
+    "difficulty": "medium",
+    "tags": ["non-compete", "contract"]
+  },
+  {
+    "id": 20,
+    "question": "What are the data protection and privacy obligations specified in the agreement?",
+    "expected_answer_contains": ["data protection", "privacy", "personal data", "GDPR"],
+    "expected_source_keywords": ["data protection", "privacy", "personal data"],
+    "difficulty": "hard",
+    "tags": ["privacy", "data-protection"]
+  }
+]

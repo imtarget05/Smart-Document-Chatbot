@@ -37,6 +37,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from adk_runtime import run_demo_workflow
 from memory.long_term import LongTermMemory
+from memory.graph_memory import GraphMemory
 from models import (
     AgentRequest,
     AgentResponse,
@@ -60,6 +61,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _workflow = None
 _long_term_memory = None
+_graph_memory = None
 _rate_limiter = None
 _a2a_hub = None
 _mcp_server = None
@@ -86,6 +88,10 @@ async def lifespan(app: FastAPI):
     _long_term_memory = LongTermMemory()
     await _long_term_memory.ensure_table()
     await _long_term_memory.ensure_turn_table()
+
+    # 2b. Graph memory (GraphRAG)
+    _graph_memory = GraphMemory()
+    await _graph_memory.ensure_tables()
 
     # 3. Rate limiter
     from rate_limiter import RateLimiter
@@ -1163,6 +1169,91 @@ async def on_ingest_complete(request: Request):
         logger.warning("Auto-retrain trigger failed (non-fatal): %s", exc)
         return {"status": "ok", "should_retrain": False, "error": str(exc)}
 
+
+
+# ---------------------------------------------------------------------------
+# Graph Memory endpoints (GraphRAG prototype)
+# ---------------------------------------------------------------------------
+@v1_router.get("/agent/memory/graph/stats")
+async def graph_memory_stats():
+    """Get graph memory statistics."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    stats = await _graph_memory.get_stats()
+    return {"status": "ok", **stats}
+
+
+@v1_router.post("/agent/memory/graph/extract")
+async def graph_memory_extract(request: Request):
+    """Extract and store entities from a conversation."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    payload = await request.json()
+    session_id = payload.get("session_id", "default")
+    user_id = payload.get("user_id", "default")
+    conversation_turns = payload.get("conversation_turns", [])
+    
+    entities, relationships = await _graph_memory.extract_and_store(
+        session_id=session_id,
+        user_id=user_id,
+        conversation_turns=conversation_turns,
+    )
+    return {
+        "status": "ok",
+        "entities_extracted": len(entities),
+        "relationships_extracted": len(relationships),
+        "entities": [e.to_dict() for e in entities],
+        "relationships": [r.to_dict() for r in relationships],
+    }
+
+
+@v1_router.get("/agent/memory/graph/entity/{entity_name:path}")
+async def graph_memory_entity(entity_name: str):
+    """Get all facts about an entity."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    context = await _graph_memory.get_entity_context(entity_name)
+    return {"status": "ok", **context}
+
+
+@v1_router.get("/agent/memory/graph/related/{entity_name:path}")
+async def graph_memory_related(entity_name: str, depth: int = 2):
+    """Find related entities using graph traversal."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    related = await _graph_memory.retrieve_related(entity_name, depth=depth)
+    return {"status": "ok", "entity": entity_name, "related": related, "count": len(related)}
+
+
+@v1_router.get("/agent/memory/graph/path")
+async def graph_memory_path(entity_a: str = "", entity_b: str = ""):
+    """Find relationship path between two entities."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    if not entity_a or not entity_b:
+        raise HTTPException(status_code=400, detail="entity_a and entity_b are required")
+    path = await _graph_memory.find_path(entity_a, entity_b)
+    return {"status": "ok", **(path or {"found": False})}
+
+
+@v1_router.get("/agent/memory/graph/session/{session_id}")
+async def graph_memory_session(session_id: str):
+    """Get all entities mentioned in a session."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    entities = await _graph_memory.get_session_entities(session_id)
+    return {"status": "ok", "session_id": session_id, "entities": entities, "count": len(entities)}
+
+
+@v1_router.get("/agent/memory/graph/search")
+async def graph_memory_search(query: str = "", limit: int = 10):
+    """Search entities by name."""
+    if _graph_memory is None:
+        raise HTTPException(status_code=503, detail="Graph memory not initialized")
+    if not query:
+        raise HTTPException(status_code=400, detail="query parameter is required")
+    entities = await _graph_memory.search_entities(query, limit=limit)
+    return {"status": "ok", "query": query, "entities": entities, "count": len(entities)}
 
 # ---------------------------------------------------------------------------
 # Register versioned routers

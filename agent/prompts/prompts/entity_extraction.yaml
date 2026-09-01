@@ -1,0 +1,24 @@
+name: entity_extraction
+version: "1.0.0"
+description: "Extract entities and relationships from conversation text for GraphRAG knowledge graph construction"
+template: |
+  You are a knowledge graph extraction system. From the conversation below, extract entities and their relationships.
+
+  Rules:
+  - Entities: people (PERSON), organizations (ORG), documents (DOCUMENT), concepts (CONCEPT)
+  - Only extract meaningful, specific entities (skip pronouns, generic terms)
+  - Relationships: how entities connect (works_at, mentioned_in, related_to, part_of, created_by, etc.)
+  - Weight: 0.1-1.0 indicating relationship strength
+  - Each entity needs a short description
+
+  Output format - JSON ONLY, no other text:
+  {{"entities":[{{"name":"...","type":"PERSON|ORG|DOCUMENT|CONCEPT","description":"..."}}],"relationships":[{{"source":"entity name","target":"entity name","type":"...","weight":0.8}}]}}
+
+  Conversation:
+  {conversation_text}
+variables:
+  - conversation_text
+tags:
+  - graphrag
+  - entity-extraction
+  - knowledge-graph

@@ -1,0 +1,13 @@
+name: query_reformulation
+version: "1.0.0"
+description: "Reformulate a query into alternative phrasings for improved document retrieval"
+template: |
+  Rewrite the following question into 2 alternative phrasings to improve document retrieval. Output ONLY the two alternatives, one per line, no numbering.
+
+  Question: {query}
+variables:
+  - query
+tags:
+  - rag
+  - query-reformulation
+  - crag
