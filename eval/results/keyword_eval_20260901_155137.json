@@ -1,0 +1,50 @@
+[
+  {
+    "question": "Điều 7 quy định gì về hình thức doanh nghiệp?",
+    "answer": "Được, tôi sẽ trả lời câu hỏi của bạn.\n\nCâu hỏi: Điều 7 quy định gì về hình thức doanh nghiệp?\n\nTrả lời: Theo Điều 7 Luật Doanh nghiệp 2020, hình thức doanh nghiệp bao gồm:\n\n(1) Doanh nghiệp tư nhân - do một cá nhân làm chủ và chịu trách nhiệm toàn bộ tài sản của mình cho hoạt động kinh doanh.\n\n(2) C",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 4150.6
+  },
+  {
+    "question": "Các hình thức doanh nghiệp được quy định ở đâu?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều 10 quy định gì về thủ tục thành lập?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận đăng ký kinh doanh?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều lệ công ty cần những nội dung gì?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều lệ công ty có hiệu lực khi nào?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Quyền của cổ đông được quy định ở Điều nào?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Cổ đông có quyền gì khi tham gia hội đồng quản trị?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp bao gồm những gì?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Doanh nghiệp có nghĩa vụ gì về thuế?",
+    "error": "HTTP 403: "
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "question": "Điều 7 quy định gì về hình thức doanh nghiệp?",
+    "answer": "Được, tôi sẽ trả lời câu hỏi của bạn.\n\nCâu hỏi: Điều 7 quy định gì về hình thức doanh nghiệp?\n\nTrả lời: Theo Điều 7 Luật Doanh nghiệp 2020, hình thức doanh nghiệp bao gồm:\n\n(1) Doanh nghiệp tư nhân - do một cá nhân làm chủ và chịu trách nhiệm toàn bộ tài sản của mình cho hoạt động kinh doanh.\n\n(2) C",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 23.8
+  },
+  {
+    "question": "Các hình thức doanh nghiệp được quy định ở đâu?",
+    "answer": "Theo Điều 7 Luật Doanh nghiệp 2020, hình thức doanh nghiệp được quy định tại khoản 1, khoản 2 và khoản 3 của Điều này.\n\nKhoản 1 Điều 7 quy định về doanh nghiệp tư nhân, doanh nghiệp này được thành lập theo hình thức doanh nghiệp tư nhân, do một cá nhân làm chủ và chịu trách nhiệm toàn bộ tài sản của",
+    "confidence": "medium",
+    "confidence_score": 0.66,
+    "rag_strategy": "corrective",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 6520.1
+  },
+  {
+    "question": "Điều 10 quy định gì về thủ tục thành lập?",
+    "answer": "Theo Điều 10 Luật Doanh nghiệp 2020, thủ tục thành lập doanh nghiệp quy định về việc:\n\n\"Người thành lập doanh nghiệp nộp hồ sơ đăng ký kinh doanh đến cơ quan đăng ký kinh doanh cấp tỉnh.\"\n\nThuật ngữ pháp lý quan trọng trong câu trả lời này là:\n\n- \"Người thành lập doanh nghiệp\" (người thực hiện việc ",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.6666666666666666,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 3907.8
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận đăng ký kinh doanh?",
+    "answer": "Theo Điều 3 Luật Doanh nghiệp 2020, thời hạn cấp giấy chứng nhận đăng ký kinh doanh là 3 ngày làm việc từ ngày nhận được hồ sơ đăng ký kinh doanh đầy đủ và chính xác.\n\nThuật ngữ pháp lý liên quan:\n\n- \"Cơ quan đăng ký kinh doanh\" là cơ quan có thẩm quyền chịu trách nhiệm về việc cấp giấy chứng nhận đ",
+    "confidence": "high",
+    "confidence_score": 0.84,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 4094.6
+  },
+  {
+    "question": "Điều lệ công ty cần những nội dung gì?",
+    "answer": "Theo Điều 2 Điều lệ công ty, điều lệ công ty phải có các nội dung chính:\n\n- Tên công ty\n- Địa chỉ trụ sở\n- Mục đích kinh doanh\n- Vốn điều lệ\n- Quyền và nghĩa vụ của cổ đông thành viên\n\nThuật ngữ pháp lý quan trọng trong câu hỏi này là \"cổ đông thành viên\" và \"vốn điều lệ\".",
+    "confidence": "medium",
+    "confidence_score": 0.6,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.6666666666666666,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 2153.1
+  },
+  {
+    "question": "Điều lệ công ty có hiệu lực khi nào?",
+    "answer": "Theo Điều 3 Điều lệ công ty có hiệu lực khi được ít nhất 51% cổ đông thành viên thông qua.\n\nThuật ngữ pháp lý \"cổ đông thành viên\" được định nghĩa trong tài liệu như sau: \"Công ty trách nhiệm hữu hạn là doanh nghiệp mà các thành viên chịu trách nhiệm vốn góp phạm vi vốn góp cho công ty.\"\n\nVì vậy, Đi",
+    "confidence": "high",
+    "confidence_score": 0.84,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 2545.4
+  },
+  {
+    "question": "Quyền của cổ đông được quy định ở Điều nào?",
+    "answer": "Được, tôi sẽ trả lời câu hỏi của bạn.\n\nTheo [TÀI LIỆU], quyền của cổ đông được quy định ở các Điều sau:\n\n- Cổ đông có quyền nhận cổ tức theo quyết định của đại hội đồng cổ đông được quy định ở [1] Điều 2.\n- Cổ đông có quyền chuyển nhượng cổ phần cho người khác theo quyết định của hội đồng quản trị đ",
+    "confidence": "high",
+    "confidence_score": 0.75,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 4699.8
+  },
+  {
+    "question": "Cổ đông có quyền gì khi tham gia hội đồng quản trị?",
+    "answer": "Câu hỏi của bạn được trả lời như sau:\n\nCổ đông có quyền tham gia hội đồng quản trị theo Điều 1.3 Luật Doanh nghiệp 2020, cụ thể là:\n\n\"Cổ đông có quyền tham gia hội đồng quản trị và biểu quyết theo số cổ phần nắm giữ.\"\n\nThuật ngữ pháp lý quan trọng trong câu trả lời này bao gồm:\n\n- Cổ đông: là người ",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 3786.8
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp bao gồm những gì?",
+    "answer": "Theo Điều 18 Luật Doanh nghiệp 2020, nghĩa vụ của doanh nghiệp bao gồm:\n\n- Doanh nghiệp có nghĩa vụ kinh doanh đúng ngành nghề đăng ký.\n- Doanh nghiệp có nghĩa vụ lưu sổ sách kế toán theo quy định của pháp luật.\n\nThuật ngữ pháp lý quan trọng trong câu hỏi này là \"doanh nghiệp\", \"ngành nghề\", \"sổ sác",
+    "confidence": "medium",
+    "confidence_score": 0.6,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.6666666666666666,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 3177.7
+  },
+  {
+    "question": "Doanh nghiệp có nghĩa vụ gì về thuế?",
+    "answer": "Theo [TÀI LIỆU], Doanh nghiệp có nghĩa vụ nộp thuế đầy đủ và đúng hạn theo quy định, được quy định rõ trong [1] của tài liệu.\n\nDo đó, trả lời câu hỏi của bạn là:\n\n\"Theo Điều 3 Luật Doanh nghiệp 2020, doanh nghiệp có nghĩa vụ nộp thuế đầy đủ và đúng hạn theo quy định.\"",
+    "confidence": "high",
+    "confidence_score": 0.88,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 2016.9
+  }
+]

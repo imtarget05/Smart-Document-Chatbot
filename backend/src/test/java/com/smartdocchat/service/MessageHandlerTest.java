@@ -56,20 +56,20 @@ class MessageHandlerTest {
         String prompt = messageHandler.buildPrompt("What is X?", List.of("chunk one", "chunk two"));
         assertTrue(prompt.contains("[1] chunk one"));
         assertTrue(prompt.contains("[2] chunk two"));
-        assertTrue(prompt.contains("User Question: What is X?"));
+        assertTrue(prompt.contains("CÂU HỎI: What is X?"));
     }
 
     @Test
     void buildPromptHandlesEmptyContext() {
         String prompt = messageHandler.buildPrompt("What is X?", List.of());
-        assertTrue(prompt.contains("No relevant context was found in the document."));
+        assertTrue(prompt.contains("(Không tìm thấy tài liệu liên quan)"));
     }
 
     @Test
     void buildsFallbackPromptsAndAbstention() {
-        assertTrue(messageHandler.buildGeneralKnowledgePrompt("Q").contains("Use your internal knowledge"));
+        assertTrue(messageHandler.buildGeneralKnowledgePrompt("Q").contains("Không tìm thấy thông tin trong tài liệu"));
         assertTrue(messageHandler.buildWebSearchPrompt("Q", List.of("snippet")).contains("[1] snippet"));
-        assertTrue(messageHandler.buildAbstentionResponse().contains("sufficient evidence"));
+        assertTrue(messageHandler.buildAbstentionResponse().contains("Không tìm thấy thông tin trong tài liệu"));
         assertTrue(messageHandler.buildInjectionBlockedResponse().contains("override the assistant's behavior"));
     }
 
