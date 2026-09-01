@@ -6,6 +6,7 @@ import com.smartdocchat.dto.ChatRequest;
 import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.security.PromptInjectionDetector;
+import com.smartdocchat.util.LegalQueryNormalizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,7 @@ class ChatServiceTest {
     @Mock private com.smartdocchat.metrics.RagMetrics ragMetrics;
     @Mock private DocumentService documentService;
     @Mock private AgentClient agentClient;
+    private LegalQueryNormalizer normalizer = new LegalQueryNormalizer();
 
     private PromptInjectionProperties promptInjectionProperties;
     private CragConfig cragConfig;
@@ -50,7 +52,8 @@ class ChatServiceTest {
         cragConfig = new CragConfig();
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService(), agentClient);
+                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService(), agentClient,
+                normalizer);
     }
 
     private ChatRequest request(String message) {

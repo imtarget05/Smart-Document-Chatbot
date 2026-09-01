@@ -1,0 +1,42 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Điều 10 quy định gì?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Quyền của cổ đông?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Công ty cổ phần chia vốn thành gì?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Điều lệ có hiệu lực khi nào?",
+    "error": "HTTP 403"
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "error": "HTTP 403"
+  }
+]

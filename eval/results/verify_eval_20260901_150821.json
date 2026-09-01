@@ -1,0 +1,122 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "answer": "Theo tài liệu, Điều 7 quy định về hình thức doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 23.3
+  },
+  {
+    "question": "Điều 10 quy định gì?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 676.3
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 30.9
+  },
+  {
+    "question": "Quyền của cổ đông?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 542.0
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp?",
+    "answer": "Theo Điều 7. Hình thức doanh nghiệp của Luật Doanh nghiệp 2020, không có thông tin cụ thể về nghĩa vụ của doanh nghiệp trong tài liệu này. Tuy nhiên, dựa trên kiến thức chung về doanh nghiệp, chúng ta",
+    "confidence": "medium",
+    "confidence_score": 0.65,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 23.0
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "answer": "Theo Điều 7. Hình thức doanh nghiệp trong Luật Doanh nghiệp 2020, doanh nghiệp tư nhân được thành lập bởi một cá nhân làm chủ và chịu trách nhiệm toàn bộ tài sản.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 1099.1
+  },
+  {
+    "question": "Công ty cổ phần chia vốn thành gì?",
+    "answer": "Theo [1] Công ty cổ phần chia vốn thành các cổ phần.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 25.6
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 480.0
+  },
+  {
+    "question": "Điều lệ có hiệu lực khi nào?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 28.1
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": null,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 582.7
+  }
+]

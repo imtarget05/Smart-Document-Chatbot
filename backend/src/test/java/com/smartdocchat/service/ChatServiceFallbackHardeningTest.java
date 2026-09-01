@@ -7,6 +7,7 @@ import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.metrics.RagMetrics;
 import com.smartdocchat.observability.LangfuseService;
 import com.smartdocchat.security.PromptInjectionDetector;
+import com.smartdocchat.util.LegalQueryNormalizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,7 @@ class ChatServiceFallbackHardeningTest {
     @Mock private RagMetrics ragMetrics;
     @Mock private DocumentService documentService;
     @Mock private AgentClient agentClient;
+    private LegalQueryNormalizer normalizer = new LegalQueryNormalizer();
 
     private ChatService chatService;
 
@@ -52,7 +54,7 @@ class ChatServiceFallbackHardeningTest {
         PromptInjectionProperties pip = new PromptInjectionProperties();
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, pip,
-                ragMetrics, documentService, new LangfuseService(), agentClient);
+                ragMetrics, documentService, new LangfuseService(), agentClient, normalizer);
         // default stubs so the RAG fallback path does not itself throw
         lenient().when(historyService.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(retrievalService.retrieve(any(), any(), anyString(), anyInt())).thenReturn(List.of());

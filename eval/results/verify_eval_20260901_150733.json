@@ -1,0 +1,66 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "answer": "Theo tài liệu, Điều 7 quy định về hình thức doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 28.9
+  },
+  {
+    "question": "Điều 10 quy định gì?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "error": "object of type 'NoneType' has no len()"
+  },
+  {
+    "question": "Quyền của cổ đông?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp?",
+    "answer": "Theo Điều 7. Hình thức doanh nghiệp của Luật Doanh nghiệp 2020, không có thông tin cụ thể về nghĩa vụ của doanh nghiệp trong tài liệu này. Tuy nhiên, dựa trên kiến thức chung về doanh nghiệp, chúng ta",
+    "confidence": "medium",
+    "confidence_score": 0.65,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 3306.8
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Công ty cổ phần chia vốn thành gì?",
+    "answer": "Theo [1] Công ty cổ phần chia vốn thành các cổ phần.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 650.6
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều lệ có hiệu lực khi nào?",
+    "error": "object of type 'NoneType' has no len()"
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "error": "HTTP 403: "
+  }
+]

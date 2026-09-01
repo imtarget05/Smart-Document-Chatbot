@@ -1,0 +1,122 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "answer": "Theo tài liệu, Điều 7 Luật Doanh nghiệp 2020 quy định về hình thức doanh nghiệp, bao gồm công ty TNHH, công ty cổ phần, doanh nghiệp tư nhân.",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.6666666666666666,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 1479.4
+  },
+  {
+    "question": "dieu 10 quy dinh gi?",
+    "answer": "Theo Điều 10 Luật Doanh nghiệp 2020, Thủ tục thành lập doanh nghiệp phải đăng ký Bộ Kế hoạch Đầu tư.",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 764.8
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 1318.4
+  },
+  {
+    "question": "quyen cua co dong?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 477.0
+  },
+  {
+    "question": "nghia vu cua doanh nghiep?",
+    "answer": "Theo Điều 7 Luật Doanh nghiệp 2020, \"doanh nghiệp\" được hiểu là tổ chức kinh tế có mục đích hoạt động kinh doanh.",
+    "confidence": "high",
+    "confidence_score": 0.74,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 937.1
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "answer": "Theo Điều 7 Luật Doanh nghiệp 2020, doanh nghiệp tư nhân được thành lập theo hình thức cá nhân, do một cá nhân làm chủ.",
+    "confidence": "high",
+    "confidence_score": 0.83,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.5,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 908.4
+  },
+  {
+    "question": "cong ty co phan chia von thanh gi?",
+    "answer": "Không tìm thấy thông tin trong tài liệu về \"cong ty co phan chia von thanh gi\".",
+    "confidence": "high",
+    "confidence_score": 0.72,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 693.1
+  },
+  {
+    "question": "thoi han cap giay chung nhan?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 461.5
+  },
+  {
+    "question": "điều lệ có hiệu lực khi nào?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.0,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 521.1
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "answer": "Không tìm thấy thông tin trong tài liệu về Điều 25 của Luật Doanh nghiệp 2020.",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": null,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 639.9
+  }
+]

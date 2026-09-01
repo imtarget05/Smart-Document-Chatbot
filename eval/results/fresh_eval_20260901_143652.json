@@ -1,0 +1,106 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "answer": "Theo văn bản cung cấp, Điều 7 quy định về hình thức doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 528.0
+  },
+  {
+    "question": "Điều 10 quy định gì?",
+    "answer": "Theo thông tin trong văn bản, Điều 10 quy định thủ tục thành lập doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 542.7
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "error": "object of type 'NoneType' has no len()"
+  },
+  {
+    "question": "Quyền của cổ đông?",
+    "answer": "Theo Điều 14 trong văn bản, quyền của cổ đông bao gồm:\n\n- Quyền tham gia hội đồng quản trị và biểu quyết.\n\nVì vậy, quyền của cổ đông chính là quyền tham gia vào hoạt động của hội đồng quản trị và có q",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.3333333333333333,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 1518.0
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp?",
+    "answer": "Theo Điều 18 của Luật Doanh nghiệp 2020, nghĩa vụ của doanh nghiệp được quy định như sau:\n\nDoanh nghiệp có nghĩa vụ:\n\n- Thực hiện đúng các quy định của pháp luật về doanh nghiệp;\n- Đăng ký và thông ti",
+    "confidence": "high",
+    "confidence_score": 0.84,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 5719.5
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "answer": "Theo thông tin trong văn bản, doanh nghiệp tư nhân được định nghĩa là doanh nghiệp do một cá nhân làm chủ.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 691.5
+  },
+  {
+    "question": "Công ty cổ phần chia vốn thành gì?",
+    "answer": "Theo điểm [1] trong văn bản, công ty cổ phần được chia thành các cổ phần.",
+    "confidence": "high",
+    "confidence_score": 0.97,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 610.4
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận?",
+    "answer": "Theo thông tin trong văn bản, thời hạn cấp giấy chứng nhận là 3 ngày làm việc.",
+    "confidence": "medium",
+    "confidence_score": 0.65,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 490.3
+  },
+  {
+    "question": "Điều lệ có hiệu lực khi nào?",
+    "answer": "Theo Điều lệ có hiệu lực khi 51% thông qua, Điều lệ có hiệu lực khi 51% thông qua.",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 581.8
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "error": "object of type 'NoneType' has no len()"
+  }
+]

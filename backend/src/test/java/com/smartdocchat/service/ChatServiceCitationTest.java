@@ -7,6 +7,7 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.entity.Document;
 import com.smartdocchat.entity.SourceType;
 import com.smartdocchat.security.PromptInjectionDetector;
+import com.smartdocchat.util.LegalQueryNormalizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,7 @@ class ChatServiceCitationTest {
     @Mock private PromptInjectionDetector promptInjectionDetector;
     @Mock private DocumentService documentService;
     @Mock private AgentClient agentClient;
+    private LegalQueryNormalizer normalizer = new LegalQueryNormalizer();
 
     private CragConfig cragConfig;
     private ChatService chatService;
@@ -46,7 +48,8 @@ class ChatServiceCitationTest {
                 promptInjectionDetector,
                 new com.smartdocchat.config.PromptInjectionProperties(),
                 new com.smartdocchat.metrics.RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
-                documentService, new com.smartdocchat.observability.LangfuseService(), agentClient);
+                documentService, new com.smartdocchat.observability.LangfuseService(), agentClient,
+                normalizer);
         lenient().when(promptInjectionDetector.analyze(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(org.mockito.ArgumentMatchers.any(ChatMessage.class)))

@@ -1,0 +1,50 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "answer": "Theo tài liệu, Điều 7 quy định về hình thức doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 28.1
+  },
+  {
+    "question": "Điều 10 quy định gì?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Quyền của cổ đông?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Công ty cổ phần chia vốn thành gì?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều lệ có hiệu lực khi nào?",
+    "error": "HTTP 403: "
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "error": "HTTP 403: "
+  }
+]

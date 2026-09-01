@@ -7,6 +7,7 @@ import com.smartdocchat.dto.ChatResponse;
 import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.metrics.RagMetrics;
 import com.smartdocchat.security.PromptInjectionDetector;
+import com.smartdocchat.util.LegalQueryNormalizer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,7 @@ class ChatServiceExtraTest {
     @Mock private QueryReformulator queryReformulator;
     @Mock private WebSearchService webSearchService;
     @Mock private PromptInjectionDetector promptInjectionDetector;
+    private LegalQueryNormalizer normalizer = new LegalQueryNormalizer();
 
     private PromptInjectionProperties promptInjectionProperties;
     private SimpleMeterRegistry meterRegistry;
@@ -55,7 +57,8 @@ class ChatServiceExtraTest {
         ragMetrics = new RagMetrics(meterRegistry);
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService(), agentClient);
+                ragMetrics, documentService, new com.smartdocchat.observability.LangfuseService(), agentClient,
+                normalizer);
         lenient().when(promptInjectionDetector.analyze(anyString())).thenReturn(PromptInjectionDetector.Severity.NONE);
         lenient().when(historyService.save(any(ChatMessage.class))).thenAnswer(inv -> inv.getArgument(0));
     }

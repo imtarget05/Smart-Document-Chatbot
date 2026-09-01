@@ -42,7 +42,7 @@ public class LegalQueryNormalizer {
     );
 
     private static final Pattern ARTICLE_REF = Pattern.compile(
-            "(?i)điều\\s+(\\d{1,3})(?:\\s*,?\\s*khoản\\s+(\\d{1,3}))?(?:\\s*,?\\s*điểm\\s+([a-zà-ỹ]))?");
+            "(?i)dieu\\s+(\\d{1,3})(?:\\s*,?\\s*khoan\\s+(\\d{1,3}))?(?:\\s*,?\\s*diem\\s+([a-z]))?");
     /** Document numbers like 45/2019/QH14 — kept as one match unit. */
     private static final Pattern DOC_NUMBER = Pattern.compile("[\\p{L}\\p{N}]+/\\d{2,4}/[\\p{L}\\p{N}]+");
 
@@ -98,7 +98,8 @@ public class LegalQueryNormalizer {
 
     /** Extracts an explicit Điều/Khoản/Điểm reference from the query, if stated. */
     public Optional<ArticleRef> extractArticleRef(String query) {
-        Matcher m = ARTICLE_REF.matcher(normalize(query));
+        String folded = fold(normalize(query));
+        Matcher m = ARTICLE_REF.matcher(folded);
         if (!m.find()) {
             return Optional.empty();
         }

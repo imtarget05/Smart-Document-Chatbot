@@ -8,6 +8,7 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.metrics.RagMetrics;
 import com.smartdocchat.observability.LangfuseService;
 import com.smartdocchat.security.PromptInjectionDetector;
+import com.smartdocchat.util.LegalQueryNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,7 @@ public class ChatService {
     private final DocumentService documentService;
     private final LangfuseService langfuse;
     private final AgentClient agentClient;
+    private final LegalQueryNormalizer normalizer;
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -110,7 +112,16 @@ public class ChatService {
                 if ("no_evidence".equals(crag.strategy())) {
                     ragMetrics.recordAbstention();
                 }
-                ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+                String confidenceLabel;
+                double confidenceScore;
+                if ("no_evidence".equals(crag.strategy())) {
+                    confidenceLabel = "low";
+                    confidenceScore = 0.0;
+                } else {
+                    confidenceLabel = confidenceLabel(crag.confidenceScore());
+                    confidenceScore = crag.confidenceScore();
+                }
+                ragMetrics.recordRequest(crag.strategy(), confidenceLabel);
                 ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
             } catch (RuntimeException e) {
                 // CRAG orchestration failure (retrieval down, reformulator bug, web
@@ -177,6 +188,17 @@ public class ChatService {
                     return;
                 }
 
+                // Bug 1 fix: force low confidence when strategy is no_evidence
+                String metaConfidenceLabel;
+                double metaConfidenceScore;
+                if ("no_evidence".equals(crag.strategy())) {
+                    metaConfidenceLabel = "low";
+                    metaConfidenceScore = 0.0;
+                } else {
+                    metaConfidenceLabel = confidenceLabel(crag.confidenceScore());
+                    metaConfidenceScore = round(crag.confidenceScore());
+                }
+
                 // Send metadata (sources + strategy) up front, before the token stream.
                 Map<String, Object> metaEvent = new LinkedHashMap<>();
                 metaEvent.put("sourceChunks", buildSourceChunks(crag));
@@ -184,15 +206,15 @@ public class ChatService {
                 metaEvent.put("sources",
                         buildSources(ownerUsername, request.getDocumentId(), crag));
                 metaEvent.put("documentId", request.getDocumentId());
-                metaEvent.put("confidenceScore", round(crag.confidenceScore()));
-                metaEvent.put("confidence", confidenceLabel(crag.confidenceScore()));
+                metaEvent.put("confidenceScore", metaConfidenceScore);
+                metaEvent.put("confidence", metaConfidenceLabel);
                 metaEvent.put("ragStrategy", crag.strategy());
                 emitter.send(SseEmitter.event().name("metadata").data(metaEvent));
 
                 // Unanswerable question: stream the safe abstention response, no LLM call.
                 if ("no_evidence".equals(crag.strategy())) {
                     ragMetrics.recordAbstention();
-                    ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
+                    ragMetrics.recordRequest(crag.strategy(), "low");
                     ragMetrics.recordAnswer(crag.strategy(), false);
                     String abstention = messageHandler.buildAbstentionResponse();
                     emitter.send(SseEmitter.event().name("chunk").data(abstention));
@@ -457,7 +479,8 @@ public class ChatService {
 
     private java.util.Set<String> significantTokens(String text) {
         java.util.Set<String> tokens = new java.util.HashSet<>();
-        for (String raw : text.toLowerCase().split("[^\\p{L}]+")) {
+        String folded = normalizer.fold(text.toLowerCase());
+        for (String raw : folded.split("[^\\p{L}]+")) {
             if (raw.length() >= 3 && !STOPWORDS.contains(raw)) {
                 tokens.add(raw);
             }
@@ -491,6 +514,16 @@ public class ChatService {
     // ------------------------------------------------------------------
 
     private ChatResponse toResponse(String ownerUsername, ChatMessage message, CragResult crag) {
+        // Bug 1 fix: force low confidence when strategy is no_evidence
+        String label;
+        double score;
+        if ("no_evidence".equals(crag.strategy())) {
+            label = "low";
+            score = 0.0;
+        } else {
+            label = confidenceLabel(crag.confidenceScore());
+            score = round(crag.confidenceScore());
+        }
         return ChatResponse.builder()
                 .id(message.getId())
                 .sessionId(message.getSessionId())
@@ -498,8 +531,8 @@ public class ChatService {
                 .aiResponse(message.getAiResponse())
                 .sourceChunks(message.getSourceChunks())
                 .documentId(message.getDocumentId())
-                .confidence(confidenceLabel(crag.confidenceScore()))
-                .confidenceScore(round(crag.confidenceScore()))
+                .confidence(label)
+                .confidenceScore(score)
                 .ragStrategy(crag.strategy())
                 .sources(buildSources(ownerUsername, message.getDocumentId(), crag))
                 .build();

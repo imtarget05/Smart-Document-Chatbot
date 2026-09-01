@@ -8,6 +8,7 @@ import com.smartdocchat.entity.ChatMessage;
 import com.smartdocchat.metrics.RagMetrics;
 import com.smartdocchat.observability.LangfuseService;
 import com.smartdocchat.security.PromptInjectionDetector;
+import com.smartdocchat.util.LegalQueryNormalizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +47,7 @@ class ChatServiceCragExceptionHardeningTest {
     @Mock private RagMetrics ragMetrics;
     @Mock private DocumentService documentService;
     @Mock private AgentClient agentClient;
+    private LegalQueryNormalizer normalizer = new LegalQueryNormalizer();
 
     private ChatService chatService;
 
@@ -57,7 +59,7 @@ class ChatServiceCragExceptionHardeningTest {
         pip.setEnabled(false);
         chatService = new ChatService(messageHandler, historyService, cragConfig, retrievalService,
                 queryReformulator, webSearchService, promptInjectionDetector, pip,
-                ragMetrics, documentService, new LangfuseService(), agentClient);
+                ragMetrics, documentService, new LangfuseService(), agentClient, normalizer);
         lenient().when(historyService.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(messageHandler.buildAbstentionResponse()).thenReturn("safe abstain");
     }

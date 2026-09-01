@@ -1,0 +1,122 @@
+[
+  {
+    "question": "Điều 7 quy định gì?",
+    "answer": "Theo văn bản, Điều 7 quy định về hình thức doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 567.0
+  },
+  {
+    "question": "Điều 10 quy định gì?",
+    "answer": "Theo văn bản, Điều 10 quy định thủ tục thành lập doanh nghiệp.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 467.2
+  },
+  {
+    "question": "Điều lệ công ty cần nội dung gì?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "low",
+    "confidence_score": 0.32,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": true,
+    "latency_ms": 1128.3
+  },
+  {
+    "question": "Quyền của cổ đông?",
+    "answer": "Theo Điều 14 của văn bản, quyền của cổ đông bao gồm:\n\n- Quyền tham gia hội đồng quản trị và biểu quyết.\n\nVề quyền và nghĩa vụ của cổ đông, theo Điều lệ công ty, phải có các thông tin sau:\n\n- Tên công ty\n- Vốn điều lệ\n- Quyền và nghĩa vụ của cổ đông sẽ được nêu rõ trong Điều lệ công ty.",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.33,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 1663.0
+  },
+  {
+    "question": "Nghĩa vụ của doanh nghiệp?",
+    "answer": "Theo Điều 18 của Luật Doanh nghiệp 2020, nghĩa vụ của doanh nghiệp được quy định như sau:\n\n\"Đồng doanh nghiệp và các cá nhân có trách nhiệm trước pháp luật về việc thực hiện nghĩa vụ của mình.\"\n\nTuy nhiên, để có thông tin cụ thể hơn về nghĩa vụ của doanh nghiệp, bạn có thể tham khảo Điều 18 của Luật",
+    "confidence": "high",
+    "confidence_score": 0.84,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 3546.9
+  },
+  {
+    "question": "Doanh nghiệp tư nhân do ai làm chủ?",
+    "answer": "Theo Điều 7. Hình thức doanh nghiệp trong Luật Doanh nghiệp 2020, doanh nghiệp tư nhân được thành lập bởi một cá nhân làm chủ.",
+    "confidence": "high",
+    "confidence_score": 1.0,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 675.9
+  },
+  {
+    "question": "Công ty cổ phần chia vốn thành gì?",
+    "answer": "Theo điểm [1] trong văn bản, công ty cổ phần được chia thành các cổ phần.",
+    "confidence": "high",
+    "confidence_score": 0.97,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 454.7
+  },
+  {
+    "question": "Thời hạn cấp giấy chứng nhận?",
+    "answer": "Theo thông tin trong văn bản, thời hạn cấp giấy chứng nhận là 3 ngày làm việc.",
+    "confidence": "medium",
+    "confidence_score": 0.65,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 494.7
+  },
+  {
+    "question": "Điều lệ có hiệu lực khi nào?",
+    "answer": "Theo điểm 3 trong Điều lệ, Điều lệ có hiệu lực khi 51% thông qua.",
+    "confidence": "high",
+    "confidence_score": 0.79,
+    "rag_strategy": "direct",
+    "keyword_accuracy": 1.0,
+    "has_source_evidence": true,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 488.9
+  },
+  {
+    "question": "Điều 25 quy định gì?",
+    "answer": "I couldn't find sufficient evidence in the provided documents to answer this question. Please rephrase the question or upload a document that covers this topic.",
+    "confidence": "high",
+    "confidence_score": 0.75,
+    "rag_strategy": "no_evidence",
+    "keyword_accuracy": 0.0,
+    "has_source_evidence": false,
+    "is_hallucination": false,
+    "is_abstain": false,
+    "latency_ms": 714.9
+  }
+]

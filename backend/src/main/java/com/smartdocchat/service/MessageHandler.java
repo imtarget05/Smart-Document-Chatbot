@@ -13,6 +13,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 @Service
@@ -28,9 +29,14 @@ public class MessageHandler {
     @org.springframework.beans.factory.annotation.Value("${security.internal-token:}")
     private String internalToken;
 
+    private static final String CITATION_REQUIREMENT =
+            "\n\nKHI TRẢ LỜI, PHẢI TRÍCH DẪN ĐIỀU KHOẢN CỤ THỂ TỪ TÀI LIỆU.\n"
+            + "Ví dụ: \"Theo Điều 7...\", \"Theo khoản 2 Điều 10...\"\n"
+            + "Nếu không tìm thấy thông tin, trả lời: \"Không tìm thấy thông tin trong tài liệu.\"";
 
     private static final String DEFAULT_SYSTEM_PROMPT =
-            "You are a helpful document assistant. Answer questions accurately based on the provided context.";
+            "You are a helpful document assistant. Answer questions accurately based on the provided context."
+            + CITATION_REQUIREMENT;
 
     public String buildPrompt(String userQuestion, List<String> relevantChunks) {
         StringBuilder prompt = new StringBuilder();
@@ -47,6 +53,7 @@ public class MessageHandler {
         }
 
         prompt.append("User Question: ").append(userQuestion);
+        prompt.append(CITATION_REQUIREMENT);
         return prompt.toString();
     }
 
@@ -54,7 +61,8 @@ public class MessageHandler {
     public String buildGeneralKnowledgePrompt(String userQuestion) {
         return "The retrieved documents do not contain enough relevant information. "
                 + "Use your internal knowledge to answer as accurately as possible.\n\n"
-                + "User Question: " + userQuestion;
+                + "User Question: " + userQuestion
+                + CITATION_REQUIREMENT;
     }
 
     /** Prompt for the web-search fallback: answers grounded in the returned snippets. */
@@ -66,6 +74,7 @@ public class MessageHandler {
             prompt.append("[").append(i + 1).append("] ").append(snippets.get(i)).append("\n\n");
         }
         prompt.append("User Question: ").append(userQuestion);
+        prompt.append(CITATION_REQUIREMENT);
         return prompt.toString();
     }
 
@@ -86,6 +95,19 @@ public class MessageHandler {
     }
 
     // ------------------------------------------------------------------
+    // LRU cache for identical queries (Bug 3: high latency fix)
+    // ------------------------------------------------------------------
+
+    private static final int MAX_CACHE_SIZE = 100;
+    private final Map<String, String> responseCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(MAX_CACHE_SIZE, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                    return size() > MAX_CACHE_SIZE;
+                }
+            });
+
+    // ------------------------------------------------------------------
     // LLM calls
     // ------------------------------------------------------------------
 
@@ -94,6 +116,13 @@ public class MessageHandler {
     }
 
     public String callLLM(String systemPrompt, String userPrompt) {
+        String cacheKey = systemPrompt + "|||" + userPrompt;
+        String cached = responseCache.get(cacheKey);
+        if (cached != null) {
+            log.debug("Cache hit for LLM query");
+            return cached;
+        }
+
         String result = null;
         int maxAttempts = llmConfig.getMaxAttempts();
         long backoff = llmConfig.getRetryBackoffMs();
@@ -105,6 +134,7 @@ public class MessageHandler {
             result = callLLMOnce(systemPrompt, userPrompt);
             if (!result.startsWith("Sorry, the language model is temporarily unavailable.")
                     && !result.startsWith("Sorry, I could not generate a response.")) {
+                responseCache.put(cacheKey, result);
                 return result;
             }
             if (attempt < maxAttempts) {
