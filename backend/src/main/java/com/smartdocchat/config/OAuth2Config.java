@@ -43,8 +43,11 @@ public class OAuth2Config {
             return new InMemoryClientRegistrationRepository();
         }
 
+        // "{baseUrl}" template: Spring resolves it at request time, so the
+        // redirect URI automatically matches the deployed host (production or
+        // localhost) without needing OAUTH2_REDIRECT_URI per environment.
         String effectiveRedirectUri = redirectUri.isBlank()
-                ? "http://localhost:8080/api/login/oauth2/code/google"
+                ? "{baseUrl}/login/oauth2/code/google"
                 : redirectUri;
 
         // Google issuer needs explicit endpoints when OIDC discovery is unavailable at build time
