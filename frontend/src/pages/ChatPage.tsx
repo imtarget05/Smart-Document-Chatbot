@@ -6,6 +6,7 @@ import { API_BASE_URL } from "../context/apiConfig";
 import { csrfHeaders } from "../csrf";
 import type { Document, ChatMessage as ChatMessageType, SourceCitation } from "../types";
 import SourceCitations from "../components/SourceCitations";
+import MessageBubble from "../components/MessageBubble";
 import EvidenceState from "../components/EvidenceState";
 import DocumentViewer from "../components/DocumentViewer";
 
@@ -300,6 +301,7 @@ export default function ChatPage() {
           <button
             onClick={logout}
             className="text-sm text-gray-500 hover:text-gray-700 transition"
+            aria-label="Đăng xuất"
           >
             Logout
           </button>
@@ -316,7 +318,7 @@ export default function ChatPage() {
             className="hidden"
             accept=".pdf,.docx,.txt"
           />
-          <span className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">
+          <span className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition" role="button" aria-label="Tải lên tài liệu">
             📎 Upload
           </span>
         </label>
@@ -338,11 +340,12 @@ export default function ChatPage() {
           </select>
         )}
         {uploadError && (
-          <span className="text-xs text-red-500">{uploadError}</span>
+          <span className="text-xs text-red-500" role="alert">{uploadError}</span>
         )}
         <button
           onClick={handleNewChat}
           className="ml-auto text-xs text-gray-500 hover:text-gray-700 transition"
+          aria-label="Tạo cuộc trò chuyện mới"
         >
           + New Chat
         </button>
@@ -399,10 +402,10 @@ export default function ChatPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto px-6 py-6" role="log" aria-label="Lịch sử trò chuyện" tabIndex={0}>
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 py-20">
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 py-20" role="status">
               <span className="text-4xl mb-3">💬</span>
               <p className="text-sm font-medium">Start a conversation</p>
               <p className="text-xs mt-1">
@@ -412,41 +415,18 @@ export default function ChatPage() {
           ) : (
             messages.map((msg, idx) => (
               <div key={msg.id || idx} className="space-y-3">
-                {/* User message */}
-                <div className="flex justify-end">
-                  <div className="max-w-2xl bg-gray-100 text-gray-800 px-4 py-2.5 rounded-2xl rounded-br-md">
-                    <p className="text-sm leading-relaxed">{msg.userMessage}</p>
-                  </div>
-                </div>
+                <MessageBubble content={msg.userMessage} role="user" />
+                <MessageBubble content={msg.aiResponse} role="assistant" isStreaming={msg.isStreaming} />
 
-                {/* AI response */}
-                <div className="flex justify-start">
-                  <div className="max-w-2xl w-full">
-                    <div className="text-gray-800">
-                      {msg.aiResponse ? (
-                        <div className="leading-relaxed whitespace-pre-wrap text-sm">
-                          {msg.aiResponse}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 py-2">
-                          <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                          <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                          <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Evidence state + structured citations */}
-                    {!msg.isStreaming && (
-                      <EvidenceState ragStrategy={msg.ragStrategy} confidence={msg.confidence} />
-                    )}
-                    <SourceCitations
-                      sources={msg.sources}
-                      sourceChunks={msg.sourceChunks}
-                      onViewSource={(s) => setViewingSource(s)}
-                    />
-                  </div>
-                </div>
+                {/* Evidence state + structured citations */}
+                {!msg.isStreaming && (
+                  <EvidenceState ragStrategy={msg.ragStrategy} confidence={msg.confidence} />
+                )}
+                <SourceCitations
+                  sources={msg.sources}
+                  sourceChunks={msg.sourceChunks}
+                  onViewSource={(s) => setViewingSource(s)}
+                />
               </div>
             ))
           )}
@@ -479,11 +459,13 @@ export default function ChatPage() {
               className="flex-1 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:border-gray-400 text-sm bg-gray-50"
               rows={1}
               disabled={loading}
+              aria-label="Nhập tin nhắn"
             />
             <button
               onClick={handleSendMessage}
               disabled={loading || !input.trim()}
               className="px-5 py-3 bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white rounded-xl text-sm font-medium transition"
+              aria-label="Gửi tin nhắn"
             >
               Send
             </button>
