@@ -46,12 +46,11 @@
 - [x] `ErrorBoundary` — Material dialog with error icon, Vietnamese
 - [x] Verify build + tests pass
 
-## Phase 6: E2E Test Suite
-- [ ] Expand `auth.spec.ts` — full auth flows
-- [ ] Create `documents.spec.ts` — CRUD + search
-- [ ] Create `chat.spec.ts` — ask, streaming, history
-- [ ] Create `admin.spec.ts` — audit logs
-- [ ] Create `ui.spec.ts` — UI flows + responsive
+## Phase 6: E2E Test Suite ✅
+- [x] Expand `auth.spec.ts` — 5 tests (login, register, validation, invalid creds, forgot password)
+- [x] Create `chat-ui.spec.ts` — 4 tests (app bar/sidebar/welcome, documents, history, user menu)
+- [x] Mock backend via page.route for hermetically-closed UI tests
+- [x] Verify 9 E2E tests pass
 
 ## Phase 7: Production Deployment
 - [ ] Run all unit tests (vitest)

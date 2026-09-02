@@ -12,7 +12,6 @@ import DocumentViewer from "../components/DocumentViewer";
 import AppBar from "../components/AppBar";
 import Sidebar from "../components/Sidebar";
 import WelcomeScreen from "../components/WelcomeScreen";
-import UserMenu from "../components/UserMenu";
 
 export default function ChatPage() {
   const { token, username, logout } = useAuth();
@@ -33,9 +32,6 @@ export default function ChatPage() {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [uploadError, setUploadError] = useState("");
   // Legal search state (Decision 15)
-  interface DocumentSearchResult { id: number; fileName: string; title?: string | null; documentNumber?: string | null; }
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<DocumentSearchResult[]>([]);
   const [viewingSource, setViewingSource] = useState<SourceCitation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
