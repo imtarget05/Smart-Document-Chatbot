@@ -32,4 +32,11 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 4173,
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+  },
 });

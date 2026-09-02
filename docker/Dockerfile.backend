@@ -36,8 +36,8 @@ WORKDIR /app
 # Install curl for health checks
 RUN apk add --no-cache curl
 
-# Copy the built JAR from build stage
-COPY --from=build /app/target/smart-doc-chatbot-1.0.0.jar app.jar
+# Copy the built JAR from build stage (version-agnostic)
+COPY --from=build /app/target/*.jar app.jar
 
 # Create uploads directory
 RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app

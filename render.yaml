@@ -56,6 +56,14 @@ services:
       property: host
   - key: REDIS_URL
     sync: false
+  - key: LANGFUSE_ENABLED
+    value: 'true'
+  - key: LANGFUSE_HOST
+    value: https://cloud.langfuse.com
+  - key: LANGFUSE_PUBLIC_KEY
+    sync: false
+  - key: LANGFUSE_SECRET_KEY
+    sync: false
 - type: web
   name: smart-doc-backend
   runtime: docker
@@ -107,7 +115,36 @@ services:
   - key: INTERNAL_SERVICE_TOKEN
     sync: false
   - key: CORS_ALLOWED_ORIGINS
-    value: '*'
+    value: https://smart-doc.pages.dev,https://smart-doc-frontend.pages.dev
+  # Langfuse Cloud (opt-in, zero overhead when keys empty — now ENABLED per contract)
+  - key: LANGFUSE_ENABLED
+    value: 'true'
+  - key: LANGFUSE_HOST
+    value: https://cloud.langfuse.com
+  - key: LANGFUSE_PUBLIC_KEY
+    sync: false
+  - key: LANGFUSE_SECRET_KEY
+    sync: false
+  # Redis for distributed rate limiting (optional, falls back to in-memory)
+  - key: REDIS_HOST
+    sync: false
+  - key: REDIS_PORT
+    value: '6379'
+  - key: REDIS_PASSWORD
+    sync: false
+  # SSO prod (Keycloak/Azure AD/Okta) — enabled per contract
+  - key: SSO_OIDC_ENABLED
+    value: 'true'
+  - key: SSO_OIDC_ISSUER_URI
+    sync: false
+  - key: SSO_OIDC_CLIENT_ID
+    sync: false
+  - key: SSO_OIDC_CLIENT_SECRET
+    sync: false
+  - key: SSO_OIDC_POST_LOGIN_REDIRECT
+    value: https://smart-doc.pages.dev
+  - key: SSO_OIDC_ADMIN_USERNAMES
+    sync: false
   - key: LOGGING_LEVEL_ROOT
     value: WARN
   - key: LOGGING_LEVEL_COM_SMARTDOCCHAT
@@ -122,9 +159,10 @@ services:
   autoDeploy: true
   plan: free
   envVars:
-    AGENT_PORT: '9000'
-    BACKEND_URL:
-      fromService:
-        name: smart-doc-backend
-        type: web
-        property: host
+  - key: AGENT_PORT
+    value: '9000'
+  - key: BACKEND_URL
+    fromService:
+      name: smart-doc-backend
+      type: web
+      property: host
