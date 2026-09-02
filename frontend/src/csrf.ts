@@ -16,3 +16,10 @@ export async function bootstrapCsrfToken(): Promise<void> {
 export function csrfHeaders(): Record<string, string> {
   return csrfToken ? { "X-XSRF-TOKEN": csrfToken } : {};
 }
+
+/** Returns CSRF headers, fetching the token on demand if not bootstrapped yet
+ *  (e.g. the first bootstrap failed because the backend was cold-starting). */
+export async function ensureCsrfHeaders(): Promise<Record<string, string>> {
+  if (!csrfToken) await bootstrapCsrfToken();
+  return csrfHeaders();
+}

@@ -35,10 +35,14 @@ describe("LoginPage", () => {
 
   it("calls POST /api/auth/login with credentials on successful submit", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({ token: "jwt-abc", username: "alice", role: "ROLE_ADMIN" }),
-    });
+    const fetchMock = vi.fn((url: RequestInfo) =>
+      String(url).includes("/csrf")
+        ? Promise.resolve({ ok: true, json: async () => ({ token: "csrf-token" }) })
+        : Promise.resolve({
+            ok: true,
+            text: async () => JSON.stringify({ token: "jwt-abc", username: "alice", role: "ROLE_ADMIN" }),
+          }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -51,11 +55,11 @@ describe("LoginPage", () => {
     await user.type(screen.getByPlaceholderText("Mật khẩu"), "secret");
     await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/auth/login");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [, init] = fetchMock.mock.calls.find((c) => String(c[0]).includes("/auth/login"))!;
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({ username: "alice", password: "secret" });
+    expect(init.headers["X-XSRF-TOKEN"]).toBe("csrf-token");
   });
 
   it("shows the backend error text when credentials are rejected", async () => {
@@ -83,10 +87,14 @@ describe("LoginPage", () => {
 
   it("switches to register mode and calls POST /api/auth/register", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({ token: "jwt-new", username: "bob", role: "ROLE_VIEWER" }),
-    });
+    const fetchMock = vi.fn((url: RequestInfo) =>
+      String(url).includes("/csrf")
+        ? Promise.resolve({ ok: true, json: async () => ({ token: "csrf-token" }) })
+        : Promise.resolve({
+            ok: true,
+            text: async () => JSON.stringify({ token: "jwt-new", username: "bob", role: "ROLE_VIEWER" }),
+          }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -103,8 +111,11 @@ describe("LoginPage", () => {
     await user.type(screen.getByPlaceholderText("Xác nhận mật khẩu"), "pw1234567890");
     await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/auth/register");
+    // CSRF token may be cached at module level from a previous test,
+    // so total fetch count is 1 (POST only) or 2 (csrf bootstrap + POST).
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]) === "/api/auth/register")).toBe(true),
+    );
   });
 
   it("shows password mismatch error in register mode", async () => {

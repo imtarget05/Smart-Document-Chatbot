@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../context/apiConfig";
-import { csrfHeaders } from "../csrf";
+import { ensureCsrfHeaders } from "../csrf";
 
 function DocIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
@@ -105,7 +105,7 @@ export default function LoginPage() {
       }
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...csrfHeaders() },
+        headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
         body: JSON.stringify(payload),
       });
       const text = await response.text();
@@ -114,7 +114,11 @@ export default function LoginPage() {
       if (!response.ok) throw new Error(data.error || data.message || text || "Xác thực thất bại");
       login(data.token, data.username, data.role);
     } catch (err: unknown) {
-      setAuthError(err instanceof Error ? err.message : "Đã có lỗi xảy ra");
+      if (err instanceof TypeError) {
+        setAuthError("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
+      } else {
+        setAuthError(err instanceof Error ? err.message : "Đã có lỗi xảy ra");
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -131,7 +135,7 @@ export default function LoginPage() {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...csrfHeaders() },
+        headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
         body: JSON.stringify({ email: resetEmail, newPassword: "Temp12345678!" }),
       });
       const t = await res.text();
