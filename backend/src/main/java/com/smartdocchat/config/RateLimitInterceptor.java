@@ -20,7 +20,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     static final String RETRY_AFTER_HEADER = "Retry-After";
     static final String REMAINING_HEADER = "X-RateLimit-Remaining";
 
-    private final RedisRateLimitStore rateLimitStore;
+    private final RateLimitStore rateLimitStore;
 
     @Value("${ratelimit.enabled:true}")
     private boolean enabled;
@@ -34,10 +34,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private int windowSeconds;
 
     @Autowired
-    public RateLimitInterceptor(@Autowired(required = false) RedisRateLimitStore rateLimitStore) {
-        this.rateLimitStore = rateLimitStore;
+    public RateLimitInterceptor(@Autowired(required = false) RateLimitStore rateLimitStore) {
+        // Prefer the shared Redis store; fall back to a per-instance in-memory
+        // store so a Redis outage degrades (not kills) availability. This keeps
+        // rate limiting active while avoiding a fail-closed 503 that would take
+        // the whole app offline.
+        this.rateLimitStore = rateLimitStore != null ? rateLimitStore : new InMemoryRateLimitStore();
         if (rateLimitStore == null) {
-            log.warn("Redis not available — rate limiting disabled (all requests allowed)");
+            log.warn("Redis absent — using in-memory rate-limit store (per-instance, NOT shared across instances)");
         }
     }
 
@@ -49,22 +53,10 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         String scope = scopeFor(path);
         if (scope == null) return true;
 
-        // Fail-closed: without Redis we cannot enforce the limit. Reject with a
-        // transient 503 instead of allowing unbounded traffic (avoids a DoS hole
-        // during an outage rather than silently disabling throttling).
-        if (rateLimitStore == null) {
-            log.error("Redis unavailable — rejecting {} {} (fail-closed rate limiting)",
-                    request.getMethod(), path);
-            response.setStatus(503);
-            response.setHeader(RETRY_AFTER_HEADER, String.valueOf(windowSeconds));
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\":\"rate_limit_unavailable\",\"message\":"
-                    + "\"Rate limiting backend unavailable; request rejected. Retry shortly.\",\"retry_after\":"
-                    + windowSeconds + "}");
-            return false;
-        }
-
-        String identity = switch (scope) {
+        // rateLimitStore is never null (constructor installs an in-memory
+        // fallback), so throttling always runs - either shared Redis or
+        // per-instance in-memory.
+                String identity = switch (scope) {
             case "chat", "upload" -> "u:" + currentUser().orElse(clientIp(request));
             default -> "ip:" + clientIp(request);
         };

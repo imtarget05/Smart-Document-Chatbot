@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 class RateLimitInterceptorTest {
 
     @Mock
-    private RedisRateLimitStore rateLimitStore;
+    private RateLimitStore rateLimitStore;
 
     private RateLimitInterceptor interceptor;
 
@@ -134,17 +134,23 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    void failsClosedWhenRedisIsUnavailable() throws Exception {
-        // When Redis is down (rateLimitStore == null) and the interceptor is
-        // enabled, throttled paths must be rejected rather than allowed through
-        // (fail-closed — closes the DoS hole during an outage).
+    void usesInMemoryFallbackWhenRedisIsUnavailable() throws Exception {
+        // When Redis is absent (rateLimitStore == null) the interceptor installs
+        // an in-memory store instead of failing closed, so throttled paths keep
+        // working (per-instance budget) rather than rejecting with 503.
         RateLimitInterceptor noStore = new RateLimitInterceptor(null);
         setField("enabled", true, noStore);
+        setField("chatPerMinute", 2, noStore);
         setField("windowSeconds", 30, noStore);
 
+        // First two chat requests are allowed by the in-memory budget (capacity 2)...
+        assertTrue(noStore.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), response(), new Object()));
+        assertTrue(noStore.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), response(), new Object()));
+
+        // ...third is rate limited (429), not a 503 outage.
         MockHttpServletResponse blocked = response();
         assertFalse(noStore.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), blocked, new Object()));
-        assertEquals(503, blocked.getStatus());
+        assertEquals(429, blocked.getStatus());
         assertEquals("30", blocked.getHeader(RateLimitInterceptor.RETRY_AFTER_HEADER));
     }
 

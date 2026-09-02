@@ -13,7 +13,7 @@ import java.time.Instant;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnBean(RedisTemplate.class)
-public class RedisRateLimitStore {
+public class RedisRateLimitStore implements RateLimitStore {
 
     private final RedisTemplate<String, String> redisTemplate;
 
