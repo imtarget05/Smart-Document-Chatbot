@@ -43,11 +43,10 @@ jobs:
           curl -fsS --retry 3 --retry-delay 20 --max-time 120 \
             "$BACKEND_URL/api/actuator/health" | tee /dev/stderr | grep -q '"status":"UP"'
 
-      # Client-facing CSRF surface (note the backend quirk: the CSRF
-      # controller is served under an extra /api segment — same path the
-      # eval runner and E2E suite use).
+      # Client-facing CSRF surface. The CSRF controller is mapped to /csrf
+      # and the server context-path is /api, so the full path is /api/csrf.
       - name: API surface reachable (CSRF)
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "$BACKEND_URL/api/api/csrf")
-          echo "GET /api/api/csrf -> $code"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "$BACKEND_URL/api/csrf")
+          echo "GET /api/csrf -> $code"
           [ "$code" = "200" ] || { echo "::error::CSRF endpoint unhealthy (HTTP $code)"; exit 1; }
