@@ -17,9 +17,9 @@ describe("LoginPage", () => {
         <LoginPage />
       </AuthProvider>,
     );
-    expect(screen.getAllByText("Sign In").length).toBeGreaterThan(0);
-    expect(screen.getByPlaceholderText("Enter username")).toBeDefined();
-    expect(screen.getByPlaceholderText("Enter password")).toBeDefined();
+    expect(screen.getAllByText("Chào mừng trở lại").length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText("Email hoặc tên đăng nhập")).toBeDefined();
+    expect(screen.getByPlaceholderText("Mật khẩu")).toBeDefined();
   });
 
   it("shows a validation error when fields are empty", async () => {
@@ -29,15 +29,15 @@ describe("LoginPage", () => {
         <LoginPage />
       </AuthProvider>,
     );
-    await user.click(screen.getAllByRole("button", { name: "Sign In" })[1]);
-    expect(await screen.findByText(/Please fill in all fields/)).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+    expect(await screen.findByText(/Vui lòng điền đầy đủ thông tin/)).toBeDefined();
   });
 
   it("calls POST /api/auth/login with credentials on successful submit", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ token: "jwt-abc", username: "alice", role: "ROLE_ADMIN" }),
+      text: async () => JSON.stringify({ token: "jwt-abc", username: "alice", role: "ROLE_ADMIN" }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -47,9 +47,9 @@ describe("LoginPage", () => {
       </AuthProvider>,
     );
 
-    await user.type(screen.getByPlaceholderText("Enter username"), "alice");
-    await user.type(screen.getByPlaceholderText("Enter password"), "secret");
-    await user.click(screen.getAllByRole("button", { name: "Sign In" })[1]);
+    await user.type(screen.getByPlaceholderText("Email hoặc tên đăng nhập"), "alice");
+    await user.type(screen.getByPlaceholderText("Mật khẩu"), "secret");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0];
@@ -64,7 +64,7 @@ describe("LoginPage", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: false,
-        text: async () => "Bad credentials",
+        text: async () => "Email hoặc mật khẩu không đúng",
       }),
     );
 
@@ -74,18 +74,18 @@ describe("LoginPage", () => {
       </AuthProvider>,
     );
 
-    await user.type(screen.getByPlaceholderText("Enter username"), "alice");
-    await user.type(screen.getByPlaceholderText("Enter password"), "wrong");
-    await user.click(screen.getAllByRole("button", { name: "Sign In" })[1]);
+    await user.type(screen.getByPlaceholderText("Email hoặc tên đăng nhập"), "alice");
+    await user.type(screen.getByPlaceholderText("Mật khẩu"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
-    expect(await screen.findByText(/Bad credentials/)).toBeDefined();
+    expect(await screen.findByText(/Email hoặc mật khẩu không đúng/)).toBeDefined();
   });
 
   it("switches to register mode and calls POST /api/auth/register", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ token: "jwt-new", username: "bob", role: "ROLE_VIEWER" }),
+      text: async () => JSON.stringify({ token: "jwt-new", username: "bob", role: "ROLE_VIEWER" }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -95,15 +95,49 @@ describe("LoginPage", () => {
       </AuthProvider>,
     );
 
-    await user.click(screen.getByText("Create Account"));
-    expect(screen.getAllByText("Create Account").length).toBeGreaterThan(0);
+    await user.click(screen.getByText("Tạo tài khoản"));
+    expect(screen.getAllByText("Tạo tài khoản").length).toBeGreaterThan(0);
 
-    await user.type(screen.getByPlaceholderText("Enter username"), "bob");
-    await user.type(screen.getByPlaceholderText("Enter password"), "pw1234");
-    const submitButton = screen.getAllByRole("button", { name: "Create Account" })[1];
-    await user.click(submitButton);
+    await user.type(screen.getByPlaceholderText("Email hoặc tên đăng nhập"), "bob");
+    await user.type(screen.getByPlaceholderText("Mật khẩu"), "pw1234567890");
+    await user.type(screen.getByPlaceholderText("Xác nhận mật khẩu"), "pw1234567890");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock.mock.calls[0][0]).toBe("/api/auth/register");
+  });
+
+  it("shows password mismatch error in register mode", async () => {
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <LoginPage />
+      </AuthProvider>,
+    );
+
+    await user.click(screen.getByText("Tạo tài khoản"));
+    await user.type(screen.getByPlaceholderText("Email hoặc tên đăng nhập"), "bob");
+    await user.type(screen.getByPlaceholderText("Mật khẩu"), "pw1234567890");
+    await user.type(screen.getByPlaceholderText("Xác nhận mật khẩu"), "different");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+
+    expect(await screen.findByText(/Mật khẩu xác nhận không khớp/)).toBeDefined();
+  });
+
+  it("shows password too short error in register mode", async () => {
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <LoginPage />
+      </AuthProvider>,
+    );
+
+    await user.click(screen.getByText("Tạo tài khoản"));
+    await user.type(screen.getByPlaceholderText("Email hoặc tên đăng nhập"), "bob");
+    await user.type(screen.getByPlaceholderText("Mật khẩu"), "short");
+    await user.type(screen.getByPlaceholderText("Xác nhận mật khẩu"), "short");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+
+    expect(await screen.findByText(/Mật khẩu phải ít nhất 12 ký tự/)).toBeDefined();
   });
 });

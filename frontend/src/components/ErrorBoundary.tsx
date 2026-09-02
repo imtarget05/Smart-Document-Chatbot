@@ -37,25 +37,29 @@ class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50/40 font-sans h-full min-h-[300px]">
-          <div className="w-full max-w-md bg-white border border-gray-200 rounded-3xl p-6 shadow-xl text-center">
-            <span className="text-4xl">⚠️</span>
-            <h3 className="text-lg font-bold text-gray-800 mt-3">
-              Something went wrong
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-surface-dim font-sans h-full min-h-[300px]">
+          <div className="w-full max-w-md bg-surface border border-outline rounded-material-2xl p-8 shadow-material-3 text-center animate-fade-in">
+            <div className="w-14 h-14 mx-auto rounded-material-full bg-[#fce8e6] flex items-center justify-center mb-4">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="#d93025">
+                <path d="M12 2L1 21h22L12 2zm0 14a1 1 0 110 2 1 1 0 010-2zm1-8h-2v6h2V8z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-onsurface mt-2">
+              Đã có lỗi xảy ra
             </h3>
-            <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto leading-relaxed">
-              An unexpected error occurred in this visual component.
+            <p className="text-sm text-onsurface-muted mt-1.5 max-w-xs mx-auto leading-relaxed">
+              Lỗi không mong muốn trong component visual này.
             </p>
             {this.state.error && (
-              <pre className="mt-3.5 p-3 bg-gray-50 rounded-xl text-[10px] font-mono text-rose-500 overflow-x-auto text-left max-h-32 border border-gray-100">
+              <pre className="mt-3.5 p-3 bg-surface-container rounded-material-lg text-[10px] font-mono text-[#a50e0e] overflow-x-auto text-left max-h-32 border border-outline">
                 {this.state.error.message}
               </pre>
             )}
             <button
               onClick={this.handleReset}
-              className="mt-5 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+              className="mt-5 w-full py-2.5 bg-google-blue hover:bg-google-blueDark text-white font-medium text-sm rounded-material-full shadow-material-btn hover:shadow-material-btn-hover transition-all duration-200"
             >
-              Reload Component
+              Tải lại Component
             </button>
           </div>
         </div>

@@ -9,6 +9,10 @@ import SourceCitations from "../components/SourceCitations";
 import MessageBubble from "../components/MessageBubble";
 import EvidenceState from "../components/EvidenceState";
 import DocumentViewer from "../components/DocumentViewer";
+import AppBar from "../components/AppBar";
+import Sidebar from "../components/Sidebar";
+import WelcomeScreen from "../components/WelcomeScreen";
+import UserMenu from "../components/UserMenu";
 
 export default function ChatPage() {
   const { token, username, logout } = useAuth();
@@ -33,6 +37,7 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DocumentSearchResult[]>([]);
   const [viewingSource, setViewingSource] = useState<SourceCitation | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -289,188 +294,109 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#f8f9fa]">
-      {/* Header — Google modern */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#dadce0] h-[64px]">
-        <div className="flex items-center gap-3">
-          <svg width="40" height="40" viewBox="0 0 48 48" className="ml-1"><path fill="#4285F4" d="M24 24v8h12c-1 4-4 7-12 7-7 0-12-5-12-12s5-12 12-12c3 0 5 1 7 3l3-3C31 11 28 9 24 9 14 9 6 17 6 24s8 15 18 15c10 0 16-7 16-15 0-1 0-2 0-3H24z"/></svg>
-          <h1 className="text-[22px] text-[#202124] font-normal tracking-tight">Smart Document</h1>
-          <span className="hidden sm:inline text-[12px] text-[#5f6368] font-medium ml-1">CRAG • Pages • Render</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:inline text-[13px] text-[#5f6368] bg-[#f1f3f4] px-3 py-1.5 rounded-full">{username}</span>
-          <button
-            onClick={logout}
-            className="text-[14px] font-medium text-white bg-[#1a73e8] hover:bg-[#185abc] px-6 py-2 rounded-full transition shadow-sm"
-            aria-label="Đăng xuất"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
+    <div className="flex flex-col h-screen bg-surface-dim">
+      <AppBar
+        onMenuClick={() => setSidebarOpen(true)}
+        username={username}
+        onLogout={logout}
+      />
 
-      {/* Document selector bar */}
-      <div className="flex items-center gap-3 px-6 py-2 border-b border-gray-100 bg-gray-50">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-            accept=".pdf,.docx,.txt"
-          />
-          <span className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition" role="button" aria-label="Tải lên tài liệu">
-            📎 Upload
-          </span>
-        </label>
-        {documents.length > 0 && (
-          <select
-            value={selectedDoc?.id || ""}
-            onChange={(e) => {
-              const doc = documents.find((d) => d.id === Number(e.target.value));
-              setSelectedDoc(doc || null);
-            }}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-300"
-          >
-            <option value="">Select a document...</option>
-            {documents.map((doc) => (
-              <option key={doc.id} value={doc.id}>
-                {doc.fileName} ({doc.chunkCount} chunks)
-              </option>
-            ))}
-          </select>
-        )}
-        {uploadError && (
-          <span className="text-xs text-red-500" role="alert">{uploadError}</span>
-        )}
-        <button
-          onClick={handleNewChat}
-          className="ml-auto text-xs text-gray-500 hover:text-gray-700 transition"
-          aria-label="Tạo cuộc trò chuyện mới"
-        >
-          + New Chat
-        </button>
-      </div>
-
-      {/* Legal search (Decision 15) */}
-      <div className="px-6 py-2 border-b border-gray-100 bg-white">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!searchQuery.trim()) { setSearchResults([]); return; }
-            try {
-              const response = await fetch(
-                `${API_BASE_URL}/documents/search?q=${encodeURIComponent(searchQuery)}`,
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-              setSearchResults(response.ok ? await response.json() : []);
-            } catch {
-              setSearchResults([]);
-            }
-          }}
-          className="flex items-center gap-2"
-        >
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm văn bản pháp luật (tên, số hiệu, Điều...)"
-            className="flex-1 max-w-md text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300"
-          />
-          <button type="submit" className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700">
-            Tìm kiếm
-          </button>
-        </form>
-        {searchResults.length > 0 && (
-          <ul className="mt-2 space-y-1">
-            {searchResults.map((r) => (
-              <li key={r.id} className="flex items-center gap-2 text-xs text-gray-600">
-                <button
-                  onClick={() => {
-                    const doc = documents.find((d) => d.id === r.id);
-                    setSelectedDoc(doc || null);
-                    setSearchResults([]);
-                  }}
-                  className="text-blue-600 hover:underline"
-                >
-                  Mở
-                </button>
-                <span className="font-medium">{r.title || r.fileName}</span>
-                {r.documentNumber && <span className="text-gray-400">Số: {r.documentNumber}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6" role="log" aria-label="Lịch sử trò chuyện" tabIndex={0}>
-        <div className="max-w-3xl mx-auto space-y-6">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 py-20" role="status">
-              <span className="text-4xl mb-3">💬</span>
-              <p className="text-sm font-medium">Start a conversation</p>
-              <p className="text-xs mt-1">
-                Upload a document and ask questions about it
-              </p>
-            </div>
-          ) : (
-            messages.map((msg, idx) => (
-              <div key={msg.id || idx} className="space-y-3">
-                <MessageBubble content={msg.userMessage} role="user" />
-                <MessageBubble content={msg.aiResponse} role="assistant" isStreaming={msg.isStreaming} />
-
-                {/* Evidence state + structured citations */}
-                {!msg.isStreaming && (
-                  <EvidenceState ragStrategy={msg.ragStrategy} confidence={msg.confidence} />
-                )}
-                <SourceCitations
-                  sources={msg.sources}
-                  sourceChunks={msg.sourceChunks}
-                  onViewSource={(s) => setViewingSource(s)}
-                />
-              </div>
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Document / evidence viewer */}
-      {viewingSource && (
-        <DocumentViewer
-          citation={viewingSource}
-          token={token}
-          onClose={() => setViewingSource(null)}
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          documents={documents}
+          selectedDoc={selectedDoc}
+          onSelectDoc={setSelectedDoc}
+          onNewChat={handleNewChat}
+          onUploadClick={() => fileInputRef.current?.click()}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
-      )}
 
-      {/* Input */}
-      <div className="border-t border-gray-200 px-6 py-4 bg-white">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex gap-3 items-end">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedDoc
-                  ? `Ask about ${selectedDoc.fileName}...`
-                  : "Type a message... (Shift+Enter for new line)"
-              }
-              className="flex-1 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:border-gray-400 text-sm bg-gray-50"
-              rows={1}
-              disabled={loading}
-              aria-label="Nhập tin nhắn"
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={loading || !input.trim()}
-              className="px-5 py-3 bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white rounded-xl text-sm font-medium transition"
-              aria-label="Gửi tin nhắn"
-            >
-              Send
-            </button>
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Messages or Welcome */}
+          <div className="flex-1 overflow-y-auto">
+            {messages.length === 0 ? (
+              <WelcomeScreen onUploadClick={() => fileInputRef.current?.click()} />
+            ) : (
+              <div className="px-6 py-6" role="log" aria-label="Lịch sử trò chuyện" tabIndex={0}>
+                <div className="max-w-3xl mx-auto space-y-6">
+                  {messages.map((msg, idx) => (
+                    <div key={msg.id || idx} className="space-y-3">
+                      <MessageBubble content={msg.userMessage} role="user" />
+                      <MessageBubble content={msg.aiResponse} role="assistant" isStreaming={msg.isStreaming} />
+                      {!msg.isStreaming && (
+                        <EvidenceState ragStrategy={msg.ragStrategy} confidence={msg.confidence} />
+                      )}
+                      <SourceCitations
+                        sources={msg.sources}
+                        sourceChunks={msg.sourceChunks}
+                        onViewSource={(s) => setViewingSource(s)}
+                      />
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+            )}
           </div>
+
+
+          {/* Upload error */}
+          {uploadError && (
+            <div className="mx-6 mb-3 px-4 py-2.5 bg-[#fce8e6] border border-[#f5c6cb] rounded-material text-[#a50e0e] text-[13px] flex items-center gap-2" role="alert">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#d93025">
+                <path d="M12 2L1 21h22L12 2zm0 14a1 1 0 110 2 1 1 0 010-2zm1-8h-2v6h2V8z" />
+              </svg>
+              {uploadError}
+            </div>
+          )}
+
+          {/* Input — always visible */}
+          <div className="border-t border-outline px-6 py-4 bg-surface">
+            <div className="max-w-3xl mx-auto">
+              <div className="flex gap-3 items-end">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={selectedDoc ? `Hỏi về ${selectedDoc.fileName}...` : "Nhập tin nhắn... (Shift+Enter dòng mới)"}
+                  className="flex-1 px-4 py-3 border border-outline rounded-material-lg resize-none focus:outline-none focus:border-google-blue focus:ring-1 focus:ring-google-blue text-[14px] bg-surface-container"
+                  rows={1}
+                  disabled={loading}
+                  aria-label="Nhập tin nhắn"
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={loading || !input.trim()}
+                  className="w-12 h-12 bg-google-blue hover:bg-google-blueDark disabled:bg-on-surface-disabled text-white rounded-material-full flex items-center justify-center transition-all duration-200 shadow-material-btn hover:shadow-material-btn-hover disabled:shadow-none"
+                  aria-label="Gửi tin nhắn"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Document viewer */}
+          {viewingSource && (
+            <DocumentViewer
+              citation={viewingSource}
+              token={token}
+              onClose={() => setViewingSource(null)}
+            />
+          )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.docx"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
         </div>
       </div>
     </div>

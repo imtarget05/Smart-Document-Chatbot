@@ -41,8 +41,8 @@ function renderApp() {
 describe("App routing", () => {
   it("shows the login page when the user is not authenticated", () => {
     renderApp();
-    expect(screen.getAllByText("Sign In").length).toBeGreaterThan(0);
-    expect(screen.getByText("Smart Doc Chatbot")).toBeInTheDocument();
+    expect(screen.getAllByText("Chào mừng trở lại").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Smart Document Chatbot/).length).toBeGreaterThan(0);
   });
 
   it("mounts the chat view (wrapped in ErrorBoundary) when authenticated", async () => {
@@ -50,7 +50,7 @@ describe("App routing", () => {
     mockAuth.token = "fake-jwt";
     renderApp();
     await waitFor(() =>
-      expect(screen.queryByText(/Đăng nhập|Login|đăng nhập/i)).toBeNull(),
+      expect(screen.getAllByText("Smart Document").length).toBeGreaterThan(0),
     );
     expect(document.body).toBeTruthy();
   });

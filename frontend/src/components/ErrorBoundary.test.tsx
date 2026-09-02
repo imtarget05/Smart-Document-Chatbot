@@ -26,7 +26,7 @@ describe("ErrorBoundary", () => {
         <Boom />
       </ErrorBoundary>,
     );
-    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+    expect(screen.getByText("Đã có lỗi xảy ra")).toBeInTheDocument();
     expect(screen.getByText("kaboom")).toBeInTheDocument();
     spy.mockRestore();
   });
@@ -38,9 +38,9 @@ describe("ErrorBoundary", () => {
         <Boom />
       </ErrorBoundary>,
     );
-    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+    expect(screen.getByText("Đã có lỗi xảy ra")).toBeInTheDocument();
     // Clicking Reload must reset internal state without throwing
-    expect(() => fireEvent.click(screen.getByText("Reload Component"))).not.toThrow();
+    expect(() => fireEvent.click(screen.getByText("Tải lại Component"))).not.toThrow();
     spy.mockRestore();
   });
 
@@ -52,7 +52,7 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
     expect(screen.getByText("custom fallback")).toBeInTheDocument();
-    expect(screen.queryByText("Something went wrong")).toBeNull();
+    expect(screen.queryByText("Đã có lỗi xảy ra")).toBeNull();
     spy.mockRestore();
   });
 });

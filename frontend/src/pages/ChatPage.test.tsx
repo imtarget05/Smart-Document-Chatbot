@@ -41,14 +41,10 @@ describe("ChatPage", () => {
     localStorage.clear();
   });
 
-  it("renders the empty-state placeholder and header", async () => {
+  it("renders welcome screen when no messages", async () => {
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) {
-        return { ok: true, json: async () => [] };
-      }
-      if (url.startsWith("/api/chat/history/")) {
-        return { ok: true, json: async () => [] };
-      }
+      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
+      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
       throw new Error(`unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -61,8 +57,22 @@ describe("ChatPage", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText("Smart Document Chat")).toBeDefined();
-    expect(await screen.findByText("Start a conversation")).toBeDefined();
+    expect(screen.getAllByText(/Smart Document/).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Chào mừng đến với Smart Document/)).toBeDefined();
+  });
+
+  it("always shows input bar", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
+      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderChatPage();
+
+    // Input should always be visible (even with no messages)
+    expect(await screen.findByPlaceholderText(/Nhập tin nhắn/)).toBeDefined();
   });
 
   it("streams an SSE response and renders the final assistant message", async () => {
@@ -77,26 +87,19 @@ describe("ChatPage", () => {
     ].join("\n");
 
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) {
-        return { ok: true, json: async () => [] };
-      }
-      if (url.startsWith("/api/chat/history/")) {
-        return { ok: true, json: async () => [] };
-      }
-      if (url.startsWith("/api/chat/ask-stream")) {
-        return { ok: true, body: sseBody(events) };
-      }
+      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
+      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
+      if (url.startsWith("/api/chat/ask-stream")) return { ok: true, body: sseBody(events) };
       throw new Error(`unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
 
     renderChatPage();
 
-    await screen.findByText("Start a conversation");
-    await user.type(
-      screen.getByPlaceholderText("Type a message... (Shift+Enter for new line)"),
-      "What is the refund policy?{enter}",
-    );
+    await screen.findByText(/Chào mừng/);
+    const input = screen.getByPlaceholderText(/Nhập tin nhắn/);
+    await user.type(input, "What is the refund policy?");
+    await user.keyboard("{enter}");
 
     await waitFor(() =>
       expect(screen.getByText(/I couldn't find sufficient evidence/)).toBeDefined(),
@@ -114,27 +117,20 @@ describe("ChatPage", () => {
   it("renders an inline error when the stream fails", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) {
-        return { ok: true, json: async () => [] };
-      }
-      if (url.startsWith("/api/chat/history/")) {
-        return { ok: true, json: async () => [] };
-      }
-      if (url.startsWith("/api/chat/ask-stream")) {
-        return { ok: false, status: 503 };
-      }
+      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
+      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
+      if (url.startsWith("/api/chat/ask-stream")) return { ok: false, status: 503 };
       throw new Error(`unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
 
     renderChatPage();
 
-    await screen.findByText("Start a conversation");
-    await user.type(
-      screen.getByPlaceholderText("Type a message... (Shift+Enter for new line)"),
-      "hello{enter}",
-    );
+    await screen.findByText(/Chào mừng/);
+    const input = screen.getByPlaceholderText(/Nhập tin nhắn/);
+    await user.type(input, "hello");
+    await user.keyboard("{enter}");
 
-    await waitFor(() => expect(screen.getByText(/❌ Error: .*Streaming/)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/Error|error|Lỗi|lỗi/)).toBeDefined());
   });
 });

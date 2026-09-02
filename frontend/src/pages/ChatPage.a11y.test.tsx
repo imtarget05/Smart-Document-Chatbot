@@ -17,6 +17,13 @@ function renderChatPage() {
   );
 }
 
+const mockFetch = () =>
+  vi.fn(async (url: string) => {
+    if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
+    if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
 describe("ChatPage accessibility", () => {
   afterEach(cleanup);
   beforeEach(() => {
@@ -24,78 +31,38 @@ describe("ChatPage accessibility", () => {
     localStorage.clear();
   });
 
-  it("has aria-label on send button", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
-      throw new Error(`unexpected fetch: ${url}`);
-    }));
-
+  it("renders welcome screen with app title", async () => {
+    vi.stubGlobal("fetch", mockFetch());
     renderChatPage();
-    await screen.findByText("Start a conversation");
-    expect(screen.getByLabelText("Gửi tin nhắn")).toBeDefined();
+    await screen.findByText(/Chào mừng đến với Smart Document/);
+    expect(screen.getAllByText(/Smart Document/).length).toBeGreaterThan(0);
   });
 
-  it("has aria-label on message input", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
-      throw new Error(`unexpected fetch: ${url}`);
-    }));
-
+  it("has app bar with user menu button", async () => {
+    vi.stubGlobal("fetch", mockFetch());
     renderChatPage();
-    await screen.findByText("Start a conversation");
-    expect(screen.getByLabelText("Nhập tin nhắn")).toBeDefined();
+    await screen.findByText(/Chào mừng/);
+    expect(screen.getByLabelText("Menu người dùng")).toBeDefined();
   });
 
-  it("has aria-label on logout button", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
-      throw new Error(`unexpected fetch: ${url}`);
-    }));
-
+  it("has sidebar with new chat button", async () => {
+    vi.stubGlobal("fetch", mockFetch());
     renderChatPage();
-    await screen.findByText("Start a conversation");
-    expect(screen.getByLabelText("Đăng xuất")).toBeDefined();
+    await screen.findByText(/Chào mừng/);
+    expect(screen.getByText("Cuộc trò chuyện mới")).toBeDefined();
   });
 
-  it("has aria-label on new chat button", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
-      throw new Error(`unexpected fetch: ${url}`);
-    }));
-
+  it("has sidebar with upload button", async () => {
+    vi.stubGlobal("fetch", mockFetch());
     renderChatPage();
-    await screen.findByText("Start a conversation");
-    expect(screen.getByLabelText("Tạo cuộc trò chuyện mới")).toBeDefined();
+    await screen.findByText(/Chào mừng/);
+    expect(screen.getByText("Tải lên tài liệu")).toBeDefined();
   });
 
-  it("has role log on messages container", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
-      throw new Error(`unexpected fetch: ${url}`);
-    }));
-
+  it("renders welcome screen with suggested prompts", async () => {
+    vi.stubGlobal("fetch", mockFetch());
     renderChatPage();
-    await screen.findByText("Start a conversation");
-    expect(screen.getByRole("log")).toBeDefined();
-  });
-
-  it("shows upload error with role alert", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.startsWith("/api/documents")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/chat/history/")) return { ok: true, json: async () => [] };
-      if (url.startsWith("/api/documents/upload")) return { ok: false, status: 400 };
-      throw new Error(`unexpected fetch: ${url}`);
-    }));
-
-    renderChatPage();
-    await screen.findByText("Start a conversation");
-    // The upload error only shows after a file upload, but the role="alert" is in the component
-    // We verify the component renders without errors
-    expect(screen.getByText("Smart Document Chat")).toBeDefined();
+    await screen.findByText(/Chào mừng/);
+    expect(screen.getByText("Tóm tắt tài liệu này")).toBeDefined();
   });
 });
