@@ -132,9 +132,10 @@ services:
     value: '6379'
   - key: REDIS_PASSWORD
     sync: false
-  # SSO prod (Keycloak/Azure AD/Okta) — enabled per contract
+  # SSO prod (Keycloak/Azure AD/Okta) — disabled until Keycloak public URL ready (local http://localhost:8180 not reachable from Render)
+  # Set to 'true' and fill SSO_OIDC_ISSUER_URI with https://smartdoc-keycloak.onrender.com/realms/smartdoc after Keycloak service is healthy
   - key: SSO_OIDC_ENABLED
-    value: 'true'
+    value: 'false'
   - key: SSO_OIDC_ISSUER_URI
     sync: false
   - key: SSO_OIDC_CLIENT_ID
