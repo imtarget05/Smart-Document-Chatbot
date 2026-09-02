@@ -143,3 +143,4 @@ supply-chain-module/mlops/mlflow.db
 frontend/coverage/
 frontend/test-results/
 *.db
+.wrangler/
