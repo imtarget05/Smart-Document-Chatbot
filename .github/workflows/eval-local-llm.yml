@@ -26,8 +26,9 @@ jobs:
       - name: Install grader test deps
         run: |
           python -m pip install --upgrade pip
-          # test_grader.py only uses stdlib; pull the small test deps anyway.
-          pip install pytest
+          # eval/eval.py (unit under test) imports `requests` at module load,
+          # so the grader job needs it too — not just pytest.
+          pip install pytest requests
 
       - name: Run offline grader tests
         run: python3 -m pytest tests/test_grader.py -q
