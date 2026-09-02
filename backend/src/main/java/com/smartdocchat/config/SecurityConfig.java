@@ -32,6 +32,7 @@ public class SecurityConfig {
     private final com.smartdocchat.security.CustomOidcUserService customOidcUserService;
     private final com.smartdocchat.security.OidcLoginSuccessHandler oidcLoginSuccessHandler;
     private final com.smartdocchat.service.OAuth2UserService oAuth2UserService;
+    private final com.smartdocchat.security.CookieAuthorizationRequestRepository cookieAuthorizationRequestRepository;
 
     @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:8080,http://127.0.0.1:3000}")
     private String allowedOrigins;
@@ -90,12 +91,14 @@ public class SecurityConfig {
 
         if (oidcProperties.isEnabled()) {
             http.oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(a -> a.authorizationRequestRepository(cookieAuthorizationRequestRepository))
                 .userInfoEndpoint(userInfo -> userInfo.oidcUserService(customOidcUserService))
                 .successHandler(oidcLoginSuccessHandler));
         }
 
         if (!oidcProperties.isEnabled() && oauth2IssuerUri != null && !oauth2IssuerUri.isBlank()) {
             http.oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(a -> a.authorizationRequestRepository(cookieAuthorizationRequestRepository))
                 .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oAuth2UserService))
                 .successHandler(oidcLoginSuccessHandler));
         }
