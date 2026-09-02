@@ -1,22 +1,22 @@
 import { expect, test } from '@playwright/test';
 
-// Chat E2E — tests chat UI flows and API contracts
+// Chat E2E - tests chat UI flows and API contracts
 
 const BACKEND = 'https://smart-doc-backend.onrender.com/api';
 
 test.describe('Chat UI', () => {
   test('login page renders with floating labels', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('h1, h2').getByText(/Ch.*o m.*ng/i).first()).toBeVisible();
+    await expect(page.getByText('Chào mừng trở lại').first()).toBeVisible();
     // Floating label inputs
-    await expect(page.locator('label').filter({ hasText: /Email/i })).toBeVisible();
-    await expect(page.locator('label').filter({ hasText: /Mat kha/i })).toBeVisible();
+    await expect(page.getByText('Email hoặc tên đăng nhập').first()).toBeVisible();
+    await expect(page.getByText('Mật khẩu').first()).toBeVisible();
   });
 
   test('unauthenticated user sees login not chat', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('h1, h2').getByText(/Ch.*o m.*ng/i).first()).toBeVisible();
-    // If authenticated, we'd see ChatPage — instead we see login
+    await expect(page.getByText('Chào mừng trở lại').first()).toBeVisible();
+    // If authenticated, we'd see ChatPage - instead we see login
   });
 });
 

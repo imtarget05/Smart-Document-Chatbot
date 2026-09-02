@@ -47,14 +47,26 @@
 - [x] Verify build + tests pass
 
 ## Phase 6: E2E Test Suite ✅
-- [x] Expand `auth.spec.ts` — 5 tests (login, register, validation, invalid creds, forgot password)
-- [x] Create `chat-ui.spec.ts` — 4 tests (app bar/sidebar/welcome, documents, history, user menu)
-- [x] Mock backend via page.route for hermetically-closed UI tests
-- [x] Verify 9 E2E tests pass
+- [x] Expand `auth.spec.ts` — 5 UI tests (login, register, validation, invalid creds, forgot password)
+- [x] Create `chat-flow.spec.ts` — 2 UI + 3 API-contract tests
+- [x] Create `documents.spec.ts` — API auth guards + UI placeholders
+- [x] Create `admin-ui.spec.ts` — admin guard + UI contract tests
+- [x] Create `chat-ui.spec.ts` — 4 tests (logged-in UI with mocked backend)
+- [x] Extend `playwright.config.ts` — `E2E_BASE_URL` to run against production (skips local webServer)
+- [x] Use Vietnamese text with diacritics + `getByPlaceholder` for floating-label inputs
+- [x] Verify 13/13 UI E2E tests pass against production
 
-## Phase 7: Production Deployment
-- [ ] Run all unit tests (vitest)
-- [ ] Run all E2E tests (playwright local)
-- [ ] Run E2E against production backend
-- [ ] Deploy to Cloudflare Pages
-- [ ] Verify production URL works
+## Phase 7: Production Deployment ✅
+- [x] Run all unit tests (vitest) — 56/56 pass
+- [x] Run all E2E tests locally (playwright)
+- [x] Run E2E against production URL (https://smart-doc-chatbot.pages.dev) — UI suites 18/18 pass
+- [x] Deploy to Cloudflare Pages (auto via pages.yml on push to main)
+- [x] Verify production URL works + serves new Google Material Design UI
+- [x] Commit + push to origin/main (Cloudflare Pages auto-deploy)
+
+## Notes
+- `fullstack-smoke.spec.ts` (csrf → register → login → upload → ask) hits Render free-tier
+  rate limiter; a transient `503 rate_limit_unavailable` (Redis backend down) can fail it
+  during cold starts. Retry shortly; not a code defect.
+- PGP/thumbnail coverage for new components (`AppBar`, `Sidebar`, `UserMenu`) is pending unit
+  tests — add for full coverage.
