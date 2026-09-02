@@ -4,6 +4,7 @@
 name = "smart-doc-chatbot"
 type = "javascript"
 compatibility_date = "2024-11-01"
+account_id = "8788242370433563100da7c3623e1b3c"
 
 [build]
 command = "npm run build"

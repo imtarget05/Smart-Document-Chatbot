@@ -115,7 +115,7 @@ services:
   - key: INTERNAL_SERVICE_TOKEN
     sync: false
   - key: CORS_ALLOWED_ORIGINS
-    value: https://smart-doc.pages.dev,https://smart-doc-frontend.pages.dev
+    value: https://smart-doc-chatbot.pages.dev,https://*.smart-doc-chatbot.pages.dev,https://smart-doc.pages.dev,https://smart-doc-frontend.pages.dev
   # Langfuse Cloud (opt-in, zero overhead when keys empty — now ENABLED per contract)
   - key: LANGFUSE_ENABLED
     value: 'true'
