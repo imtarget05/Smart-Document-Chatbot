@@ -19,36 +19,35 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 3. **Get accurate answers** with source citations
 4. **Trust the output** — Hallucination mitigation through 5-layer verification
 
-## 🏗️ Architecture
+## 🏗️ Architecture (Hybrid: Cloudflare Pages + Render + Local Fallback)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Frontend (React + TypeScript)              │
-│                        Vite • TanStack Query • TailwindCSS       │
+│ Frontend (React + TS, Vite) → Cloudflare Pages                  │
+│ smart-doc-chatbot.pages.dev  • _redirects SPA • _headers       │
 └─────────────────────────────────────────────────────────────────┘
                                   │
-                                  ▼
+                                  ▼ (CORS)
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Backend (Spring Boot 3.2)                      │
-│                    JWT + CSRF • Rate Limiting • Audit Logging     │
+│ Backend (Spring Boot 3.2, Render Singapore)                     │
+│ JWT + CSRF + RateLimit (fail-closed) + Audit + SSO/Keycloak    │
+│ Langfuse Cloud (https://cloud.langfuse.com) — no-op when off    │
 └─────────────────────────────────────────────────────────────────┘
                     │                           │
-                    ▼                           ▼
-┌─────────────────────────┐     ┌─────────────────────────────────┐
-│    PostgreSQL 15        │     │      LLM Router (FastAPI)       │
-│    (metadata + Chunks)  │     │      Task Routing • Caching     │
-│    ► Production path    │     │                                 │
-└─────────────────────────┘     └─────────────────────────────────┘
-                                              │
+              Neon PG │                           │ LLM Router (FastAPI, Render)
+     (Neon 512MB+Qdrant Cloud+R2 10GB free)     │  Task Routing • Circuit breaker
+                                                │
                                     ┌─────────┴─────────┐
                                     ▼                   ▼
                           ┌─────────────┐       ┌─────────────┐
                           │   Ollama    │       │  Cloudflare  │
                           │  (Local)    │       │  Workers AI  │
+                          │ qwen3:8b    │       │ llama-3.3-70b│
                           └─────────────┘       └─────────────┘
+Local fallback: docker-compose.dev.yml (pgvector:5434/qdrant:6333/redis:6379 + Keycloak:8180)
 ```
 
-> **Note:** Production chat uses **PostgreSQL lexical search**. Qdrant hybrid search + BM25 + RRF is available in the experimental Python agent service only.
+> **Note:** Production chat uses **PostgreSQL lexical search**. Qdrant hybrid search + BM25 + RRF is available in the experimental Python agent service only. **SSO prod disabled until Keycloak public URL ready** (`SSO_OIDC_ENABLED=false` on Render).
 
 ## ✨ Key Features
 
@@ -80,11 +79,12 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
   graph routing, full approve/reject API flow).
 
 ### 🛠️ DevOps
-- **CI/CD Pipeline** (GitHub Actions)
-- **Docker Compose** (full stack)
-- **Database Migrations** (Flyway)
-- **Monitoring** (Prometheus + Grafana)
-- **Automated Testing** (251 backend + 35 frontend tests)
+- **CI/CD Pipeline** (GitHub Actions — CI + CD + Pages auto)
+- **Hybrid Deploy**: Cloudflare Pages (frontend) + Render (backend/llm-router/agent/Keycloak)
+- **Docker Compose** (full stack — prod/dev/local/monitoring)
+- **Database Migrations** (Flyway 14)
+- **Monitoring** (Langfuse Cloud + Prometheus + Grafana)
+- **Automated Testing** (254 backend + 54 frontend tests)
 
 ## ⚠️ Known Limitations
 
@@ -92,7 +92,7 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 - **Hallucination rate is 3-10%**, not 0%. Every eval run shows 1-3 hallucination cases.
 - **Production chat uses PostgreSQL lexical search**, not Qdrant hybrid search. Qdrant is only in the experimental Python agent service.
 - **Evaluation uses keyword matching**, not semantic similarity (semantic metric added but not yet calibrated).
-- **Deploy step is manual** — CI builds images but doesn't auto-deploy.
+- **SSO disabled on Render until Keycloak public URL ready** — local Keycloak `http://localhost:8180` works, prod `SSO_OIDC_ENABLED=false` (enable with `https://smartdoc-keycloak.onrender.com/realms/smartdoc`).
 
 ## ✅ What's Genuinely Implemented
 
@@ -124,11 +124,15 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 git clone https://github.com/imtarget05/Smart-Document-Chatbot.git
 cd Smart-Document-Chatbot
 cp .env.example .env
+# Edit .env: CLOUDFLARE_*, R2_*, JWT_SECRET (openssl rand -base64 48)
 ```
 
-### 2. Start Infrastructure
+### 2. Start Infrastructure (local hybrid fallback)
 ```bash
-make local-infra-up
+make local-infra-up          # pgvector:5434, qdrant:6333, redis:6379
+# Keycloak local (SSO dev)
+docker run -d --name smartdoc-keycloak -p 8180:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:24.0.5 start-dev
+# Then create realm/client: see PLAN_HYBRID_PROD.md
 ```
 
 ### 3. Start Backend
@@ -146,9 +150,17 @@ npm run dev
 ```
 
 ### 5. Access
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8080/api
-- API Docs: http://localhost:8080/api/swagger-ui.html
+- Frontend local: http://localhost:3000 — prod: https://smart-doc-chatbot.pages.dev
+- Backend local: http://localhost:8080/api — prod: https://smart-doc-backend-h4mt.onrender.com/api
+- API Docs: http://localhost:8080/api/swagger-ui.html — prod: https://smart-doc-backend-h4mt.onrender.com/api/swagger-ui.html
+- Keycloak local: http://localhost:8180 (admin/admin, realm smartdoc)
+
+### 6. Deploy (Hybrid, free-tier)
+- **Frontend Pages**: `CLOUDFLARE_API_TOKEN` Pages:Edit + `wrangler pages deploy frontend/dist --project-name=smart-doc-chatbot`
+  or auto via `.github/workflows/pages.yml` (push main → `VITE_API_URL=https://smart-doc-backend-h4mt.onrender.com/api`)
+- **Backend/Router**: Render autoDeploy on push (Singapore) — set `NEON_DATABASE_URL`, `QDRANT_HOST/API_KEY`, `R2_*`, `JWT_SECRET` in dashboard
+- **Langfuse Cloud**: set `LANGFUSE_PUBLIC_KEY=pk-lf-...` / `SECRET=sk-lf-...` (cloud.langfuse.com) — no-op when empty
+- **SSO prod**: currently `SSO_OIDC_ENABLED=false` on Render (localhost Keycloak not reachable). Enable with `ISSUER=https://smartdoc-keycloak.onrender.com/realms/smartdoc` after Keycloak service healthy
 
 ## 📊 Performance Metrics
 
@@ -159,8 +171,10 @@ npm run dev
 | Hallucination Rate | 3.2%–9.7% (1-3 cases per 31 questions) |
 | Avg Latency | ~1.9s (production) |
 | P95 Latency | ~2.7s (production) |
-| Automated Tests | 286+ passing (251 backend + 35 frontend) |
+| Automated Tests | 308+ passing (254 backend + 54 frontend) |
 | Evaluation Dataset | 31 Vietnamese legal questions |
+| Frontend | https://smart-doc-chatbot.pages.dev (Cloudflare Pages) |
+| Backend | https://smart-doc-backend-h4mt.onrender.com (Render, Singapore) |
 
 ## 🧪 Testing
 
@@ -182,31 +196,37 @@ python eval/eval.py --base-url http://localhost:8080/api --token $JWT --document
 
 ```
 Smart-Document-Chatbot/
-├── backend/              # Spring Boot API
+├── backend/              # Spring Boot API (254 tests)
 │   ├── src/main/java/    # Java source
-│   ├── src/test/         # Unit tests (251 tests)
-│   └── src/main/resources/db/migration/  # Flyway migrations
-├── frontend/             # React + TypeScript
-│   ├── src/components/   # UI components
-│   └── src/pages/        # Page components
-├── llm-router/           # Python FastAPI LLM router
-├── agent/                # Python AI agent
-├── eval/                 # Evaluation pipeline
-├── docker/               # Docker Compose configs
-├── docs/                 # Documentation
+│   ├── src/test/         # Unit + Flyway integration (local fallback)
+│   └── src/main/resources/db/migration/  # Flyway V1..V14
+├── frontend/             # React + TypeScript (54 tests)
+│   ├── src/              # components, pages, context
+│   ├── public/_redirects # SPA fallback for Cloudflare Pages
+│   ├── wrangler.toml     # Pages project smart-doc-chatbot
+│   └── dist/             # vite build (VITE_API_URL prod)
+├── llm-router/           # Python FastAPI LLM router (Cloudflare Workers AI)
+├── agent/                # Python LangGraph agent + HITL (experimental)
+├── eval/                 # Evaluation pipeline (31 Q, keyword + LLM judge)
+├── docker/               # Docker Compose (prod/dev/local/monitoring) + Dockerfile.keycloak
+├── render.yaml           # Render blueprint (backend, router, agent, keycloak, supply-chain)
+├── .github/workflows/    # CI/CD + Pages auto deploy
+├── docs/                 # Production/eval guides
 ├── n8n-workflows/        # Automation workflows
-└── scripts/              # Utility scripts
+└── scripts/              # Load test, smoke test
 ```
 
-## 🔧 Configuration
+## 🔧 Configuration (hybrid)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_BASE_URL` | LLM Router URL | http://localhost:8001 |
-| `LOCAL_OLLAMA_URL` | Ollama URL | (empty) |
-| `REDIS_HOST` | Redis host | localhost |
-| `JWT_SECRET` | JWT signing key | (required) |
-| `DATABASE_URL` | PostgreSQL URL | (required) |
+| Variable | Description | Default (local) | Prod (Render/Pages) |
+|----------|-------------|---------|-----|
+| `LLM_BASE_URL` | LLM Router URL | http://localhost:8001 | `https://smart-doc-llm-router.onrender.com` (fromService) |
+| `VITE_API_URL` | Frontend → Backend | `/api` (vite proxy) | `https://smart-doc-backend-h4mt.onrender.com/api` |
+| `CORS_ALLOWED_ORIGINS` | Allowed origins | `http://localhost:3000` | `https://smart-doc-chatbot.pages.dev` |
+| `LANGFUSE_*` | Langfuse Cloud | empty (no-op) | `pk-lf-...`/`sk-lf-...` `https://cloud.langfuse.com` |
+| `SSO_OIDC_*` | Keycloak SSO | `http://localhost:8180/realms/smartdoc` (dev) | `false` on Render until `smartdoc-keycloak.onrender.com` ready |
+| `JWT_SECRET` | JWT signing key | (required, `openssl rand -base64 48`) | same, sync:false |
+| `NEON_DATABASE_URL` | Neon PG | `jdbc:postgresql://localhost:5432/smart_doc_chatbot` | `...neon.tech?sslmode=require` |
 
 ## 📚 Documentation
 
