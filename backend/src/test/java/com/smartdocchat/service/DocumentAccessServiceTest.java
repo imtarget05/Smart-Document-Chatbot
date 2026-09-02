@@ -30,17 +30,15 @@ class DocumentAccessServiceTest {
     // canUpload
     // ------------------------------------------------------------------
     @Test
-    void onlyAdminAndEngineerCanUpload() {
+    void allRolesCanUpload() {
         assertTrue(service.canUpload(Role.ROLE_ADMIN));
         assertTrue(service.canUpload(Role.ROLE_ENGINEER));
-        assertFalse(service.canUpload(Role.ROLE_USER));
+        assertTrue(service.canUpload(Role.ROLE_USER));
     }
 
     @Test
-    void viewerUploadThrows403() {
-        AccessDeniedException ex = assertThrows(AccessDeniedException.class,
-                () -> service.checkUpload(Role.ROLE_USER));
-        assertTrue(ex.getMessage().contains("ROLE_USER"));
+    void allRolesUploadSucceeds() {
+        assertDoesNotThrow(() -> service.checkUpload(Role.ROLE_USER));
         assertDoesNotThrow(() -> service.checkUpload(Role.ROLE_ENGINEER));
         assertDoesNotThrow(() -> service.checkUpload(Role.ROLE_ADMIN));
     }

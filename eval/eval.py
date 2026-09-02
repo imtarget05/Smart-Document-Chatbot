@@ -63,11 +63,11 @@ def get_csrf_token(base_url: str, session: requests.Session) -> Optional[str]:
 
     The Spring Boot backend enables CSRF protection on mutating endpoints,
     so POST requests must carry the X-XSRF-TOKEN header plus the XSRF-TOKEN
-    cookie issued by /api/csrf. Returns None when CSRF is disabled or the
+    cookie issued by {base_url}/csrf. Returns None when CSRF is disabled or the
     endpoint is unreachable.
     """
     try:
-        resp = session.get(f"{base_url}/api/csrf", timeout=30)
+        resp = session.get(f"{base_url}/csrf", timeout=30)
         if resp.status_code == 200:
             data = resp.json()
             return data.get("token")

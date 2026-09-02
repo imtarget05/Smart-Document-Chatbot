@@ -22,7 +22,7 @@ import { expect, test } from '@playwright/test';
  * `request` fixture does not automatically carry that cookie, so we capture it
  * and send it explicitly on every call — mirroring how the Python eval runner
  * (requests.Session) behaves. Note the CSRF controller is served under an
- * extra `/api` segment (`{E2E_API_URL}/api/csrf` → …/api/api/csrf), matching
+ * at `{E2E_API_URL}/csrf` (the backend serves CSRF under the /api context path already included in E2E_API_URL), matching
  * run_fixture_eval.py.
  *
  * E2E_API_URL points at Render's free tier, where cold starts can exceed a
@@ -47,7 +47,7 @@ async function freshSession(context: {
   get: (url: string, opts?: any) => Promise<any>;
   post: (url: string, opts?: any) => Promise<any>;
 }) {
-  const csrfRes = await context.get(`${apiUrl}/api/csrf`, { timeout: 120_000 });
+  const csrfRes = await context.get(`${apiUrl}/csrf`, { timeout: 120_000 });
   expect(csrfRes.status()).toBe(200);
   const body = await csrfRes.json();
   const csrfToken = body.token;
@@ -98,11 +98,28 @@ test.describe('full-stack API smoke', () => {
 
   test('authenticated user uploads a document and receives an evidence-backed answer', async ({ request }) => {
     test.setTimeout(180_000);
-    const { authHeaders } = await freshSession(request);
+    const { token } = await freshSession(request);
+
+    // Fetch a fresh CSRF token + cookie for each mutating request (Spring Security
+    // rotates the token per authenticated session). Mirrors run_fixture_eval.py.
+    const freshCsrf = async () => {
+      const csrfRes = await request.get(`${apiUrl}/csrf`, { timeout: 120_000 });
+      expect(csrfRes.status()).toBe(200);
+      const body = await csrfRes.json();
+      const csrfToken = body.token;
+      const setCookie = String(csrfRes.headers()['set-cookie'] || '');
+      const match = setCookie.match(/XSRF-TOKEN=([^;]+)/);
+      const cookie = match ? `XSRF-TOKEN=${match[1]}` : '';
+      return {
+        Authorization: `Bearer ${token}`,
+        'X-XSRF-TOKEN': csrfToken,
+        Cookie: cookie,
+      };
+    };
 
     const upload = async () =>
       request.post(`${apiUrl}/documents/upload`, {
-        headers: authHeaders,
+        headers: await freshCsrf(),
         multipart: {
           file: { name: FIXTURE.name, mimeType: FIXTURE.mime, buffer: FIXTURE.buffer },
         },
@@ -115,7 +132,7 @@ test.describe('full-stack API smoke', () => {
     expect(documentId).toBeTruthy();
 
     const ask = await request.post(`${apiUrl}/chat/ask`, {
-      headers: authHeaders,
+      headers: await freshCsrf(),
       data: {
         sessionId: `e2e-session-${Date.now()}`,
         documentId,

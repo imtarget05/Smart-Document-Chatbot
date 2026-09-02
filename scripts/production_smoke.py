@@ -45,7 +45,7 @@ def main() -> int:
 
     # --- 1. CSRF endpoint
     try:
-        csrf = s.get(f"{b}/api/csrf", timeout=60).json()["token"]
+        csrf = s.get(f"{b}/csrf", timeout=60).json()["token"]
         results.append(check("CSRF             ", bool(csrf)))
     except Exception as e:
         check("CSRF             ", False, str(e)[:80])
@@ -67,7 +67,7 @@ def main() -> int:
     ah = {"Authorization": f"Bearer {jwt}"}
 
     def fresh_csrf():
-        return s.get(f"{b}/api/csrf", timeout=60).json()["token"]
+        return s.get(f"{b}/csrf", timeout=60).json()["token"]
 
     # --- 3. Upload test document owned by the test user
     content = (b"Deployment verification document. The Eiffel Tower is located in "

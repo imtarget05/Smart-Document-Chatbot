@@ -11,8 +11,7 @@ import org.springframework.stereotype.Service;
  * Rules:
  *  - ROLE_ADMIN   : full access to every document (read, upload, delete, list all).
  *  - ROLE_ENGINEER: may upload and manage documents; reads only their own.
- *  - ROLE_USER    : viewer — may read/chat over their own documents only;
- *                   uploading or deleting is forbidden (403).
+ *  - ROLE_USER    : may upload, read and chat over their own documents; may not delete.
  *
  * Read denials throw the same "not found" as owner isolation so callers cannot
  * distinguish "missing" from "not yours". Write denials surface as 403.
@@ -32,22 +31,26 @@ public class DocumentAccessService {
     }
 
     public boolean canUpload(Role role) {
-        return role == Role.ROLE_ADMIN || role == Role.ROLE_ENGINEER;
+        return role == Role.ROLE_ADMIN || role == Role.ROLE_ENGINEER || role == Role.ROLE_USER;
     }
 
     public boolean canDelete(Role role, String ownerUsername, String callerUsername) {
         if (role == Role.ROLE_ADMIN) {
             return true;
         }
-        // Viewers (ROLE_USER) may never delete, even their own documents —
-        // deletion is an engineer/admin action.
-        return ownerUsername != null && ownerUsername.equals(callerUsername) && canUpload(role);
+        // ROLE_USER may never delete, even their own documents — deletion is an
+        // engineer/admin action. canUpload now includes ROLE_USER, so we must
+        // explicitly exclude it here.
+        if (role == Role.ROLE_USER) {
+            return false;
+        }
+        return ownerUsername != null && ownerUsername.equals(callerUsername);
     }
 
     /** Upload denial → 403 (AccessDeniedException is mapped by GlobalExceptionHandler). */
     public void checkUpload(Role role) {
         if (!canUpload(role)) {
-            throw new AccessDeniedException("ROLE_USER cannot upload documents");
+            throw new AccessDeniedException("This role cannot upload documents");
         }
     }
 
@@ -63,7 +66,7 @@ public class DocumentAccessService {
         if (canDelete(role, ownerUsername, callerUsername)) {
             return;
         }
-        if (ownerUsername != null && ownerUsername.equals(callerUsername) && !canUpload(role)) {
+        if (ownerUsername != null && ownerUsername.equals(callerUsername) && role == Role.ROLE_USER) {
             throw new AccessDeniedException("ROLE_USER cannot delete documents");
         }
         throw new SecurityException("Document not found with id");

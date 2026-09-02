@@ -48,7 +48,7 @@ def main() -> int:
     s = requests.Session()
 
     def csrf():
-        return s.get(f"{b}/api/csrf", timeout=60).json()["token"]
+        return s.get(f"{b}/csrf", timeout=60).json()["token"]
 
     # 1. Throwaway evaluation user
     u = f"fixtbench{int(time.time())}"

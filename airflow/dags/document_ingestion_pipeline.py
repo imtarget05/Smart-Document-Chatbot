@@ -54,7 +54,7 @@ def _login(base_url: str, owner: str) -> str:
 
 def _csrf_token(base_url: str, token: str) -> str:
     resp = requests.get(
-        f"{base_url}/api/csrf",
+        f"{base_url}/csrf",
         headers={"Authorization": f"Bearer {token}"},
         timeout=30,
     )
