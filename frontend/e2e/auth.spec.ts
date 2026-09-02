@@ -34,7 +34,8 @@ test('shows error message on invalid credentials', async ({ page }) => {
   await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
 
   // Either auth failure or network error — but a visible error state appears
-  await expect(page.locator('text=/thất bại|không đúng|không hợp lệ|quá|failed/i').first()).toBeVisible();
+  // Backend returns "Invalid username or password"; check for error dialog
+await expect(page.locator('text=/thất bại|không đúng|không hợp lệ|quá|failed|invalid/i').first()).toBeVisible();
 });
 
 test('can navigate to forgot password flow', async ({ page }) => {
