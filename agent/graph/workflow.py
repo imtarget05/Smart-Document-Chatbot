@@ -23,6 +23,8 @@ from agents.action_agent import ActionAgent
 from agents.engineering_analysis_agent import EngineeringAnalysisAgent
 
 from graph.state import AgentState
+from hitl import hitl_store
+from settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,55 @@ def route_to_agent(
 
 
 # ---------------------------------------------------------------------------
+# Human-in-the-Loop gate — every orchestrated action needs human approval
+# ---------------------------------------------------------------------------
+async def hitl_gate_node(state: AgentState) -> AgentState:
+    """
+    Pause before executing any real-world action (email, Jira, Notion,
+    webhook...). If HITL is enabled and the request is not a human-approved
+    resume, create an approval request and end the run with a pending status.
+    A human later approves via POST /agent/approvals/{id}/approve, which
+    re-invokes the workflow with hitl_auto_approved=True.
+    """
+    if not settings.hitl_require_approval or state.get("hitl_auto_approved"):
+        state["hitl_pending"] = False
+        state["hitl_approval_id"] = None
+        return state
+
+    record = await hitl_store.create(
+            query=state.get("query", ""),
+            session_id=state.get("session_id", ""),
+            user_id=state.get("user_id", ""),
+            agent_plan=state.get("agent_plan", ""),
+            document_ids=state.get("document_ids"),
+        )
+    state["hitl_pending"] = True
+    state["hitl_approval_id"] = record["request_id"]
+    state["action_result"] = {
+        "hitl": True,
+        "approval_id": record["request_id"],
+        "status": "pending_approval",
+    }
+    state["final_answer"] = (
+        f"⏸ Yêu cầu hành động cần phê duyệt của con người trước khi thực thi. "
+        f"Mã phê duyệt: {record['request_id']}. "
+        f"Duyệt: POST /api/v1/agent/approvals/{record['request_id']}/approve "
+        f"— hoặc từ chối: POST /api/v1/agent/approvals/{record['request_id']}/reject."
+    )
+    logger.info(
+        "HITL gate paused action (request=%s, session=%s)",
+        record["request_id"],
+        state.get("session_id", ""),
+    )
+    return state
+
+
+def route_after_hitl(state: AgentState) -> Literal["action", "__end__"]:
+    """Continue to the action node only after human approval."""
+    return "__end__" if state.get("hitl_pending") else "action"
+
+
+# ---------------------------------------------------------------------------
 # Build and compile the workflow graph
 # ---------------------------------------------------------------------------
 def build_workflow() -> StateGraph:
@@ -90,6 +141,7 @@ def build_workflow() -> StateGraph:
     graph.add_node("compare", comparator.run)
     graph.add_node("research", researcher.run)
     graph.add_node("action", action.run)
+    graph.add_node("hitl_gate", hitl_gate_node)
     graph.add_node("engineering", engineering.run)
     graph.add_node("adk", run_adk_demo_node)
 
@@ -103,15 +155,25 @@ def build_workflow() -> StateGraph:
             "report": "report",
             "compare": "compare",
             "research": "research",
-            "action": "action",
+            "action": "hitl_gate",
             "engineering": "engineering",
             "adk": "adk",
         },
     )
 
+    # HITL gate → action only after human approval; otherwise END (paused)
+    graph.add_conditional_edges(
+        "hitl_gate",
+        route_after_hitl,
+        {"action": "action", "__end__": END},
+    )
+
     # All sub-agents lead to END
     for node in ALL_AGENT_TYPES:
-        graph.add_edge(node, END)
+        if node != "action":
+            graph.add_edge(node, END)
+
+    graph.add_edge("action", END)
 
     compiled = graph.compile()
     logger.info(

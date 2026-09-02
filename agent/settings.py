@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     jira_base_url: str = ""
     jira_email: str = ""
     jira_api_token: str = ""
+
+    # Governance — Human-in-the-Loop approval for orchestrated actions
+    hitl_require_approval: bool = True
+    hitl_approval_ttl_seconds: int = 3600
     notion_api_token: str = ""
     teams_webhook_url: str = ""
 

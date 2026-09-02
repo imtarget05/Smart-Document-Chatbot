@@ -36,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from adk_runtime import run_demo_workflow
+from hitl import hitl_store
 from memory.long_term import LongTermMemory
 from memory.graph_memory import GraphMemory
 from models import (
@@ -43,6 +44,7 @@ from models import (
     AgentResponse,
     ConnectorIngestRequest,
     ActionRequest,
+    ApprovalDecisionRequest,
     ReportRequest,
 )
 from security.guardrails import input_guardrails, output_guardrails
@@ -989,6 +991,84 @@ async def generate_report(req: ReportRequest):
         user_id=req.user_id,
     )
     return {"report_path": path, "status": "generated"}
+
+
+# ---------------------------------------------------------------------------
+# Governance — Human-in-the-Loop approvals for orchestrated actions
+# ---------------------------------------------------------------------------
+@v1_router.get("/agent/approvals", dependencies=[Depends(verify_and_rate_limit)])
+async def list_approvals():
+    """List all pending human-approval requests (HITL governance queue)."""
+    pending = await hitl_store.list_pending()
+    return {"status": "ok", "pending": pending, "count": len(pending)}
+
+
+@v1_router.get("/agent/approvals/{request_id}", dependencies=[Depends(verify_and_rate_limit)])
+async def get_approval(request_id: str):
+    record = await hitl_store.get(request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Approval request not found or expired")
+    return {"status": "ok", "request": record}
+
+
+@v1_router.post(
+    "/agent/approvals/{request_id}/approve", dependencies=[Depends(verify_and_rate_limit)]
+)
+async def approve_action(request_id: str, req: ApprovalDecisionRequest):
+    """Human approves the paused action → execute it immediately."""
+    record = await hitl_store.decide(request_id, "approved", req.approver, req.note)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Approval request not found, already decided, or expired")
+
+    # Resume the workflow with the SAME request that was paused.
+    if _workflow is None:
+        raise HTTPException(status_code=503, detail="LangGraph workflow unavailable")
+
+    result = await _workflow.ainvoke(
+        {
+            "query": record["query"],
+            "session_id": record["session_id"],
+            "user_id": record["user_id"],
+            "document_ids": record.get("document_ids") or [],
+            "messages": [],
+            "long_term_history": [],
+            "retrieved_chunks": [],
+            "confidence_score": 0.0,
+            "agent_plan": record.get("agent_plan", ""),
+            "agent_type": "action",
+            "intent_override": "action",
+            "final_answer": "",
+            "sources": [],
+            "action_result": None,
+            "report_path": None,
+            "use_web_search": False,
+            "hybrid_search_enabled": True,
+            "hitl_auto_approved": True,
+        }
+    )
+    return {
+        "status": "ok",
+        "decision": "approved",
+        "approver": req.approver,
+        "request_id": request_id,
+        "workflow_result": result,
+    }
+
+
+@v1_router.post(
+    "/agent/approvals/{request_id}/reject", dependencies=[Depends(verify_and_rate_limit)]
+)
+async def reject_action(request_id: str, req: ApprovalDecisionRequest):
+    """Human rejects the paused action → nothing executes."""
+    record = await hitl_store.decide(request_id, "rejected", req.approver, req.note)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Approval request not found, already decided, or expired")
+    return {
+        "status": "ok",
+        "decision": "rejected",
+        "approver": req.approver,
+        "request_id": request_id,
+    }
 
 
 # ---------------------------------------------------------------------------

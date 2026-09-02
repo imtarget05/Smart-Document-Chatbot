@@ -34,6 +34,12 @@ class ActionRequest(BaseModel):
     payload: Dict[str, Any]
 
 
+class ApprovalDecisionRequest(BaseModel):
+    """Human-in-the-Loop decision on a paused orchestrated action."""
+    approver: str = Field(..., min_length=1, max_length=200)
+    note: Optional[str] = None
+
+
 class ConnectorIngestRequest(BaseModel):
     source: str  # "google_drive" | "gmail" | "slack" | "sharepoint"
     user_id: str

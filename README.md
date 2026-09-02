@@ -67,6 +67,18 @@ Smart Document Chatbot is an enterprise-grade RAG (Retrieval-Augmented Generatio
 - **Audit Logging** (immutable trail)
 - **SSO/OIDC Integration** (Keycloak, Azure AD, Okta)
 
+### 👤 Human-in-the-Loop Governance
+- **HITL approval gate** (`agent/hitl.py` + LangGraph `hitl_gate` node): every
+  orchestrated real-world action (email, Jira, Notion, webhook) **pauses** for
+  human approval before execution — the LLM cannot act unilaterally.
+- **Approval queue API**: `GET /api/v1/agent/approvals` (pending queue),
+  `POST /agent/approvals/{id}/approve` (resume + execute the exact paused
+  request), `POST /agent/approvals/{id}/reject` (nothing executes).
+- **TTL expiry** of stale approvals (`HITL_APPROVAL_TTL_SECONDS`, default 1h),
+  on/off switch (`HITL_REQUIRE_APPROVAL`, default on).
+- Verified by `agent/tests/test_hitl.py` (store lifecycle, TTL expiry,
+  graph routing, full approve/reject API flow).
+
 ### 🛠️ DevOps
 - **CI/CD Pipeline** (GitHub Actions)
 - **Docker Compose** (full stack)

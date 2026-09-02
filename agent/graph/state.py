@@ -50,3 +50,8 @@ class AgentState(TypedDict):
     sources: List[Dict[str, Any]]
     action_result: Optional[Dict[str, Any]]
     report_path: Optional[str]
+
+    # ── Governance (Human-in-the-Loop) ────────────────────────────────────
+    hitl_pending: bool  # True → action paused, awaiting human approval
+    hitl_approval_id: Optional[str]  # request id for /agent/approvals/{id}
+    hitl_auto_approved: bool  # set on resume to bypass the gate
