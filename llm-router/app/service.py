@@ -53,6 +53,26 @@ class LLMRouter:
             return self.local
         return self.providers
 
+    def _relabel_decision(
+        self, decision: RouteDecision, active: ProviderLike
+    ) -> RouteDecision:
+        """Make the decision reflect the provider actually serving the request.
+
+        ``choose_route`` always labels ``provider=cloudflare`` with the
+        Cloudflare model (it only decides *complexity/cache*, not transport).
+        When local Ollama serves instead, the response envelope and logs must
+        say so — otherwise observability would claim Cloudflare handled a
+        request it never touched.
+        """
+        if active is self.local:
+            return RouteDecision(
+                provider="local_ollama",
+                model=self.settings.local_ollama_model,
+                reason=decision.reason,
+                task_type=decision.task_type,
+            )
+        return decision
+
     def _prepare_request(self, request: ChatRequest) -> tuple[ChatRequest, dict[str, Any]]:
         """Apply prompt compression and build cache metadata.
 
@@ -116,6 +136,8 @@ class LLMRouter:
                 return cached
 
         active = await self._active()
+        if active is self.local:
+            decision = self._relabel_decision(decision, active)
         started = time.monotonic()
         self._log("route_decision", request_id, decision,
                   backend="local_ollama" if active is self.local else "cloudflare",
@@ -142,6 +164,8 @@ class LLMRouter:
         request, meta = self._prepare_request(request)
         decision = choose_route(request, self.settings)
         active = await self._active()
+        if active is self.local:
+            decision = self._relabel_decision(decision, active)
         started = time.monotonic()
         self._log("route_decision", request_id, decision,
                   backend="local_ollama" if active is self.local else "cloudflare",

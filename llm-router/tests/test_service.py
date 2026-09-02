@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -69,6 +70,98 @@ def settings():
     )
 
 
+class FakeLocalProviders:
+    """Fake local provider whose is_available() is always True."""
+
+    def __init__(self):
+        self.decisions = []
+
+    async def close(self) -> None:
+        pass
+
+    async def is_available(self) -> bool:
+        return True
+
+    async def chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> dict[str, Any]:
+        self.decisions.append(decision)
+        return {
+            "model": decision.model,
+            "message": {"role": "assistant", "content": "local answer"},
+            "done": True,
+            "router": {
+                "provider": decision.provider,
+                "model": decision.model,
+                "reason": decision.reason,
+                "task_type": decision.task_type,
+                "request_id": request_id,
+            },
+        }
+
+    async def stream_chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> AsyncIterator[bytes]:
+        self.decisions.append(decision)
+        payload = {
+            "model": decision.model,
+            "message": {"content": "local answer"},
+            "done": True,
+            "router": {
+                "provider": decision.provider,
+                "model": decision.model,
+                "reason": decision.reason,
+                "task_type": decision.task_type,
+                "request_id": request_id,
+            },
+        }
+        yield (json.dumps(payload) + "\n").encode()
+
+
+def test_chat_relabels_decision_when_local_active(settings):
+    """When a local provider is active, the response envelope must name the
+    local provider and model — not Cloudflare (the fix for the mislabeled
+    provider bug)."""
+
+    local = FakeLocalProviders()
+
+    async def run():
+        # Pass the fake as the `local` provider. Local is always available, so
+        # the cloudflare fake is never exercised.
+        router = LLMRouter(
+            settings,
+            providers=FakeProviders(),
+            local=local,
+        )
+        return await router.chat(simple_request())
+
+    response = asyncio.run(run())
+
+    assert response["router"]["provider"] == "local_ollama"
+    assert response["router"]["model"] == settings.local_ollama_model
+    assert response["model"] == settings.local_ollama_model
+
+
+def test_stream_relabels_decision_when_local_active(settings):
+    """Streaming responses must also carry the local provider label."""
+
+    local = FakeLocalProviders()
+
+    async def run():
+        router = LLMRouter(settings, providers=FakeProviders(), local=local)
+        chunks = [
+            json.loads(c)
+            async for c in router.stream_chat(simple_request(stream=True))
+        ]
+        return chunks
+
+    chunks = asyncio.run(run())
+    assert chunks
+    env = chunks[0]["router"]
+    assert env["provider"] == "local_ollama"
+    assert env["model"] == settings.local_ollama_model
+
+
 def simple_request(stream=False):
     return ChatRequest(
         messages=[{"role": "user", "content": "Extract invoice number"}],
@@ -112,8 +205,12 @@ def test_stream_yields_router_metadata(settings):
 
 def test_cloudflare_failure_propagates_as_provider_error(settings):
     async def run():
+        # Disable the (module-level, shared) response cache: a prior success
+        # test may have cached the same keyed messages and would mask the
+        # provider failure as a cache hit.
+        no_cache = replace(settings, response_cache_enabled=False)
         providers = FakeProviders(fail=True)
-        await LLMRouter(settings, providers).chat(simple_request())
+        await LLMRouter(no_cache, providers).chat(simple_request())
 
     with pytest.raises(ProviderError):
         asyncio.run(run())
@@ -121,8 +218,11 @@ def test_cloudflare_failure_propagates_as_provider_error(settings):
 
 def test_stream_failure_propagates_as_provider_error(settings):
     async def run():
+        # Streaming path doesn't use the cache, but disable it anyway for
+        # consistency/robustness against the shared module cache.
+        no_cache = replace(settings, response_cache_enabled=False)
         providers = FakeProviders(fail=True)
-        async for _ in LLMRouter(settings, providers).stream_chat(
+        async for _ in LLMRouter(no_cache, providers).stream_chat(
             simple_request(stream=True)
         ):
             pass
