@@ -44,7 +44,7 @@ public class OAuth2Config {
         }
 
         String effectiveRedirectUri = redirectUri.isBlank()
-                ? "http://localhost:8080/api/login/oauth2/code/oidc"
+                ? "http://localhost:8080/api/login/oauth2/code/google"
                 : redirectUri;
 
         // Google issuer needs explicit endpoints when OIDC discovery is unavailable at build time

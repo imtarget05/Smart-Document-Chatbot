@@ -159,6 +159,9 @@ services:
     sync: false
   - key: OAUTH2_ISSUER_URI
     value: https://accounts.google.com
+  # Must exactly match an Authorized redirect URI in Google Cloud Console
+  - key: OAUTH2_REDIRECT_URI
+    value: https://smart-doc-backend-h4mt.onrender.com/api/login/oauth2/code/google
   - key: LOGGING_LEVEL_ROOT
     value: WARN
   - key: LOGGING_LEVEL_COM_SMARTDOCCHAT
