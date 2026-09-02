@@ -132,4 +132,25 @@ class RateLimitInterceptorTest {
         MockHttpServletResponse resp = response();
         assertNull(resp.getHeader(RateLimitInterceptor.RETRY_AFTER_HEADER));
     }
+
+    @Test
+    void failsClosedWhenRedisIsUnavailable() throws Exception {
+        // When Redis is down (rateLimitStore == null) and the interceptor is
+        // enabled, throttled paths must be rejected rather than allowed through
+        // (fail-closed — closes the DoS hole during an outage).
+        RateLimitInterceptor noStore = new RateLimitInterceptor(null);
+        setField("enabled", true, noStore);
+        setField("windowSeconds", 30, noStore);
+
+        MockHttpServletResponse blocked = response();
+        assertFalse(noStore.preHandle(request("POST", "/api/chat/ask", "1.2.3.4"), blocked, new Object()));
+        assertEquals(503, blocked.getStatus());
+        assertEquals("30", blocked.getHeader(RateLimitInterceptor.RETRY_AFTER_HEADER));
+    }
+
+    private void setField(String name, Object value, RateLimitInterceptor target) throws Exception {
+        var field = RateLimitInterceptor.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
 }

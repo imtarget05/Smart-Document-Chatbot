@@ -66,7 +66,7 @@ public class DocumentParser {
             Tesseract tesseract = new Tesseract();
             // Giả định đã cài English language data trong /usr/local/share/tessdata
             // hoặc dùng hệ thống tessdata mặc định.
-            tesseract.setLanguage("eng");
+            tesseract.setLanguage("vie+eng");
             // 0 = legacy Tesseract only, 1 = LSTM only, 2 = combined (tessdata best)
             tesseract.setOcrEngineMode(1);
             tesseract.setPageSegMode(1); // Page segmentation mode: treat as single block of text

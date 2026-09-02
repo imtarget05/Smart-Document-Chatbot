@@ -44,10 +44,25 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
-        if (!enabled || rateLimitStore == null) return true;
+        if (!enabled) return true;
         String path = request.getRequestURI();
         String scope = scopeFor(path);
         if (scope == null) return true;
+
+        // Fail-closed: without Redis we cannot enforce the limit. Reject with a
+        // transient 503 instead of allowing unbounded traffic (avoids a DoS hole
+        // during an outage rather than silently disabling throttling).
+        if (rateLimitStore == null) {
+            log.error("Redis unavailable — rejecting {} {} (fail-closed rate limiting)",
+                    request.getMethod(), path);
+            response.setStatus(503);
+            response.setHeader(RETRY_AFTER_HEADER, String.valueOf(windowSeconds));
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"rate_limit_unavailable\",\"message\":"
+                    + "\"Rate limiting backend unavailable; request rejected. Retry shortly.\",\"retry_after\":"
+                    + windowSeconds + "}");
+            return false;
+        }
 
         String identity = switch (scope) {
             case "chat", "upload" -> "u:" + currentUser().orElse(clientIp(request));

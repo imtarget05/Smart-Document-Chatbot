@@ -158,9 +158,10 @@ class AuthControllerTest {
     @Test
     void logoutClearsCookie() {
         controller = new AuthController(userRepository, passwordEncoder, tokenProvider, loginAuditService, auditLogService);
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest("POST", "/auth/logout");
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
-        ResponseEntity<?> response = controller.logout(servletResponse);
+        ResponseEntity<?> response = controller.logout(servletRequest, servletResponse);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("Logged out successfully", response.getBody());

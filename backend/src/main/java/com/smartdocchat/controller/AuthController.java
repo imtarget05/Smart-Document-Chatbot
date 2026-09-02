@@ -94,7 +94,7 @@ public class AuthController {
                     jwtCookie.setPath("/");
                     jwtCookie.setMaxAge(JWT_COOKIE_MAX_AGE_SECONDS);
                     jwtCookie.setAttribute("SameSite", "Lax");
-                    jwtCookie.setSecure("https".equalsIgnoreCase(System.getProperty("server.scheme", "http")));
+                    jwtCookie.setSecure(request.isSecure());
                     response.addCookie(jwtCookie);
 
                     return ResponseEntity.ok(AuthResponse.builder()
@@ -113,13 +113,13 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletResponse response) {
+    public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
         Cookie jwtCookie = new Cookie(JWT_COOKIE_NAME, null);
         jwtCookie.setHttpOnly(true);
         jwtCookie.setPath("/");
         jwtCookie.setMaxAge(0);
         jwtCookie.setAttribute("SameSite", "Lax");
-        jwtCookie.setSecure("https".equalsIgnoreCase(System.getProperty("server.scheme", "http")));
+        jwtCookie.setSecure(request.isSecure());
         response.addCookie(jwtCookie);
         return ResponseEntity.ok("Logged out successfully");
     }

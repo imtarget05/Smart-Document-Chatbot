@@ -22,7 +22,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +43,13 @@ public class ChatService {
     private final LangfuseService langfuse;
     private final AgentClient agentClient;
     private final LegalQueryNormalizer normalizer;
+
+    /**
+     * Bounded executor for the SSE streaming path so chat requests don't saturate
+     * the shared ForkJoinPool with long-running (LLM + retrieval) work.
+     */
+    private static final ExecutorService STREAM_EXECUTOR = Executors.newFixedThreadPool(
+            Math.max(4, Runtime.getRuntime().availableProcessors()));
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -144,7 +152,7 @@ public class ChatService {
     public SseEmitter processQueryStream(String ownerUsername, ChatRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L);
 
-        CompletableFuture.runAsync(() -> {
+        STREAM_EXECUTOR.execute(() -> {
             try {
                 String userMessage = request.getMessage();
                 if (isBlockedInjection(userMessage)) {
