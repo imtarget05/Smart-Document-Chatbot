@@ -105,7 +105,9 @@ jobs:
 
       - name: Run frontend tests with coverage
         working-directory: ./frontend
-        run: npm test -- --run --coverage
+        # `npm test` already runs `vitest run --coverage` (see package.json);
+        # do not append another --coverage/--run or vitest rejects the dup.
+        run: npm test
 
       - name: Check frontend coverage threshold
         working-directory: ./frontend
@@ -175,6 +177,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
+        # Informational scan (exit-code: 0 — findings reported, not blocking).
+        # continue-on-error: Trivy periodically hits public Maven Central 429
+        # rate-limits while resolving Java deps; that is infra noise, not a
+        # vulnerability, and must not red the whole pipeline.
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
