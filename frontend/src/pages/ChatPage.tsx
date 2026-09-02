@@ -289,21 +289,22 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
+    <div className="flex flex-col h-screen bg-[#f8f9fa]">
+      {/* Header — Google modern */}
+      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#dadce0] h-[64px]">
         <div className="flex items-center gap-3">
-          <span className="text-xl">📚</span>
-          <h1 className="text-lg font-semibold text-gray-800">Smart Document Chat</h1>
+          <svg width="40" height="40" viewBox="0 0 48 48" className="ml-1"><path fill="#4285F4" d="M24 24v8h12c-1 4-4 7-12 7-7 0-12-5-12-12s5-12 12-12c3 0 5 1 7 3l3-3C31 11 28 9 24 9 14 9 6 17 6 24s8 15 18 15c10 0 16-7 16-15 0-1 0-2 0-3H24z"/></svg>
+          <h1 className="text-[22px] text-[#202124] font-normal tracking-tight">Smart Document</h1>
+          <span className="hidden sm:inline text-[12px] text-[#5f6368] font-medium ml-1">CRAG • Pages • Render</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">{username}</span>
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:inline text-[13px] text-[#5f6368] bg-[#f1f3f4] px-3 py-1.5 rounded-full">{username}</span>
           <button
             onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-700 transition"
+            className="text-[14px] font-medium text-white bg-[#1a73e8] hover:bg-[#185abc] px-6 py-2 rounded-full transition shadow-sm"
             aria-label="Đăng xuất"
           >
-            Logout
+            Sign out
           </button>
         </div>
       </header>

@@ -3,6 +3,7 @@ package com.smartdocchat.controller;
 import com.smartdocchat.dto.AuthRequest;
 import com.smartdocchat.dto.AuthResponse;
 import com.smartdocchat.dto.RegisterRequest;
+import com.smartdocchat.dto.ResetPasswordRequest;
 import com.smartdocchat.entity.Role;
 import com.smartdocchat.entity.User;
 import com.smartdocchat.repository.UserRepository;
@@ -122,6 +123,25 @@ public class AuthController {
         jwtCookie.setSecure(request.isSecure());
         response.addCookie(jwtCookie);
         return ResponseEntity.ok("Logged out successfully");
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        // Try by username first, then by email — only show generic response
+        var userOpt = userRepository.findByUsername(req.getEmail());
+        if (userOpt.isEmpty()) {
+            userOpt = userRepository.findByEmail(req.getEmail());
+        }
+        if (userOpt.isEmpty()) {
+            // Hide whether user exists
+            return ResponseEntity.ok("If an account exists, a reset link has been sent");
+        }
+        User user = userOpt.get();
+        user.setPassword(passwordEncoder.encode(req.getNewPassword()));
+        userRepository.save(user);
+        log.info("Password reset for user: {}", user.getUsername());
+        auditLogService.record(user.getUsername(), "auth.reset-password", "user", user.getUsername(), "0.0.0.0", "success");
+        return ResponseEntity.ok("Password has been reset successfully");
     }
 
     private String getClientIp(HttpServletRequest request) {

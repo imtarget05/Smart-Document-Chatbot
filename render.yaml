@@ -146,6 +146,19 @@ services:
     value: https://smart-doc.pages.dev
   - key: SSO_OIDC_ADMIN_USERNAMES
     sync: false
+  # Google OAuth (modern One Tap) — 921957726446-...apps.googleusercontent.com
+  - key: GOOGLE_CLIENT_ID
+    sync: false
+  - key: GOOGLE_CLIENT_SECRET
+    sync: false
+  - key: GOOGLE_API_KEY
+    sync: false
+  - key: OAUTH2_CLIENT_ID
+    sync: false
+  - key: OAUTH2_CLIENT_SECRET
+    sync: false
+  - key: OAUTH2_ISSUER_URI
+    value: https://accounts.google.com
   - key: LOGGING_LEVEL_ROOT
     value: WARN
   - key: LOGGING_LEVEL_COM_SMARTDOCCHAT
