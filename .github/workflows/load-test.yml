@@ -1,0 +1,187 @@
+name: Nightly Load Test
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 2 AM UTC daily
+  workflow_dispatch:
+    inputs:
+      users:
+        description: 'Number of concurrent users'
+        required: false
+        default: '50'
+      duration:
+        description: 'Test duration in seconds'
+        required: false
+        default: '60'
+
+env:
+  PYTHON_VERSION: '3.11'
+  JAVA_VERSION: '17'
+
+jobs:
+  load-test:
+    name: Load Test (${{ github.event.inputs.users || 50 }} users, ${{ github.event.inputs.duration || 60 }}s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: smartdoc_loadtest
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install aiohttp
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build backend JAR
+        working-directory: ./backend
+        run: mvn clean package -DskipTests -B
+
+      - name: Start backend services
+        working-directory: ./backend
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smartdoc_loadtest
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+          SPRING_REDIS_HOST: localhost
+          SPRING_REDIS_PORT: 6379
+          JWT_SECRET: bG9hZC10ZXN0LXNlY3JldC1rZXktZm9yLW5pZ2h0bHktY2ktMjAyNA==
+          INTERNAL_SERVICE_TOKEN: load-test-internal-token
+          SERVER_PORT: 8080
+        run: |
+          nohup java -jar target/smart-doc-chatbot-1.0.0.jar > /tmp/backend.log 2>&1 &
+          echo "Backend starting..."
+
+      - name: Wait for backend health check
+        run: |
+          echo "Waiting for backend to be ready..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/api/actuator/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy"
+              exit 0
+            fi
+            if [ $((i % 5)) -eq 0 ]; then
+              echo "Still waiting... ($i/60s)"
+            fi
+            sleep 3
+          done
+          echo "❌ Backend failed to start"
+          tail -50 /tmp/backend.log
+          exit 1
+
+      - name: Run load test
+        run: |
+          USERS="${{ github.event.inputs.users || '50' }}"
+          DURATION="${{ github.event.inputs.duration || '60' }}"
+          echo "Running load test: $USERS users, ${DURATION}s duration"
+          python scripts/load_test.py --users "$USERS" --duration "$DURATION" --ramp-up 10
+
+      - name: Parse results and check thresholds
+        id: check_thresholds
+        run: |
+          RESULTS_FILE=$(ls -t load_test_*.json | head -1)
+          echo "Results file: $RESULTS_FILE"
+
+          python3 << 'PYEOF'
+          import json
+          import sys
+          import os
+          import glob
+
+          files = sorted(glob.glob('load_test_*.json'))
+          if not files:
+              print("❌ No results file found")
+              sys.exit(1)
+
+          with open(files[-1]) as f:
+              data = json.load(f)
+
+          summary = data.get('summary', {})
+          p95 = summary.get('latency_p95', 0)
+          success_rate = summary.get('success_rate', 0) * 100
+          total_requests = summary.get('total_requests', 0)
+          errors = summary.get('errors', 0)
+          throughput = summary.get('throughput', 0)
+
+          # Output for GitHub Step Summary
+          job_summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if job_summary:
+              with open(job_summary, 'a') as f:
+                  f.write("## 🔥 Load Test Results\n\n")
+                  f.write(f"| Metric | Value | Status |\n")
+                  f.write(f"|--------|-------|--------|\n")
+                  f.write(f"| Total Requests | {total_requests} | — |\n")
+                  f.write(f"| Throughput | {throughput:.2f} req/s | — |\n")
+                  f.write(f"| P95 Latency | {p95:.0f}ms | {'✅' if p95 <= 5000 else '❌'} |\n")
+                  f.write(f"| Success Rate | {success_rate:.1f}% | {'✅' if success_rate >= 95 else '❌'} |\n")
+                  f.write(f"| Errors | {errors} | {'✅' if errors == 0 else '⚠️'} |\n")
+
+          print(f"\n📊 Threshold Check:")
+          print(f"  P95 Latency: {p95:.0f}ms (threshold: 5000ms) {'✅' if p95 <= 5000 else '❌'}")
+          print(f"  Success Rate: {success_rate:.1f}% (threshold: 95%) {'✅' if success_rate >= 95 else '❌'}")
+
+          failed = False
+          if p95 > 5000:
+              print(f"❌ FAIL: P95 latency {p95:.0f}ms exceeds 5000ms threshold")
+              failed = True
+          if success_rate < 95:
+              print(f"❌ FAIL: Success rate {success_rate:.1f}% below 95% threshold")
+              failed = True
+
+          if failed:
+              sys.exit(1)
+          else:
+              print("✅ All thresholds passed")
+          PYEOF
+
+      - name: Upload load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: load_test_*.json
+          retention-days: 30
+
+      - name: Upload backend logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs-load-test
+          path: /tmp/backend.log

@@ -44,7 +44,7 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Run backend tests
+      - name: Run backend tests with coverage
         working-directory: ./backend
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smartdoc_test
@@ -53,7 +53,41 @@ jobs:
           SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
           JWT_SECRET: dGVzdC1zZWNyZXQta2V5LWZvci1jaS1waXBlbGluZS10ZXN0aW5nLTIwMjQ=
           INTERNAL_SERVICE_TOKEN: test-internal-token
-        run: mvn clean test -B
+        run: mvn clean verify -B
+
+      - name: Check backend coverage threshold
+        working-directory: ./backend
+        run: |
+          COVERAGE=$(grep -o 'counter type="LINE"[^>]*' target/site/jacoco/index.html | grep -oP 'missed="\K[0-9]+|covered="\K[0-9]+' | head -2)
+          if [ -f target/site/jacoco/jacoco.xml ]; then
+            echo "✅ JaCoCo report generated"
+            python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('target/site/jacoco/jacoco.xml')
+root = tree.getroot()
+for counter in root.findall('counter'):
+    if counter.get('type') == 'LINE':
+        missed = int(counter.get('missed', 0))
+        covered = int(counter.get('covered', 0))
+        total = missed + covered
+        ratio = covered / total if total > 0 else 0
+        print(f'Line coverage: {ratio:.2%} ({covered}/{total})')
+        if ratio < 0.70:
+            print(f'❌ Coverage {ratio:.2%} is below 70% threshold')
+            exit(1)
+        else:
+            print(f'✅ Coverage {ratio:.2%} meets 70% threshold')
+"
+          else
+            echo "⚠️ No JaCoCo report found"
+          fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/target/site/jacoco/
 
       - name: Upload test results
         if: always()
@@ -84,9 +118,32 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - name: Run frontend tests
+      - name: Run frontend tests with coverage
         working-directory: ./frontend
-        run: npm test -- --run
+        run: npm test -- --run --coverage
+
+      - name: Check frontend coverage threshold
+        working-directory: ./frontend
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "✅ Coverage report generated"
+            python3 -c "
+import json
+with open('coverage/coverage-summary.json') as f:
+    data = json.load(f)
+total = data.get('total', {})
+lines = total.get('lines', {})
+pct = lines.get('pct', 0)
+print(f'Line coverage: {pct}%')
+if pct < 60:
+    print(f'❌ Coverage {pct}% is below 60% threshold')
+    exit(1)
+else:
+    print(f'✅ Coverage {pct}% meets 60% threshold')
+"
+          else
+            echo "⚠️ No coverage summary found"
+          fi
 
       - name: Build frontend
         working-directory: ./frontend
