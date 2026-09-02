@@ -123,6 +123,9 @@ test.describe('full-stack API smoke', () => {
         multipart: {
           file: { name: FIXTURE.name, mimeType: FIXTURE.mime, buffer: FIXTURE.buffer },
         },
+        // Render free-tier ingestion (R2 + Qdrant indexing) is slow on the first
+        // call after a cold start; the default actionTimeout (15s) is too tight.
+        timeout: 150_000,
       });
 
     const first = await upload();
