@@ -60,7 +60,20 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install aiohttp
+          pip install aiohttp fastapi uvicorn
+
+      # The load test exercises /chat/ask; give the backend a local Ollama-
+      # compatible mock so chat succeeds without Cloudflare credentials.
+      - name: Start mock Ollama (local LLM)
+        run: |
+          nohup python eval/mock_ollama.py > /tmp/mock_ollama.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:11434/api/health > /dev/null && { echo "✅ mock Ollama up"; exit 0; }
+            sleep 2
+          done
+          echo "❌ mock Ollama failed to start"
+          cat /tmp/mock_ollama.log
+          exit 1
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
@@ -85,6 +98,11 @@ jobs:
           JWT_SECRET: bG9hZC10ZXN0LXNlY3JldC1rZXktZm9yLW5pZ2h0bHktY2ktMjAyNA==
           INTERNAL_SERVICE_TOKEN: load-test-internal-token
           SERVER_PORT: 8080
+          # Point the backend at the local mock Ollama (Ollama-compatible API)
+          # so /chat/ask and retrieval embeddings succeed without any cloud LLM.
+          LLM_BASE_URL: http://localhost:11434
+          LLM_CHAT_MODEL: llama3.2
+          LLM_EMBEDDING_MODEL: nomic-embed-text
         run: |
           nohup java -jar target/smart-doc-chatbot-1.0.0.jar > /tmp/backend.log 2>&1 &
           echo "Backend starting..."

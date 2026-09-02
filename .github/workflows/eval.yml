@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: "Backend API base URL (defaults to hermetic mock backend on :8081)"
+        description: "Backend API base URL (optional: eval a live deployment; default = local mock stack)"
         required: false
-        default: "http://localhost:8081/api"
+        default: ""
       run_full_suite:
         description: "Run the full 31-question suite instead of the fast fixture set"
         type: boolean
@@ -19,58 +19,45 @@ on:
 jobs:
   fixture-eval:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - name: Install eval + mock deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r eval/requirements.txt fastapi uvicorn
+      - name: Install deps
+        run: pip install requests pytest fastapi uvicorn httpx
 
-      # Hermetic local LLM stack: spin up mock Ollama + mock backend inside
-      # the runner. No dependency on Render staging, no cold-start latency,
-      # no flakiness. Mock_ollama.py serves /api/tags, /api/chat and
-      # /api/embeddings so the router contract is exercised end-to-end.
-      - name: Boot mock Ollama on :11434
-        run: |
-          mkdir -p eval/logs
-          nohup python eval/mock_ollama.py > eval/logs/mock_ollama.log 2>&1 &
-          echo $! > eval/logs/mock_ollama.pid
+      # Offline, deterministic grader unit tests (no network, no LLM).
+      - name: Offline grader tests
+        run: python -m pytest tests/test_grader.py -q
 
-      - name: Wait for Mock Ollama /api/tags
+      # Hermetic local LLM stack: mock Ollama (Ollama protocol, :11434) plus a
+      # mock backend (:8081). No Render/cloud-LLM dependency — the eval can no
+      # longer fail because a free-tier staging server is asleep.
+      - name: Start local LLM stack (mock Ollama + mock backend)
         run: |
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then
-              echo "Mock Ollama ready after ${i}s"; exit 0
+          nohup python eval/mock_ollama.py > /tmp/mock_ollama.log 2>&1 &
+          nohup python eval/mock_backend.py > /tmp/mock_backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:11434/api/health > /dev/null && \
+               curl -sf http://127.0.0.1:8081/api/actuator/health > /dev/null; then
+              echo "✅ Local LLM stack is up"
+              exit 0
             fi
-            sleep 1
+            sleep 2
           done
-          echo "FATAL: Mock Ollama never became ready"; exit 1
+          echo "❌ Local LLM stack failed to start"
+          cat /tmp/mock_ollama.log /tmp/mock_backend.log
+          exit 1
 
-      - name: Boot mock backend on :8081
-        run: |
-          nohup python eval/mock_backend.py > eval/logs/mock_backend.log 2>&1 &
-          echo $! > eval/logs/mock_backend.pid
-
-      - name: Wait for Mock backend /api/actuator/health
-        run: |
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8081/api/actuator/health >/dev/null 2>&1; then
-              echo "Mock backend ready after ${i}s"; exit 0
-            fi
-            sleep 1
-          done
-          echo "FATAL: Mock backend never became ready"; exit 1
-
+      # Pass --base-url via workflow_dispatch to eval a live deployment instead.
       - name: Run fixture benchmark (fast gate)
         env:
-          BASE_URL: ${{ inputs.base_url || 'http://localhost:8081/api' }}
+          BASE_URL: ${{ inputs.base_url || 'http://127.0.0.1:8081/api' }}
         run: |
           python eval/run_fixture_eval.py --base-url "$BASE_URL" \
             --output eval/results/fixture_eval.json
@@ -78,7 +65,7 @@ jobs:
       - name: Run full question suite (optional)
         if: ${{ inputs.run_full_suite == true }}
         env:
-          BASE_URL: ${{ inputs.base_url || 'http://localhost:8081/api' }}
+          BASE_URL: ${{ inputs.base_url || 'http://127.0.0.1:8081/api' }}
         run: |
           python eval/run_fixture_eval.py --base-url "$BASE_URL" \
             --questions eval/questions.json \
@@ -89,15 +76,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: eval-report
-          path: |
-            eval/results/
-            eval/logs/
-          retention-days: 30
+          path: eval/results/
 
       - name: Summarize
         if: always()
         run: |
-          python - <<'EOF'
+          python - <<'PYEOF'
           import json, pathlib
           p = pathlib.Path("eval/results/fixture_eval.json")
           if p.exists():
@@ -108,22 +92,12 @@ jobs:
                     f"retrieval={s.get('retrieval_accuracy')} "
                     f"correctness={s.get('answer_correctness')} "
                     f"hallucinations={s.get('hallucination_cases')}")
-          EOF
-
-      - name: Tear down mocks
-        if: always()
-        run: |
-          for pidfile in eval/logs/mock_ollama.pid eval/logs/mock_backend.pid; do
-            if [ -f "$pidfile" ]; then kill "$(cat $pidfile)" 2>/dev/null || true; fi
-          done
-          pkill -f eval/mock_ollama.py 2>/dev/null || true
-          pkill -f eval/mock_backend.py 2>/dev/null || true
-          sleep 1
+          PYEOF
 
   e2e-fullstack:
-    name: "Full-stack E2E smoke (mock backend)"
+    name: "Full-stack E2E smoke"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -141,36 +115,31 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      # UI smoke against the built preview bundle (hermetic).
       - name: UI smoke tests
         working-directory: frontend
         run: npx playwright test e2e/auth.spec.ts
 
-      - name: Boot mock backend on :8081
+      # Full-stack API smoke against the local mock backend (:8081) — hermetic,
+      # no Render dependency. Covers CSRF handshake → register → login →
+      # upload → chat ask end-to-end through the HTTP surface the frontend uses.
+      - name: Start local mock backend
         run: |
-          mkdir -p eval/logs
-          python -m pip install --upgrade pip fastapi uvicorn
-          nohup python eval/mock_backend.py > eval/logs/mock_backend.log 2>&1 &
-          echo $! > eval/logs/mock_backend.pid
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8081/api/actuator/health >/dev/null 2>&1; then
-              echo "Mock backend ready after ${i}s"; exit 0
-            fi
-            sleep 1
+          pip install --quiet fastapi uvicorn
+          nohup python eval/mock_backend.py > /tmp/mock_backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8081/api/actuator/health > /dev/null && { echo "✅ mock backend up"; exit 0; }
+            sleep 2
           done
-          echo "FATAL: Mock backend never became ready"; exit 1
+          echo "❌ mock backend failed to start"
+          cat /tmp/mock_backend.log
+          exit 1
 
-      - name: Full-stack API smoke tests (against mock backend)
+      - name: Full-stack API smoke tests
         working-directory: frontend
         env:
-          E2E_API_URL: http://localhost:8081/api
-          E2E_EXPECT_IDEMPOTENT: '1'
+          E2E_API_URL: http://127.0.0.1:8081/api
         run: npx playwright test e2e/fullstack-smoke.spec.ts
-
-      - name: Tear down mock backend
-        if: always()
-        run: |
-          if [ -f eval/logs/mock_backend.pid ]; then kill "$(cat eval/logs/mock_backend.pid)" 2>/dev/null || true; fi
-          pkill -f eval/mock_backend.py 2>/dev/null || true
 
       - name: Upload Playwright report
         if: failure()

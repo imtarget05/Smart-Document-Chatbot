@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 
@@ -453,7 +453,14 @@ async def verify_token(authorization: Optional[str] = Header(None)):
 
 @app.get("/api/csrf")
 async def get_csrf():
-    return {"token": "mock-csrf-token-" + uuid.uuid4().hex[:16]}
+    token = "mock-csrf-token-" + uuid.uuid4().hex[:16]
+    # Real backend sets the token as an XSRF-TOKEN cookie; the E2E smoke
+    # (and the frontend) rely on that cookie being present.
+    response = JSONResponse({"token": token})
+    response.set_cookie(
+        key="XSRF-TOKEN", value=token, httponly=False, samesite="lax", path="/"
+    )
+    return response
 
 
 @app.post("/api/auth/register")

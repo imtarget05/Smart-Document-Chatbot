@@ -1,0 +1,161 @@
+# ============================================
+# Local LLM Eval — REAL local inference in CI
+# Spins up a real Ollama server, pulls llama3.2, wires the llm-router to it
+# (LOCAL_OLLAMA_URL), and asks real questions answered by local inference.
+# Evidence (model list + real answer + latency) is captured as artifacts and
+# in the job summary. Deliberately NOT a merge gate — slow CPU inference.
+# Triggers: manual (workflow_dispatch) + weekly schedule.
+# ============================================
+
+name: "4. Local LLM Eval (Ollama in CI)"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1' # Weekly, Monday 04:00 UTC
+
+jobs:
+  ollama-eval:
+    name: "Real local inference — llama3.2 via Ollama"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Pull llama3.2 into Ollama (real model download)
+        run: |
+          for i in $(seq 1 30); do
+            docker exec ${{ job.services.ollama.id }} ollama list > /dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec ${{ job.services.ollama.id }} ollama pull llama3.2
+
+      # EVIDENCE #1: the model registry of the local Ollama server.
+      - name: Capture Ollama model registry (evidence)
+        run: |
+          curl -sf http://localhost:11434/api/tags | tee ollama_tags.json
+          grep -q 'llama3.2' ollama_tags.json \
+            || { echo "::error::llama3.2 not present in local Ollama"; exit 1; }
+
+      - name: Install llm-router dependencies
+        working-directory: llm-router
+        run: pip install --quiet -r requirements.txt
+
+      # The router's local-first path (LocalOllamaProvider) serves chat from
+      # the locally downloaded model — no Cloudflare credentials involved.
+      - name: Start llm-router wired to local Ollama
+        working-directory: llm-router
+        env:
+          LOCAL_OLLAMA_URL: http://localhost:11434
+          LOCAL_OLLAMA_MODEL: llama3.2
+          RESPONSE_CACHE_ENABLED: 'false'
+        run: |
+          nohup uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/router.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health > /dev/null && { echo "✅ llm-router up"; exit 0; }
+            sleep 2
+          done
+          echo "❌ llm-router failed to start"
+          cat /tmp/router.log
+          exit 1
+
+      # EVIDENCE #2: real questions answered by local llama3.2 inference
+      # through the router's local-first path.
+      - name: Run real local-LLM eval
+        run: |
+          python - <<'PYEOF'
+          import json, time, urllib.request
+
+          def post(path, payload):
+              req = urllib.request.Request(
+                  f"http://127.0.0.1:8000{path}",
+                  data=json.dumps(payload).encode(),
+                  headers={"Content-Type": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=300) as r:
+                  return json.loads(r.read())
+
+          QUESTIONS = [
+              {"q": "What is the root cause described in the failure report F-2024-118?",
+               "ctx": "Failure Report F-2024-118. Root cause: coolant pump seal degradation "
+                      "leading to overheating of the spindle bearing. Corrective action: "
+                      "replaced seal assembly and revised the preventive maintenance interval."},
+              {"q": "Triệu chứng chính của bệnh sốt xuất huyết là gì?",
+               "ctx": "Bệnh sốt xuất huyết Dengue có triệu chứng chính là sốt cao đột ngột, "
+                      "đau đầu, đau mắt, phát ban và xuất huyết dưới da."},
+          ]
+          results = []
+          for item in QUESTIONS:
+              start = time.time()
+              resp = post("/api/chat", {
+                  "model": "llama3.2",
+                  "messages": [
+                      {"role": "system",
+                       "content": "Answer strictly from the provided context. Be concise."},
+                      {"role": "user",
+                       "content": f"Context from the document:\n{item['ctx']}\n\nQuestion: {item['q']}"},
+                  ],
+                  "stream": False,
+              })
+              latency = round((time.time() - start) * 1000)
+              content = resp.get("message", {}).get("content", "")
+              model = resp.get("model", "unknown")
+              assert content.strip(), f"empty answer for: {item['q']}"
+              assert "llama3.2" in model, f"answered by wrong model: {model}"
+              results.append({"question": item["q"], "model": model,
+                              "latency_ms": latency, "answer": content})
+              print(f"✅ [{model}] {latency}ms — {item['q']}")
+              print(f"   → {content[:180]}")
+
+          with open("local_llm_eval.json", "w", encoding="utf-8") as f:
+              json.dump({"provider": "ollama (local)", "model": "llama3.2",
+                         "runtime": "GitHub Actions runner (CPU)", "results": results},
+                        f, indent=2, ensure_ascii=False)
+          print("")
+          print("✅ REAL LOCAL INFERENCE VERIFIED: all questions answered by local llama3.2")
+          PYEOF
+
+      # EVIDENCE #3: job summary + artifacts so the run is auditable.
+      - name: Write evidence to job summary
+        if: always()
+        run: |
+          {
+            echo "## 🦙 Local LLM Eval — evidence"
+            echo ""
+            echo '- **Provider:** Ollama running as a real service container in CI'
+            echo '- **Model:** llama3.2 (pulled inside the job, served via llm-router local-first path)'
+            echo '- **Inference:** real CPU inference on the runner — no cloud LLM calls'
+            echo ""
+            echo '```json'
+            cat ollama_tags.json 2>/dev/null || true
+            echo '```'
+            echo ""
+            if [ -f local_llm_eval.json ]; then
+              echo '```json'
+              cat local_llm_eval.json
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload evidence artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-eval-evidence
+          path: |
+            ollama_tags.json
+            local_llm_eval.json
+            /tmp/router.log
+          if-no-files-found: ignore

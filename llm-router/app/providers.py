@@ -247,7 +247,7 @@ class CloudflareProvider:
 class LocalOllamaProvider:
     """Opt-in local provider: talks to a user-run Ollama server (e.g.
     ``LOCAL_OLLAMA_URL=http://localhost:11434`` with a model pulled via
-    ``ollama pull qwen3:8b``).
+    ``ollama pull llama3.2`` (LOCAL_OLLAMA_MODEL default).
 
     Contract (Decision: local-first, NO mid-request auto-fallback):
     - when LOCAL_OLLAMA_URL is unset → ``available`` is False and the router
