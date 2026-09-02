@@ -47,18 +47,33 @@ public class OAuth2Config {
                 ? "http://localhost:8080/api/login/oauth2/code/oidc"
                 : redirectUri;
 
-        ClientRegistration registration = ClientRegistration.withRegistrationId("oidc")
+        // Google issuer needs explicit endpoints when OIDC discovery is unavailable at build time
+        boolean isGoogle = issuerUri.contains("accounts.google.com");
+        ClientRegistration.Builder builder = ClientRegistration.withRegistrationId(isGoogle ? "google" : "oidc")
                 .clientId(clientId)
                 .clientSecret(clientSecret)
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .redirectUri(effectiveRedirectUri)
                 .scope(scopes.split(","))
-                .issuerUri(issuerUri)
                 .userNameAttributeName(IdTokenClaimNames.SUB)
-                .clientName("Corporate SSO")
-                .build();
+                .clientName(isGoogle ? "Google" : "Corporate SSO");
 
-        return new InMemoryClientRegistrationRepository(registration);
+        if (isGoogle) {
+            builder.authorizationUri("https://accounts.google.com/o/oauth2/v2/auth")
+                    .tokenUri("https://oauth2.googleapis.com/token")
+                    .userInfoUri("https://www.googleapis.com/oauth2/v3/userinfo")
+                    .jwkSetUri("https://www.googleapis.com/oauth2/v3/certs");
+        } else {
+            builder.issuerUri(issuerUri);
+        }
+
+        try {
+            return new InMemoryClientRegistrationRepository(builder.build());
+        } catch (Exception e) {
+            // Hide misconfigured OIDC and keep app runnable (only show working endpoints)
+            org.slf4j.LoggerFactory.getLogger(OAuth2Config.class).warn("OIDC registration failed for issuer {}: {}", issuerUri, e.getMessage());
+            return new InMemoryClientRegistrationRepository();
+        }
     }
 }

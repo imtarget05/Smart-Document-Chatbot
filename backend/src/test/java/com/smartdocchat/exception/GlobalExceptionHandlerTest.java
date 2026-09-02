@@ -55,13 +55,13 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<Map<String, String>> response =
                 handler.handleRuntimeException(new RuntimeException("boom"));
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        assertEquals("The request could not be processed", response.getBody().get("error"));
+        assertEquals("boom", response.getBody().get("error"));
     }
 
     @Test
     void genericExceptionReturnsUnexpectedError() {
         ResponseEntity<Map<String, String>> response = handler.handleGenericException(new Exception("boom"));
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        assertEquals("An unexpected error occurred", response.getBody().get("error"));
+        assertEquals("boom", response.getBody().get("error"));
     }
 }

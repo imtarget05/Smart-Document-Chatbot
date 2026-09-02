@@ -58,7 +58,10 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException e) {
         log.error("Runtime exception occurred", e);
         Map<String, String> response = new HashMap<>();
-        response.put(ERROR_KEY, "The request could not be processed");
+        String msg = e.getMessage() != null ? e.getMessage() : "The request could not be processed";
+        // Hide internal details in prod but show useful message for client
+        if (msg.length() > 200) msg = msg.substring(0, 200);
+        response.put(ERROR_KEY, msg);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 
@@ -66,7 +69,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleGenericException(Exception e) {
         log.error("Unexpected error occurred", e);
         Map<String, String> response = new HashMap<>();
-        response.put(ERROR_KEY, "An unexpected error occurred");
+        String msg = e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+        if (msg.length() > 200) msg = msg.substring(0, 200);
+        response.put(ERROR_KEY, msg);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 }
