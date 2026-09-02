@@ -65,8 +65,16 @@
 - [x] Commit + push to origin/main (Cloudflare Pages auto-deploy)
 
 ## Notes
-- `fullstack-smoke.spec.ts` (csrf → register → login → upload → ask) hits Render free-tier
-  rate limiter; a transient `503 rate_limit_unavailable` (Redis backend down) can fail it
-  during cold starts. Retry shortly; not a code defect.
-- PGP/thumbnail coverage for new components (`AppBar`, `Sidebar`, `UserMenu`) is pending unit
+- Root cause of the transient 503s: the rate-limiter was fail-closed when Redis was
+  absent (`RateLimitInterceptor` returned 503 `rate_limit_unavailable`). Fixed by adding
+  an in-memory fallback store (`InMemoryRateLimitStore`, `@ConditionalOnMissingBean`) so a
+  Redis outage degrades to per-instance throttling instead of taking the whole API offline.
+  Backend now returns 429 when over the limit, never 503.
+- Also fixed a deploy blocker: `OAuth2Config` built a Google `ClientRegistration` via
+  `issuerUri()` without explicit endpoints -> `authorizationUri cannot be empty` -> app
+  crashed at startup. Now sets explicit Google endpoints + wraps build in try/catch.
+- E2E API auth-guard tests use `fetch(url, { redirect: 'manual' })` because Playwright's
+  `page.request` follows the Spring Security 302 -> login redirect, masking whether an
+  endpoint is actually protected.
+- PGP/thumbnail coverage for new components (`AppBar`, `Sidebar`, `UserMenu`) pending unit
   tests — add for full coverage.
