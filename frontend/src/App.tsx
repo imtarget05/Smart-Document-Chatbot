@@ -1,9 +1,13 @@
+import { Suspense, lazy, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import LoginPage from "./pages/LoginPage";
-import ChatPage from "./pages/ChatPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
+
+// Route-level code splitting: each page bundles into its own chunk so the
+// login screen loads instantly without pulling in the chat/document code.
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const ChatPage = lazy(() => import("./pages/ChatPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,16 +18,39 @@ const queryClient = new QueryClient({
   },
 });
 
+// Minimal Material-style loading indicator while a lazy chunk streams in.
+function RouteFallback() {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center bg-surface"
+      role="status"
+      aria-label="Đang tải"
+    >
+      <span className="w-8 h-8 border-2 border-google-blue border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function SuspensePage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
 function AppContent() {
   const { isAuthenticated } = useAuth();
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return (
+      <SuspensePage>
+        <LoginPage />
+      </SuspensePage>
+    );
   }
 
   return (
     <ErrorBoundary>
-      <ChatPage />
+      <SuspensePage>
+        <ChatPage />
+      </SuspensePage>
     </ErrorBoundary>
   );
 }

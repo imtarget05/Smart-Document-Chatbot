@@ -38,5 +38,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // Code-split vendor libraries for better caching + smaller initial chunk.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'query-vendor': ['@tanstack/react-query'],
+          'uuid': ['uuid'],
+        },
+      },
+    },
   },
 });

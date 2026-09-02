@@ -39,9 +39,12 @@ function renderApp() {
 }
 
 describe("App routing", () => {
-  it("shows the login page when the user is not authenticated", () => {
+  it("shows the login page when the user is not authenticated", async () => {
+    mockAuth.isAuthenticated = false;
     renderApp();
-    expect(screen.getAllByText("Chào mừng trở lại").length).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(screen.getAllByText("Chào mừng trở lại").length).toBeGreaterThan(0),
+    );
     expect(screen.getAllByText(/Smart Document Chatbot/).length).toBeGreaterThan(0);
   });
 
