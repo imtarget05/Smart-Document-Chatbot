@@ -143,7 +143,7 @@ services:
   - key: SSO_OIDC_CLIENT_SECRET
     sync: false
   - key: SSO_OIDC_POST_LOGIN_REDIRECT
-    value: https://smart-doc.pages.dev
+    value: https://smart-doc-chatbot.pages.dev
   - key: SSO_OIDC_ADMIN_USERNAMES
     sync: false
   # Google OAuth (modern One Tap) — 921957726446-...apps.googleusercontent.com

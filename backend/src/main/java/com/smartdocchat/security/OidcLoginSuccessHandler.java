@@ -61,6 +61,31 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
         auditLogService.record(username, "auth.login.sso", "user", username,
                 request.getRemoteAddr(), "role=" + role);
 
-        response.sendRedirect(oidcProperties.getPostLoginRedirect());
+        response.sendRedirect(resolvePostLoginTarget(request));
+
+        // Redirect back to the frontend origin that started the flow (from the
+        // Referer header of the initial /oauth2/authorization navigation). This
+        // keeps production and local dev working without per-env config; falls
+        // back to the configured value when Referer is absent (e.g. direct nav).
+    }
+
+    private String resolvePostLoginTarget(HttpServletRequest request) {
+        String referer = request.getHeader("Referer");
+        if (referer != null) {
+            try {
+                java.net.URI uri = java.net.URI.create(referer);
+                String origin = uri.getScheme() + "://" + uri.getHost()
+                        + (uri.getPort() > 0 && uri.getPort() != 443 && uri.getPort() != 80 ? ":" + uri.getPort() : "");
+                String self = request.getScheme() + "://" + request.getServerName()
+                        + (request.getServerPort() > 0 && request.getServerPort() != 443 && request.getServerPort() != 80 ? ":" + request.getServerPort() : "");
+                // Only trust cross-origin referers (i.e. the SPA), never redirect to the API itself
+                if (uri.getScheme() != null && uri.getHost() != null && !origin.equals(self)) {
+                    return origin + "/";
+                }
+            } catch (IllegalArgumentException ignored) {
+                // fall through to configured redirect
+            }
+        }
+        return oidcProperties.getPostLoginRedirect();
     }
 }
