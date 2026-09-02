@@ -46,11 +46,12 @@ class Settings:
     # Local Ollama (opt-in): when LOCAL_OLLAMA_URL is set (e.g.
     # http://localhost:11434) and the server answers its health probe, chat
     # requests are served by the locally downloaded model (user pulled it via
-    # `ollama pull`, e.g. qwen3:8b). When unset or unreachable the router uses
-    # Cloudflare — deliberately WITHOUT mid-request fallback between the two,
-    # so behaviour stays predictable (Decision: local-first, no auto-fallback).
+    # `ollama pull`, e.g. llama3.2 — Makefile target `local-ollama-pull`).
+    # When unset or unreachable the router uses Cloudflare — deliberately
+    # WITHOUT mid-request fallback between the two, so behaviour stays
+    # predictable (Decision: local-first, no auto-fallback).
     local_ollama_url: str = os.getenv("LOCAL_OLLAMA_URL", "")
-    local_ollama_model: str = os.getenv("LOCAL_OLLAMA_MODEL", "qwen3:8b")
+    local_ollama_model: str = os.getenv("LOCAL_OLLAMA_MODEL", "llama3.2")
     local_ollama_timeout_seconds: float = _float_env(
         "LOCAL_OLLAMA_TIMEOUT_SECONDS", 120.0
     )
