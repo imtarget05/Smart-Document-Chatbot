@@ -191,6 +191,13 @@ jobs:
   agent-test:
     name: Agent Tests
     runs-on: ubuntu-latest
+    env:
+      # The agent Settings model treats an unset APP_ENV as "production" and
+      # then enforces strict secrets (INTERNAL_SERVICE_TOKEN / POSTGRES_PASSWORD
+      # / AGENT_ALLOWED_ORIGINS). These unit tests don't need real creds, so run
+      # them in the permissive "local" mode. Credentials are validated at deploy
+      # time in production where the real secrets are injected.
+      APP_ENV: local
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
