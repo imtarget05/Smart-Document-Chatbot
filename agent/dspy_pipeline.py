@@ -87,8 +87,14 @@ class DspyRag:
             self._build_module()
         if self._rag_module is None:
             return "DSPy module not initialized."
-        result = self._rag_module(context=context, question=question)
-        return str(result.answer)
+        try:
+            result = self._rag_module(context=context, question=question)
+            return str(result.answer)
+        except Exception as exc:  # noqa: BLE001 — degrade gracefully when LLM unreachable
+            logger.warning("DSPy LLM call failed (%s): %s; falling backto a helpful message",
+                          type(exc).__name__, exc)
+            return ("DSPy could not reach its LLM endpoint, so no answer could be "
+                    "generated. Check that the LLM router / Ollama is reachable.")
 
     @property
     def is_available(self) -> bool:
