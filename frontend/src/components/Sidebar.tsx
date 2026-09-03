@@ -69,7 +69,7 @@ export default function Sidebar({
 
         {/* Search */}
         <div className="px-3 pt-3">
-          <SearchInput onSelectDoc={(doc) => { onSelectDoc(doc); onClose(); }} />
+          <SearchInput onSelectDoc={(doc) => { onSelectDoc(doc as Document); onClose(); }} />
         </div>
 
         {/* Documents section */}
