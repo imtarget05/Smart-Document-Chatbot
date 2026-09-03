@@ -17,6 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,7 +32,7 @@ class WebSearchServiceTest {
     @Test
     void returnsEmptyWhenNotConfigured() {
         webSearchService = new WebSearchService(tavilyConfig, restTemplate);
-        when(tavilyConfig.isConfigured()).thenReturn(false);
+        lenient().when(tavilyConfig.isConfigured()).thenReturn(false);
 
         assertTrue(webSearchService.search("query").isEmpty());
         assertTrue(webSearchService.search("query", 5).isEmpty());
@@ -39,9 +41,9 @@ class WebSearchServiceTest {
     @Test
     void parsesResultsAndFiltersShortContent() throws Exception {
         webSearchService = new WebSearchService(tavilyConfig, restTemplate);
-        when(tavilyConfig.isConfigured()).thenReturn(true);
-        when(tavilyConfig.getApiKey()).thenReturn("k");
-        when(tavilyConfig.getUrl()).thenReturn("https://api.tavily.com/search");
+        lenient().when(tavilyConfig.isConfigured()).thenReturn(true);
+        lenient().when(tavilyConfig.getApiKey()).thenReturn("k");
+        lenient().when(tavilyConfig.getUrl()).thenReturn("https://api.tavily.com/search");
 
         String json = """
                 {"results":[
@@ -49,7 +51,7 @@ class WebSearchServiceTest {
                   {"content":"tiny"},
                   {"content":"Another long enough snippet to be returned as well."}
                 ]}""";
-        when(restTemplate.postForEntity(anyString(), any(), any(Class.class)))
+        lenient().when(restTemplate.postForEntity(eq("https://api.tavily.com/search"), any(), eq(com.fasterxml.jackson.databind.JsonNode.class)))
                 .thenReturn(ResponseEntity.ok(new ObjectMapper().readTree(json)));
 
         Optional<List<String>> result = webSearchService.search("latest news");
@@ -61,8 +63,8 @@ class WebSearchServiceTest {
     @Test
     void returnsEmptyOnNon2xxStatus() {
         webSearchService = new WebSearchService(tavilyConfig, restTemplate);
-        when(tavilyConfig.isConfigured()).thenReturn(true);
-        when(restTemplate.postForEntity(anyString(), any(), any(Class.class)))
+        lenient().when(tavilyConfig.isConfigured()).thenReturn(true);
+        lenient().when(restTemplate.postForEntity(eq("https://api.tavily.com/search"), any(), eq(com.fasterxml.jackson.databind.JsonNode.class)))
                 .thenReturn(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(null));
 
         assertTrue(webSearchService.search("query").isEmpty());
@@ -71,9 +73,9 @@ class WebSearchServiceTest {
     @Test
     void returnsEmptyWhenNoSnippetsMeetLength() throws Exception {
         webSearchService = new WebSearchService(tavilyConfig, restTemplate);
-        when(tavilyConfig.isConfigured()).thenReturn(true);
+        lenient().when(tavilyConfig.isConfigured()).thenReturn(true);
         String json = "{\"results\":[{\"content\":\"short\"},{\"content\":\"too short\"}]}";
-        when(restTemplate.postForEntity(anyString(), any(), any(Class.class)))
+        lenient().when(restTemplate.postForEntity(eq("https://api.tavily.com/search"), any(), eq(com.fasterxml.jackson.databind.JsonNode.class)))
                 .thenReturn(ResponseEntity.ok(new ObjectMapper().readTree(json)));
 
         assertTrue(webSearchService.search("query").isEmpty());
@@ -82,8 +84,8 @@ class WebSearchServiceTest {
     @Test
     void returnsEmptyWhenRequestFails() {
         webSearchService = new WebSearchService(tavilyConfig, restTemplate);
-        when(tavilyConfig.isConfigured()).thenReturn(true);
-        when(restTemplate.postForEntity(anyString(), any(), any(Class.class)))
+        lenient().when(tavilyConfig.isConfigured()).thenReturn(true);
+        lenient().when(restTemplate.postForEntity(eq("https://api.tavily.com/search"), any(), eq(com.fasterxml.jackson.databind.JsonNode.class)))
                 .thenThrow(new RuntimeException("network down"));
 
         assertTrue(webSearchService.search("query").isEmpty());

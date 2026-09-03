@@ -18,6 +18,12 @@ export default defineConfig({
     actionTimeout: useProduction ? 15000 : 10000,
     navigationTimeout: useProduction ? 30000 : 10000,
   },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
   // Only start the preview server when not targeting production
   ...(useProduction
     ? {}

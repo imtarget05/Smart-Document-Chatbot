@@ -1,6 +1,5 @@
 package com.smartdocchat.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -14,11 +13,19 @@ import java.util.Map;
  * The backend injects the internal token so the frontend never sees it.
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class SupplyChainService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+    public SupplyChainService() {
+        this(new RestTemplate());
+    }
+
+    // Public constructor allows injecting a mock RestTemplate in tests.
+    public SupplyChainService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
 
     @Value("${supply.chain.api-url:http://localhost:8000}")
     private String supplyChainBaseUrl;

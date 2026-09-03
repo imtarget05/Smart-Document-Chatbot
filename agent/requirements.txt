@@ -67,7 +67,10 @@ pytest==8.2.2
 pytest-asyncio==0.23.7
 
 # Alternative RAG frameworks (LlamaIndex & DSPy)
-llama-index==0.10.65
+# NOTE: llama-index 0.11.x requires llama-index-core >= 0.11.0,<0.12.0
+#       llama-index-vector-stores-qdrant 0.3.0 requires llama-index-core >= 0.11.0,<0.12.0
+#       Both are compatible with llama-index-core 0.11.x
+llama-index==0.11.1
 llama-index-vector-stores-qdrant==0.3.0
 llama-index-llms-ollama==0.2.0
 llama-index-embeddings-ollama==0.2.0
