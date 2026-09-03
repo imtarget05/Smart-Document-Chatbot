@@ -24,7 +24,9 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -204,5 +206,33 @@ class ChatServiceTest {
 
         assertEquals("direct", response.getRagStrategy());
         verify(messageHandler).callLLM("direct prompt");
+    }
+
+    @Test
+    void agenticDuplicateRequestSuppressesSecondAgentCall() {
+        when(agentClient.invokeAgent(eq("alice"), eq("session-1"),
+                eq("who are the suppliers?"), nullable(String.class)))
+                .thenReturn(new AgentClient.AgentResponse("supplier list", "rag",
+                        List.of(), 0.9, "trace-1"));
+        // RAG fallback path used for the suppressed (dedup'd) second request.
+        when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt()))
+                .thenReturn(List.of(new RetrievalService.RetrievalResult(
+                        "The suppliers are vetted quarterly.", 0.9)));
+        when(messageHandler.buildPrompt(anyString(), anyList())).thenReturn("prompt");
+        when(messageHandler.callLLM("prompt")).thenReturn("rag answer");
+        stubSaveReturnsArgument();
+
+        ChatRequest req = ChatRequest.builder()
+                .sessionId("session-1").documentId(1L)
+                .message("who are the suppliers?")
+                .mode("agent")
+                .build();
+
+        chatService.processQuery("alice", req);
+        chatService.processQuery("alice", req);
+
+        // The duplicate (identical message within the 5s TTL) must be suppressed,
+        // so the agent service is contacted exactly once.
+        verify(agentClient, times(1)).invokeAgent(anyString(), anyString(), anyString(), nullable(String.class));
     }
 }

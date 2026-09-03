@@ -24,6 +24,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -44,6 +45,7 @@ class LlmClientTest {
 
     private LlmClient llmClient;
     private CircuitBreaker circuitBreaker;
+    private io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry;
 
     private static final String SYS = "sys";
     private static final String USER = "user";
@@ -54,8 +56,9 @@ class LlmClientTest {
         llmConfig.setChatModel("test-model");
         llmConfig.setBaseUrl("http://localhost:8001");
 
+        meterRegistry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
         llmClient = new LlmClient(restTemplate, llmConfig,
-                new RagMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                new RagMetrics(meterRegistry),
                 new com.smartdocchat.observability.LangfuseService());
         ReflectionTestUtils.setField(llmClient, "internalToken", "");
 
@@ -176,5 +179,58 @@ class LlmClientTest {
         assertEquals(0.95, ((Number) options.get("top_p")).doubleValue());
         assertEquals(0.3, ((Number) options.get("temperature")).doubleValue());
         assertEquals(2048, ((Number) options.get("num_predict")).intValue());
+    }
+
+    @Test
+    void tokenUsageWithOllamaCountsRecordsTokensAndCost() {
+        ReflectionTestUtils.setField(llmClient, "costPer1kJson",
+                "{\"test-model\":0.0003}");
+        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of(
+                        "message", Map.of("content", "answer"),
+                        "prompt_eval_count", 150,
+                        "eval_count", 50)));
+
+        assertEquals("answer", guardedChat());
+
+        assertEquals(200.0, meterRegistry.get("chat.tokens").summary().totalAmount());
+        assertEquals(150.0, meterRegistry.get("chat.tokens.total")
+                .tag("direction", "prompt").counter().count());
+        assertEquals(50.0, meterRegistry.get("chat.tokens.total")
+                .tag("direction", "completion").counter().count());
+        // (150+50)/1000 * 0.0003 = 0.00006
+        assertEquals(0.00006, meterRegistry.get("chat.cost.total").counter().count(), 1e-12);
+    }
+
+    @Test
+    void tokenUsageFromUsageMapFormatIsRecorded() {
+        ReflectionTestUtils.setField(llmClient, "costPer1kJson", "{}");
+        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of(
+                        "message", Map.of("content", "answer"),
+                        "usage", Map.of("prompt_tokens", 100, "completion_tokens", 25))));
+
+        assertEquals("answer", guardedChat());
+
+        assertEquals(125.0, meterRegistry.get("chat.tokens").summary().totalAmount());
+    }
+
+    @Test
+    void tokenUsageWithStringCountsAndBlankCostJsonRecordsTokensOnly() {
+        ReflectionTestUtils.setField(llmClient, "costPer1kJson", "{}");
+        when(restTemplate.exchange(eq("http://localhost:8001/api/chat"), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of(
+                        "message", Map.of("content", "answer"),
+                        "prompt_eval_count", "40",
+                        "eval_count", "60")));
+
+        assertEquals("answer", guardedChat());
+
+        assertEquals(100.0, meterRegistry.get("chat.tokens").summary().totalAmount());
+        // blank/empty cost JSON → no cost metric recorded
+        assertNull(meterRegistry.find("chat.cost.total").counter());
     }
 }

@@ -4,8 +4,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
@@ -14,9 +16,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -84,5 +88,52 @@ class AgentClientTest {
 
         assertTrue(ex.getMessage().contains("agent unavailable"), ex.getMessage());
         mockServer.verify();
+    }
+
+    @Test
+    void invokeAgent_propagatesTraceAndRequestIds() {
+        MDC.put("requestId", "rid-123");
+        try {
+            mockServer.expect(requestTo("http://localhost:9000/v1/agent/invoke"))
+                    .andExpect(method(HttpMethod.POST))
+                    .andExpect(jsonPath("$.trace_id").value("trace-9"))
+                    .andExpect(jsonPath("$.request_id").value("rid-123"))
+                    .andExpect(header("X-Langfuse-Trace-Id", "trace-9"))
+                    .andExpect(header("X-Request-Id", "rid-123"))
+                    .andRespond(withSuccess("{\"answer\":\"ok\"}", MediaType.APPLICATION_JSON));
+
+            AgentClient.AgentResponse resp = agentClient.invokeAgent(
+                    "owner-1", "sess-1", "hello", "trace-9");
+
+            mockServer.verify();
+            assertEquals("ok", resp.answer());
+        } finally {
+            MDC.remove("requestId");
+        }
+    }
+
+    @Test
+    void invokeAgent_nullBody_returnsEmptyResponseWithTrace() {
+        mockServer.expect(requestTo("http://localhost:9000/v1/agent/invoke"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("", MediaType.APPLICATION_JSON));
+
+        AgentClient.AgentResponse resp = agentClient.invokeAgent(
+                "owner-1", "sess-1", "hello", "trace-7");
+
+        assertEquals("", resp.answer());
+        assertEquals("trace-7", resp.traceId());
+        assertNull(resp.confidence());
+        mockServer.verify();
+    }
+
+    @Test
+    void invokeAgentFallback_throwsRuntimeException_andPersistsFailureState() {
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                ReflectionTestUtils.invokeMethod(agentClient, "invokeAgentFallback",
+                        "owner-1", "sess-1", "msg", "trace-1",
+                        new IllegalStateException("boom")));
+
+        assertTrue(ex.getMessage().contains("circuit open"), ex.getMessage());
     }
 }
