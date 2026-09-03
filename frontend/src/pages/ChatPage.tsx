@@ -222,6 +222,7 @@ export default function ChatPage(_props: ChatPageProps) {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...csrfHeaders(),
         },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 

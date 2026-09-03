@@ -124,6 +124,7 @@ export default function LoginPage() {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       const text = await response.text();
@@ -239,6 +240,7 @@ export default function LoginPage() {
       const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
+        credentials: "include",
         body: JSON.stringify({ email: resetEmail, newPassword: "Temp12345678!" }),
       });
       const t = await res.text();
