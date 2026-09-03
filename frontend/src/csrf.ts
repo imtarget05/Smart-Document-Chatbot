@@ -3,18 +3,31 @@ import { API_BASE_URL } from "./context/apiConfig";
 let csrfToken: string | null = null;
 
 export async function bootstrapCsrfToken(): Promise<void> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/csrf`, { method: "GET" });
-    if (!response.ok) return;
-    const data = (await response.json()) as { token?: string };
-    csrfToken = data.token ?? null;
-  } catch {
-    csrfToken = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/csrf`, { method: "GET", credentials: "include" });
+      if (!response.ok) {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      const data = (await response.json()) as { token?: string };
+      csrfToken = data.token ?? null;
+      if (csrfToken) return;
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
+    }
   }
+  csrfToken = null;
+}
+
+function getCsrfFromCookie(): string | null {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 export function csrfHeaders(): Record<string, string> {
-  return csrfToken ? { "X-XSRF-TOKEN": csrfToken } : {};
+  const token = csrfToken || getCsrfFromCookie();
+  return token ? { "X-XSRF-TOKEN": token } : {};
 }
 
 /** Returns CSRF headers, fetching the token on demand if not bootstrapped yet

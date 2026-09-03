@@ -151,6 +151,7 @@ export default function LoginPage() {
     const post = (xsrf: Record<string, string>) =>
       fetch(`${API_BASE_URL}/auth/google`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json", ...xsrf },
         body: JSON.stringify({ credential }),
       });
