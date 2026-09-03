@@ -149,12 +149,27 @@ export default function LoginPage() {
 
   const handleGoogleCredential = async (credential: string) => {
     setAuthLoading(true); setAuthError("");
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/google`, {
+    const post = (xsrf: Record<string, string>) =>
+      fetch(`${API_BASE_URL}/auth/google`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
+        headers: { "Content-Type": "application/json", ...xsrf },
         body: JSON.stringify({ credential }),
       });
+    try {
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await post(await ensureCsrfHeaders(attempt > 0));
+          break;
+        } catch (e) {
+          // TypeError: network/CORS failure — often caused by a missing CSRF
+          // token (backend 302-redirects, which fails CORS). Refresh the token
+          // and retry once before giving up.
+          if (attempt === 0) continue;
+          throw e;
+        }
+      }
+      if (!res) throw new TypeError("no response");
       const text = await res.text();
       let data: Record<string, string> = {};
       try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
@@ -162,7 +177,11 @@ export default function LoginPage() {
       setGoogleModalOpen(false);
       login(data.token, data.username, data.role);
     } catch (err: unknown) {
-      setAuthError(err instanceof Error ? err.message : "Đăng nhập Google thất bại");
+      if (err instanceof TypeError) {
+        setAuthError("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
+      } else {
+        setAuthError(err instanceof Error ? err.message : "Đăng nhập Google thất bại");
+      }
     } finally { setAuthLoading(false); }
   };
 

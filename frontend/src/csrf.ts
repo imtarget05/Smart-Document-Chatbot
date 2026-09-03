@@ -18,8 +18,9 @@ export function csrfHeaders(): Record<string, string> {
 }
 
 /** Returns CSRF headers, fetching the token on demand if not bootstrapped yet
- *  (e.g. the first bootstrap failed because the backend was cold-starting). */
-export async function ensureCsrfHeaders(): Promise<Record<string, string>> {
-  if (!csrfToken) await bootstrapCsrfToken();
+ *  (e.g. the first bootstrap failed because the backend was cold-starting).
+ *  Pass force=true to refetch even if a token is cached (stale-token retry). */
+export async function ensureCsrfHeaders(force = false): Promise<Record<string, string>> {
+  if (force || !csrfToken) await bootstrapCsrfToken();
   return csrfHeaders();
 }
