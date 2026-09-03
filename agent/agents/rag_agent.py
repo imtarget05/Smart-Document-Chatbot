@@ -38,7 +38,7 @@ CRAG_CONFIDENCE_THRESHOLD = float(os.getenv("CRAG_CONFIDENCE_THRESHOLD", "0.6"))
 TOP_K = 5
 LTM_EXTRACT_INTERVAL = 5
 
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 
 MAX_REFORMULATIONS = int(os.getenv("CRAG_MAX_REFORMULATIONS", "2"))
 
@@ -322,13 +322,17 @@ class RagAgent:
         try:
             limit = TOP_K * 2
             pairs = [(query, c.get("text", "")[:500]) for c in chunks[:limit]]
-            scores = self._reranker.predict(pairs)
+            # Run blocking CPU inference in thread pool
+            scores = await asyncio.to_thread(self._reranker.predict, pairs)
             rescored = []
             for i, score in enumerate(scores):
                 chunk = dict(chunks[i])
                 chunk["rerank_score"] = float(score)
                 chunk["score"] = (chunk["score"] + float(score)) / 2
                 rescored.append(chunk)
+            # keep remaining chunks unscored
+            if len(chunks) > limit:
+                rescored.extend(chunks[limit:])
             return sorted(rescored, key=lambda x: x["score"], reverse=True)
         except Exception as exc:
             logger.warning(

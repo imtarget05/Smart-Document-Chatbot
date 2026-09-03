@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     # LLM calls are expensive; keep this conservative.
     agent_rate_limit_rpm: int = 20
 
+    # ── Cost tracking ──────────────────────────────────────────────────────
+    # JSON map model -> price per 1k tokens (USD). Example:
+    # {"@cf/meta/llama-3.3-70b-instruct-fp8-fast":0.0003,"default":0.0003}
+    # Leave as "{}" to disable cost tracking.
+    cost_per_1k_tokens: str = "{}"
+
     # ── Prometheus ─────────────────────────────────────────────────────────
     # If true, the agent service exposes a /metrics endpoint for Prometheus
     # scraping. Disable for environments without Prometheus.

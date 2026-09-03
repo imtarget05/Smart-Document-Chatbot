@@ -84,6 +84,9 @@ llm:
   max-attempts: ${LLM_MAX_ATTEMPTS:3}
   retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}
 
+cost:
+  per-1k-tokens: ${COST_PER_1K_TOKENS:{}}
+
 # Supply Chain module (FastAPI proxy)
 supply:
   chain:
@@ -164,6 +167,37 @@ storage:
 resilience4j:
   circuitbreaker:
     instances:
+      agentService:
+        registerHealthIndicator: false
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 15s
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - org.springframework.web.client.HttpClientErrorException
+          - java.util.concurrent.TimeoutException
+      tavilyService:
+        registerHealthIndicator: false
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 10s
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - java.lang.RuntimeException
       llmService:
         registerHealthIndicator: false
         slidingWindowType: COUNT_BASED
@@ -181,6 +215,31 @@ resilience4j:
           - org.springframework.web.client.ResourceAccessException
           - org.springframework.web.client.HttpServerErrorException
           - com.smartdocchat.service.LlmClient.UnexpectedResponseException
+  retry:
+    instances:
+      tavilyService:
+        maxAttempts: 3
+        waitDuration: 300ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - java.lang.RuntimeException
+      agentService:
+        maxAttempts: 3
+        waitDuration: 250ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+
+chat:
+  sse:
+    threads: ${CHAT_SSE_THREADS:0}
 
 # API rate limiting (Redis-backed sliding window, see RateLimitInterceptor).
 ratelimit:

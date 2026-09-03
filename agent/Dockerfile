@@ -20,7 +20,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-v2-m3')" || echo "Reranker pre-download skipped (offline build)"
 
 # --- Stage 2: Runtime - minimal image ---
 FROM python:3.11-slim AS runtime

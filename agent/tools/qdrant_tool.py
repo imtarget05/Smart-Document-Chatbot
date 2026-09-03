@@ -20,14 +20,67 @@ Scalability note (issue #16):
 import hashlib
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
 from rank_bm25 import BM25Okapi
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from settings import settings
 
 logger = logging.getLogger(__name__)
+
+# ── Simple circuit breaker for Qdrant (no extra dependency) ──
+class _CircuitBreaker:
+    def __init__(self, name: str, fail_max: int = 5, reset_timeout: float = 30.0):
+        self.name = name
+        self.fail_max = fail_max
+        self.reset_timeout = reset_timeout
+        self._failures = 0
+        self._state = "closed"  # closed | open | half_open
+        self._opened_at: Optional[float] = None
+
+    def _emit(self):
+        try:
+            from metrics import circuit_breaker_state
+            m = {"closed": 0, "half_open": 1, "open": 2}.get(self._state, 0)
+            circuit_breaker_state.labels(agent_id=self.name).set(m)
+        except Exception:
+            pass
+
+    def can_execute(self) -> bool:
+        if self._state == "closed":
+            return True
+        if self._state == "open":
+            if time.monotonic() - (self._opened_at or 0) >= self.reset_timeout:
+                self._state = "half_open"
+                self._emit()
+                return True
+            return False
+        return True  # half_open: allow one trial
+
+    def record_success(self):
+        self._failures = 0
+        if self._state != "closed":
+            self._state = "closed"
+            self._emit()
+
+    def record_failure(self):
+        self._failures += 1
+        try:
+            from metrics import circuit_breaker_failures
+            circuit_breaker_failures.labels(agent_id=self.name).inc()
+        except Exception:
+            pass
+        if self._state == "half_open" or self._failures >= self.fail_max:
+            self._state = "open"
+            self._opened_at = time.monotonic()
+            self._emit()
+            logger.warning("Circuit breaker OPEN for %s after %d failures", self.name, self._failures)
+
+_qdrant_breaker = _CircuitBreaker("qdrant", fail_max=5, reset_timeout=30)
+_embed_breaker = _CircuitBreaker("qdrant_embed", fail_max=5, reset_timeout=30)
 
 # Optional Redis cache for RAG queries.
 # Issue #48: Previously, a Redis import failure was silently swallowed and
@@ -78,7 +131,10 @@ class QdrantHybridSearch:
         self._api_key = settings.qdrant_api_key
         self._embed_url = f"{settings.llm_base_url}/api/embeddings"
         self._embed_model = settings.llm_embedding_model
-        self._http = httpx.AsyncClient(timeout=30)
+        self._http = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=5.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -164,11 +220,28 @@ class QdrantHybridSearch:
         return final
 
     # ------------------------------------------------------------------
-    # Semantic search
+    # Semantic search — with retry + circuit breaker
     # ------------------------------------------------------------------
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError)),
+        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
+        reraise=True,
+    )
+    async def _semantic_search_inner(
+        self, url: str, payload: Dict[str, Any], headers: Dict[str, str]
+    ):
+        resp = await self._http.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
     async def _semantic_search(
         self, query: str, collection_id: str, top_k: int
     ) -> List[Dict[str, Any]]:
+        if not _qdrant_breaker.can_execute():
+            logger.warning("Qdrant circuit OPEN — skipping search for %s", collection_id)
+            return []
         vector = await self._embed(query)
         if not vector:
             return []
@@ -184,11 +257,11 @@ class QdrantHybridSearch:
         }
         url = f"{self._base_url}/collections/{collection_id}/points/search"
         try:
-            resp = await self._http.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+            data = await self._semantic_search_inner(url, payload, headers)
             points = data.get("result", [])
+            _qdrant_breaker.record_success()
         except Exception as exc:
+            _qdrant_breaker.record_failure()
             logger.warning(
                 "Qdrant search failed for collection %s: %s", collection_id, exc
             )
@@ -211,16 +284,29 @@ class QdrantHybridSearch:
         return results
 
     # ------------------------------------------------------------------
-    # Embedding
+    # Embedding — with retry + circuit breaker
     # ------------------------------------------------------------------
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError)),
+        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
+        reraise=True,
+    )
+    async def _embed_inner(self, payload: Dict[str, Any]):
+        resp = await self._http.post(self._embed_url, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
     async def _embed(self, text: str) -> Optional[List[float]]:
+        if not _embed_breaker.can_execute():
+            logger.warning("Embedding circuit OPEN — skipping embed")
+            return None
         try:
-            resp = await self._http.post(
-                self._embed_url,
-                json={"model": self._embed_model, "prompt": text},
-            )
-            resp.raise_for_status()
-            return resp.json().get("embedding", [])
+            data = await self._embed_inner({"model": self._embed_model, "prompt": text})
+            _embed_breaker.record_success()
+            return data.get("embedding", [])
         except Exception as exc:
+            _embed_breaker.record_failure()
             logger.error("Embedding failed: %s", exc)
             return None

@@ -70,4 +70,32 @@ public class RagMetrics {
                 .register(meterRegistry)
                 .record(tokens);
     }
+
+    public void recordTokensWithCost(long promptTokens, long completionTokens, double costUsd) {
+        long total = promptTokens + completionTokens;
+        if (total > 0) {
+            io.micrometer.core.instrument.DistributionSummary
+                    .builder("chat.tokens")
+                    .publishPercentiles(0.5, 0.95)
+                    .register(meterRegistry)
+                    .record(total);
+        }
+        if (costUsd > 0) {
+            io.micrometer.core.instrument.DistributionSummary
+                    .builder("chat.cost.usd")
+                    .publishPercentiles(0.5, 0.95)
+                    .register(meterRegistry)
+                    .record(costUsd);
+            Counter.builder("chat.cost.total")
+                    .register(meterRegistry)
+                    .increment(costUsd);
+        }
+        // also per-direction counters
+        if (promptTokens > 0) {
+            Counter.builder("chat.tokens.total").tag("direction", "prompt").register(meterRegistry).increment(promptTokens);
+        }
+        if (completionTokens > 0) {
+            Counter.builder("chat.tokens.total").tag("direction", "completion").register(meterRegistry).increment(completionTokens);
+        }
+    }
 }

@@ -63,8 +63,8 @@ public class WebSearchService {
                     new HttpEntity<>(body, headers),
                     JsonNode.class);
 
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                log.warn("Tavily search returned {}", response.getStatusCode());
+            if (response == null || !response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.warn("Tavily search returned {}", response == null ? "null" : response.getStatusCode());
                 return Optional.empty();
             }
 

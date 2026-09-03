@@ -17,6 +17,9 @@ class AgentRequest(BaseModel):
     use_web_search: bool = False
     # Optional explicit intent override ("rag", "report", "compare", "research", "action", "engineering")
     intent_override: Optional[str] = None
+    # Distributed tracing — propagated from Spring Boot via headers + body
+    trace_id: Optional[str] = Field(default=None, max_length=200)
+    request_id: Optional[str] = Field(default=None, max_length=200)
 
 
 class ReportRequest(BaseModel):
@@ -69,3 +72,6 @@ class AgentResponse(BaseModel):
     confidence_score: float = 0.0
     action_result: Optional[Dict[str, Any]] = None
     report_path: Optional[str] = None
+    trace_id: Optional[str] = None
+    tokens_used: Optional[int] = None
+    cost_usd: Optional[float] = None

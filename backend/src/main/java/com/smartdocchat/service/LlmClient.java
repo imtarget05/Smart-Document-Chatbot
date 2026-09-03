@@ -56,6 +56,9 @@ public class LlmClient {
     @Value("${security.internal-token:}")
     private String internalToken;
 
+    @Value("${cost.per-1k-tokens:{}}")
+    private String costPer1kJson;
+
     @SuppressWarnings("unchecked")
     @CircuitBreaker(name = "llmService", fallbackMethod = "chatFallback")
     public String chat(String systemPrompt, String userPrompt) {
@@ -124,12 +127,70 @@ public class LlmClient {
         return NO_RESPONSE_PLACEHOLDER;
     }
 
-    /** Records reported generated-token usage when the LLM exposes it (Ollama: eval_count). */
+    /** Records reported token usage + cost. Supports Ollama (prompt_eval_count/eval_count) and OpenAI usage. */
     private void recordTokenUsage(Map<String, Object> body) {
-        Object evalCount = body.get("eval_count");
-        if (evalCount instanceof Number n && n.longValue() > 0) {
-            ragMetrics.recordTokens(n.longValue());
-            langfuse.updateTrace(Map.of("outputTokens", n.longValue()), null);
+        long promptTokens = toLong(body.get("prompt_eval_count"));
+        long completionTokens = toLong(body.get("eval_count"));
+        // OpenAI / Cloudflare format: usage: {prompt_tokens, completion_tokens}
+        Object usage = body.get("usage");
+        if (usage instanceof Map<?, ?> um) {
+            promptTokens = Math.max(promptTokens, toLong(um.get("prompt_tokens")));
+            completionTokens = Math.max(completionTokens, toLong(um.get("completion_tokens")));
+            if (promptTokens == 0) promptTokens = toLong(um.get("promptTokens"));
+            if (completionTokens == 0) completionTokens = toLong(um.get("completionTokens"));
+        }
+        // legacy single field
+        if (completionTokens == 0) completionTokens = toLong(body.get("completion_tokens"));
+        if (promptTokens == 0) promptTokens = toLong(body.get("prompt_tokens"));
+
+        if (promptTokens > 0 || completionTokens > 0) {
+            double cost = calculateCost(promptTokens, completionTokens);
+            ragMetrics.recordTokensWithCost(promptTokens, completionTokens, cost);
+            Map<String, Object> meta = new HashMap<>();
+            meta.put("promptTokens", promptTokens);
+            meta.put("completionTokens", completionTokens);
+            meta.put("totalTokens", promptTokens + completionTokens);
+            if (cost > 0) meta.put("costUsd", cost);
+            langfuse.updateTrace(meta, null);
+        } else if (completionTokens > 0 || promptTokens > 0) {
+            // fallback already handled
+        } else {
+            // fallback: try eval_count only for backward compat
+            if (completionTokens > 0) {
+                ragMetrics.recordTokens(completionTokens);
+                langfuse.updateTrace(Map.of("outputTokens", completionTokens), null);
+            }
+        }
+    }
+
+    private long toLong(Object v) {
+        if (v instanceof Number n) return n.longValue();
+        if (v instanceof String s) {
+            try { return Long.parseLong(s); } catch (NumberFormatException ignored) {}
+        }
+        return 0L;
+    }
+
+    private double calculateCost(long prompt, long completion) {
+        if (costPer1kJson == null || costPer1kJson.isBlank() || costPer1kJson.equals("{}")) return 0.0;
+        try {
+            String model = llmConfig.getChatModel();
+            // simple JSON parse without jackson to avoid overhead: look for "model":price
+            // costPer1kJson is {"@cf/meta/llama-3.3-70b-instruct-fp8-fast":0.0003, ...}
+            com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = om.readValue(costPer1kJson, Map.class);
+            Object priceObj = map.get(model);
+            if (priceObj == null) {
+                // try generic fallback key "*" or "default"
+                priceObj = map.getOrDefault("*", map.get("default"));
+            }
+            double pricePer1k = priceObj instanceof Number ? ((Number) priceObj).doubleValue() : 0.0;
+            if (pricePer1k == 0.0) return 0.0;
+            return (prompt + completion) / 1000.0 * pricePer1k;
+        } catch (Exception e) {
+            log.debug("Failed to parse costPer1kJson: {}", e.getMessage());
+            return 0.0;
         }
     }
 }

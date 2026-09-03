@@ -258,7 +258,7 @@ app.add_middleware(
     allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Internal-Token"],
+    allow_headers=["Authorization", "Content-Type", "X-Internal-Token", "X-Request-Id", "X-Langfuse-Trace-Id"],
 )
 
 
@@ -279,6 +279,38 @@ async def limit_request_size(request: Request, call_next):
             content={"error": "Request body exceeds the maximum allowed size."},
         )
     return await call_next(request)
+
+# ---------------------------------------------------------------------------
+# Middleware: distributed tracing correlation IDs
+# Propagates X-Request-Id and X-Langfuse-Trace-Id from Spring Boot backend.
+# ---------------------------------------------------------------------------
+import contextvars
+import uuid
+
+_request_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="")
+_trace_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", default="")
+
+@app.middleware("http")
+async def tracing_correlation(request: Request, call_next):
+    req_id = request.headers.get("X-Request-Id") or request.headers.get("x-request-id") or ""
+    trace_id = request.headers.get("X-Langfuse-Trace-Id") or request.headers.get("x-langfuse-trace-id") or ""
+    if not req_id:
+        req_id = str(uuid.uuid4())
+    # store in request.state for handlers that have Request object
+    request.state.request_id = req_id
+    request.state.trace_id = trace_id
+    # also set contextvars so leaf tools can read without Request
+    _request_id_ctx.set(req_id)
+    if trace_id:
+        _trace_id_ctx.set(trace_id)
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = req_id
+    if trace_id:
+        response.headers["X-Langfuse-Trace-Id"] = trace_id
+    return response
+
+def get_correlation_ids():
+    return {"request_id": _request_id_ctx.get(""), "trace_id": _trace_id_ctx.get("")}
 
 
 # ---------------------------------------------------------------------------
@@ -682,13 +714,22 @@ async def mcp_stats():
     response_model=AgentResponse,
     dependencies=[Depends(verify_and_rate_limit)],
 )
-async def invoke_agent(req: AgentRequest):
+async def invoke_agent(req: AgentRequest, request: Request):
     try:
+        corr = get_correlation_ids()
+        eff_trace = req.trace_id or request.state.trace_id if hasattr(request.state, "trace_id") else corr.get("trace_id", "")
+        eff_req = req.request_id or getattr(request.state, "request_id", "") or corr.get("request_id", "")
+        if eff_trace:
+            _trace_id_ctx.set(eff_trace)
+        if eff_req:
+            _request_id_ctx.set(eff_req)
         logger.info(
-            "Agent invoke: session=%s user=%s query=%s",
+            "Agent invoke: session=%s user=%s query=%s trace_id=%s request_id=%s",
             req.session_id,
             req.user_id,
             req.query[:80],
+            eff_trace,
+            eff_req,
         )
 
         # Prompt-injection guard (issue #9)
@@ -806,6 +847,29 @@ async def invoke_agent(req: AgentRequest):
         if not output_report.passed:
             logger.warning("Output guardrail warnings: %s", output_report.events)
 
+        corr = get_correlation_ids()
+        eff_trace = corr.get("trace_id", "") or req.trace_id or ""
+        # Cost tracking — estimate tokens when real usage not available
+        try:
+            from metrics import estimate_tokens, calculate_cost, record_llm_usage
+            from settings import settings as _settings
+            model = _settings.llm_chat_model
+            # try to extract real usage if workflow provided it
+            prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(result.get("completion_tokens", 0) or 0)
+            if prompt_tokens == 0 and completion_tokens == 0:
+                prompt_tokens = estimate_tokens(req.query)
+                completion_tokens = estimate_tokens(answer)
+            # check response_metadata in result if present
+            usage_meta = result.get("usage_metadata") or result.get("usage") or {}
+            if isinstance(usage_meta, dict) and usage_meta:
+                prompt_tokens = int(usage_meta.get("input_tokens", usage_meta.get("prompt_tokens", prompt_tokens)) or prompt_tokens)
+                completion_tokens = int(usage_meta.get("output_tokens", usage_meta.get("completion_tokens", completion_tokens)) or completion_tokens)
+            cost_usd = calculate_cost(prompt_tokens, completion_tokens, model)
+            record_llm_usage(model, prompt_tokens, completion_tokens, cost_usd)
+        except Exception as _e:
+            logger.debug("Cost tracking failed: %s", _e)
+            prompt_tokens, completion_tokens, cost_usd = 0, 0, 0.0
         return AgentResponse(
             session_id=req.session_id,
             answer=answer,
@@ -814,6 +878,9 @@ async def invoke_agent(req: AgentRequest):
             confidence_score=confidence,
             action_result=result.get("action_result"),
             report_path=result.get("report_path"),
+            trace_id=eff_trace or None,
+            tokens_used=(prompt_tokens + completion_tokens) if 'prompt_tokens' in locals() else None,
+            cost_usd=cost_usd if 'cost_usd' in locals() else None,
         )
     except HTTPException:
         raise

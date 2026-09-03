@@ -21,4 +21,15 @@ public class HttpClientConfig {
                 .setReadTimeout(Duration.ofMillis(readTimeoutMs))
                 .build();
     }
+
+    @Bean
+    public RestTemplate agentRestTemplate(
+            RestTemplateBuilder builder,
+            @Value("${external-services.connect-timeout-ms:3000}") long connectTimeoutMs,
+            @Value("${agent.timeout-ms:15000}") long agentTimeoutMs) {
+        return builder
+                .setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
+                .setReadTimeout(Duration.ofMillis(agentTimeoutMs))
+                .build();
+    }
 }

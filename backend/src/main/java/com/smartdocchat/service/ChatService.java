@@ -22,11 +22,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class ChatService {
 
@@ -43,13 +43,76 @@ public class ChatService {
     private final LangfuseService langfuse;
     private final AgentClient agentClient;
     private final LegalQueryNormalizer normalizer;
+    private final ExecutorService streamExecutor;
+    private final ConcurrentHashMap<String, Long> dedupCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> dlq = new ConcurrentHashMap<>();
 
-    /**
-     * Bounded executor for the SSE streaming path so chat requests don't saturate
-     * the shared ForkJoinPool with long-running (LLM + retrieval) work.
-     */
-    private static final ExecutorService STREAM_EXECUTOR = Executors.newFixedThreadPool(
-            Math.max(4, Runtime.getRuntime().availableProcessors()));
+    public ChatService(MessageHandler messageHandler, HistoryService historyService,
+                       CragConfig cragConfig, RetrievalService retrievalService,
+                       QueryReformulator queryReformulator, WebSearchService webSearchService,
+                       PromptInjectionDetector promptInjectionDetector,
+                       PromptInjectionProperties promptInjectionProperties,
+                       RagMetrics ragMetrics, DocumentService documentService,
+                       LangfuseService langfuse, AgentClient agentClient,
+                       LegalQueryNormalizer normalizer) {
+        this(messageHandler, historyService, cragConfig, retrievalService, queryReformulator,
+                webSearchService, promptInjectionDetector, promptInjectionProperties,
+                ragMetrics, documentService, langfuse, agentClient, normalizer, 0);
+    }
+
+    public ChatService(MessageHandler messageHandler, HistoryService historyService,
+                       CragConfig cragConfig, RetrievalService retrievalService,
+                       QueryReformulator queryReformulator, WebSearchService webSearchService,
+                       PromptInjectionDetector promptInjectionDetector,
+                       PromptInjectionProperties promptInjectionProperties,
+                       RagMetrics ragMetrics, DocumentService documentService,
+                       LangfuseService langfuse, AgentClient agentClient,
+                       LegalQueryNormalizer normalizer,
+                       @org.springframework.beans.factory.annotation.Value("${chat.sse.threads:0}") int sseThreads) {
+        this.messageHandler = messageHandler;
+        this.historyService = historyService;
+        this.cragConfig = cragConfig;
+        this.retrievalService = retrievalService;
+        this.queryReformulator = queryReformulator;
+        this.webSearchService = webSearchService;
+        this.promptInjectionDetector = promptInjectionDetector;
+        this.promptInjectionProperties = promptInjectionProperties;
+        this.ragMetrics = ragMetrics;
+        this.documentService = documentService;
+        this.langfuse = langfuse;
+        this.agentClient = agentClient;
+        this.normalizer = normalizer;
+        int threads = sseThreads > 0 ? sseThreads : Math.max(4, Runtime.getRuntime().availableProcessors());
+        this.streamExecutor = Executors.newFixedThreadPool(threads);
+    }
+
+    private boolean isDuplicateRequest(String ownerUsername, ChatRequest request) {
+        String key = ownerUsername + ":" + request.getSessionId() + ":" + request.getMessage().hashCode();
+        long now = System.currentTimeMillis();
+        Long prev = dedupCache.get(key);
+        if (prev != null && (now - prev) < 5000) {
+            log.warn("Duplicate agent request suppressed key={}", key);
+            return true;
+        }
+        dedupCache.put(key, now);
+        // evict old entries >30s
+        dedupCache.entrySet().removeIf(e -> (now - e.getValue()) > 30000);
+        return false;
+    }
+
+    private void recordDlq(String ownerUsername, String sessionId, String query, String error) {
+        String key = sessionId + ":" + System.currentTimeMillis();
+        dlq.put(key, ownerUsername + "|" + query + "|" + error);
+        if (dlq.size() > 1000) {
+            // drop oldest
+            dlq.keySet().stream().sorted().limit(dlq.size() - 1000).forEach(dlq::remove);
+        }
+        log.warn("DLQ recorded key={} session={} err={}", key, sessionId, error);
+    }
+
+    public Map<String, String> getDlqSnapshot() {
+        return Map.copyOf(dlq);
+    }
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
@@ -82,6 +145,10 @@ public class ChatService {
         // Explicit agent mode (user-selected) or supply-chain auto-detection
         boolean agentMode = "agent".equalsIgnoreCase(request.getMode())
                 || SupplyChainIntentDetector.isSupplyChainIntent(userMessage);
+        if (agentMode && isDuplicateRequest(ownerUsername, request)) {
+            // dedup: treat as already processed, fall through to RAG
+            agentMode = false;
+        }
         if (agentMode) {
             String traceId = langfuse.startTrace("agentic_request", ownerUsername,
                     Map.of("query", userMessage));
@@ -154,7 +221,7 @@ public class ChatService {
     public SseEmitter processQueryStream(String ownerUsername, ChatRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L);
 
-        STREAM_EXECUTOR.execute(() -> {
+        streamExecutor.execute(() -> {
             try {
                 String userMessage = request.getMessage();
                 if (isBlockedInjection(userMessage)) {
@@ -297,6 +364,11 @@ public class ChatService {
 
             } catch (Exception e) {
                 log.error("Error in streaming task: {}", e.getMessage(), e);
+                // DLQ stub — retain failed SSE for manual replay/debugging
+                try {
+                    String userMessage = request.getMessage();
+                    recordDlq(ownerUsername, request.getSessionId(), userMessage, e.getMessage());
+                } catch (Exception ignored) {}
                 try {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
                     emitter.completeWithError(e);
