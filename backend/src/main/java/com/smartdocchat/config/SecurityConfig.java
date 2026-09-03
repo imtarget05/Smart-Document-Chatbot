@@ -47,6 +47,7 @@ public class SecurityConfig {
         csrfTokenRepository.setCookiePath("/");
         csrfTokenRepository.setCookieName("XSRF-TOKEN");
         csrfTokenRepository.setHeaderName("X-XSRF-TOKEN");
+        csrfTokenRepository.setCookieCustomizer(c -> c.sameSite("None"));
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
