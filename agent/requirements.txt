@@ -9,10 +9,11 @@ uvicorn[standard]==0.30.1
 python-multipart==0.0.9
 
 # LangGraph & LangChain (Phase 2 - Multi-agent orchestration)
+# NOTE: langgraph 0.2.76 requires langchain-core >= 0.2.43
 langgraph==0.2.76
-langchain==0.2.6
-langchain-core==0.2.22
-langchain-community==0.2.6
+langchain==0.2.16
+langchain-core==0.2.43
+langchain-community==0.2.16
 langchain-ollama==0.1.1
 langchain-openai==0.1.8
 
