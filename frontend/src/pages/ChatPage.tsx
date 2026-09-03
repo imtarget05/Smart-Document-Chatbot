@@ -13,6 +13,10 @@ import AppBar from "../components/AppBar";
 import Sidebar from "../components/Sidebar";
 import WelcomeScreen from "../components/WelcomeScreen";
 import AgentModeToggle from "../components/AgentModeToggle";
+import RenameDialog from "../components/RenameDialog";
+import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
+import VersionHistory from "../components/VersionHistory";
+import { useRenameDocument, useDeleteDocument } from "../hooks/useDocumentMutations";
 
 export default function ChatPage() {
   const { token, username, logout } = useAuth();
@@ -36,8 +40,14 @@ export default function ChatPage() {
   // Legal search state (Decision 15)
   const [viewingSource, setViewingSource] = useState<SourceCitation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [renameDoc, setRenameDoc] = useState<Document | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [versionDoc, setVersionDoc] = useState<Document | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const renameMutation = useRenameDocument();
+  const deleteMutation = useDeleteDocument();
 
   // Fetch documents
   const { data: documents = [] } = useQuery<Document[]>({
@@ -320,6 +330,9 @@ export default function ChatPage() {
           onClose={() => setSidebarOpen(false)}
           activeSessionId={sessionId}
           onSelectSession={handleSelectSession}
+          onRenameDoc={setRenameDoc}
+          onDeleteDoc={setDeleteDoc}
+          onViewVersions={setVersionDoc}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -424,6 +437,46 @@ export default function ChatPage() {
           />
         </div>
       </div>
+
+      {/* Document dialogs */}
+      <RenameDialog
+        open={renameDoc != null}
+        currentTitle={renameDoc?.title}
+        currentNumber={renameDoc?.documentNumber}
+        onClose={() => setRenameDoc(null)}
+        loading={renameMutation.isPending}
+        onSave={(data) => {
+          if (renameDoc) {
+            renameMutation.mutate(
+              { id: renameDoc.id, payload: data },
+              { onSuccess: () => setRenameDoc(null) }
+            );
+          }
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteDoc != null}
+        documentName={deleteDoc?.title || deleteDoc?.fileName || ""}
+        onClose={() => setDeleteDoc(null)}
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteDoc) {
+            deleteMutation.mutate(deleteDoc.id, {
+              onSuccess: () => {
+                setDeleteDoc(null);
+                setSelectedDoc((prev) => (prev?.id === deleteDoc.id ? null : prev));
+              },
+            });
+          }
+        }}
+      />
+
+      <VersionHistory
+        documentId={versionDoc?.id ?? null}
+        documentName={versionDoc?.title || versionDoc?.fileName || ""}
+        onClose={() => setVersionDoc(null)}
+      />
     </div>
   );
 }

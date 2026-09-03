@@ -1,6 +1,7 @@
 import type { Document } from "../types";
 import SearchInput from "./SearchInput";
 import SessionList from "./SessionList";
+import DocumentMenu from "./DocumentMenu";
 
 interface SidebarProps {
   documents: Document[];
@@ -12,6 +13,9 @@ interface SidebarProps {
   onClose: () => void;
   activeSessionId: string;
   onSelectSession: (sessionId: string) => void;
+  onRenameDoc: (doc: Document) => void;
+  onDeleteDoc: (doc: Document) => void;
+  onViewVersions: (doc: Document) => void;
 }
 
 export default function Sidebar({
@@ -24,6 +28,9 @@ export default function Sidebar({
   onClose,
   activeSessionId,
   onSelectSession,
+  onRenameDoc,
+  onDeleteDoc,
+  onViewVersions,
 }: SidebarProps) {
   return (
     <>
@@ -115,12 +122,17 @@ export default function Sidebar({
                       {doc.documentNumber ? `Số: ${doc.documentNumber}` : doc.fileType} &bull; {doc.chunkCount} chunks
                     </p>
                   </div>
+                  <DocumentMenu
+                    document={doc}
+                    onRename={() => onRenameDoc(doc)}
+                    onDelete={() => onDeleteDoc(doc)}
+                    onViewHistory={() => onViewVersions(doc)}
+                  />
                 </button>
               ))}
             </div>
           )}
         </div>
-
         {/* Sessions */}
         <SessionList activeSessionId={activeSessionId} onSelectSession={(id) => { onSelectSession(id); onClose(); }} />
 

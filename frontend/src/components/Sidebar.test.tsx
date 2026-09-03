@@ -47,6 +47,9 @@ function renderSidebar(props: Partial<{
   onClose: () => void;
   activeSessionId: string;
   onSelectSession: (sessionId: string) => void;
+  onRenameDoc: (doc: Document) => void;
+  onDeleteDoc: (doc: Document) => void;
+  onViewVersions: (doc: Document) => void;
 }> = {}) {
   return render(
     <Sidebar
@@ -59,6 +62,9 @@ function renderSidebar(props: Partial<{
       onClose={props.onClose ?? vi.fn()}
       activeSessionId={props.activeSessionId ?? "test-session"}
       onSelectSession={props.onSelectSession ?? vi.fn()}
+      onRenameDoc={props.onRenameDoc ?? vi.fn()}
+      onDeleteDoc={props.onDeleteDoc ?? vi.fn()}
+      onViewVersions={props.onViewVersions ?? vi.fn()}
     />,
     { wrapper: createWrapper() },
   );
