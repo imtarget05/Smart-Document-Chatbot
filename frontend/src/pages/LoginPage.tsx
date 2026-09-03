@@ -157,7 +157,6 @@ export default function LoginPage() {
       });
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     let res: Response | null = null;
-    let lastErr: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
         await sleep(4000);
@@ -166,7 +165,6 @@ export default function LoginPage() {
         res = await post(await ensureCsrfHeaders(attempt > 0));
         break;
       } catch (e) {
-        lastErr = e;
         continue;
       }
     }
