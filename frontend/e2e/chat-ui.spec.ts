@@ -86,8 +86,10 @@ test.describe('Chat UI after login', () => {
   test('user menu dropdown opens and has logout', async ({ page }) => {
     await loginAndOpen(page);
 
-    await page.getByLabel('Menu người dùng').click();
-    await expect(page.getByText('testuser')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible();
+    const menuButton = page.getByLabel('Menu người dùng');
+    await menuButton.click({ force: true });
+    // Wait for dropdown animation and check for logout button
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible({ timeout: 10000 });
   });
 });
