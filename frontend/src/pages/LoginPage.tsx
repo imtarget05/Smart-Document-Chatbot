@@ -10,6 +10,7 @@ declare global {
         id: {
           initialize: (config: { client_id: string; callback: (resp: { credential: string }) => void }) => void;
           renderButton: (el: HTMLElement, options: Record<string, unknown>) => void;
+          prompt: () => void;
         };
       };
     };
@@ -146,35 +147,37 @@ export default function LoginPage() {
   const [googleModalOpen, setGoogleModalOpen] = useState(false);
   const googleBtnRef = useRef<HTMLDivElement | null>(null);
 
+  const postGoogleCredential = useCallback(
+    async (credential: string): Promise<Response> => {
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await sleep(4000);
+        try {
+          res = await fetch(`${API_BASE_URL}/auth/google`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
+            body: JSON.stringify({ credential }),
+          });
+          break;
+        } catch {
+          continue;
+        }
+      }
+      if (!res) {
+        throw new Error("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
+      }
+      return res;
+    },
+    [login],
+  );
+
   const handleGoogleCredential = async (credential: string) => {
     setAuthLoading(true);
     setAuthError("");
-    const post = () =>
-      fetch(`${API_BASE_URL}/auth/google`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential }),
-      });
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    let res: Response | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        await sleep(4000);
-      }
-      try {
-        res = await post();
-        break;
-      } catch (e) {
-        continue;
-      }
-    }
-    if (!res) {
-      setAuthLoading(false);
-      setAuthError("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
-      return;
-    }
     try {
+      const res = await postGoogleCredential(credential);
       const text = await res.text();
       let data: Record<string, string> = {};
       try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
@@ -191,6 +194,28 @@ export default function LoginPage() {
       setAuthLoading(false);
     }
   };
+
+  // Google Identity Services One Tap auto-login: if the browser still has the
+  // user's Google session, prompt for it automatically so they don't have to
+  // click through the login form again.
+  const googleAutoAttempted = useRef(false);
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || googleAutoAttempted.current) return;
+    const g = window.google?.accounts?.id;
+    if (!g) return;
+    googleAutoAttempted.current = true;
+    try {
+      g.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp) => {
+          if (resp?.credential) void handleGoogleCredential(resp.credential);
+        },
+      });
+      g.prompt();
+    } catch {
+      /* prompt unavailable — user can still use the button */
+    }
+  }, [GOOGLE_CLIENT_ID]);
 
   const renderGoogleButton = useCallback(() => {
     const el = googleBtnRef.current;

@@ -40,8 +40,13 @@ function SuspensePage({ children }: { children: ReactNode }) {
 }
 
 function AppContent() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
   const [view, setView] = useState<AppView>("chat");
+
+  // Don't flash the login page while we restore a persisted session.
+  if (isInitializing) {
+    return <RouteFallback />;
+  }
 
   if (!isAuthenticated) {
     return (
