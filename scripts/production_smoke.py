@@ -80,9 +80,13 @@ def main() -> int:
                          r.status_code == 200 and doc is not None, f"(docId={doc})"))
 
     # --- 4. Owner isolation: unauthenticated document access must be rejected
-    r_anon = requests.Session().get(f"{b}/documents/{doc}", timeout=60)
+    # NOTE: allow_redirects=False — unauthenticated requests are redirected
+    # (302) to the OAuth2 entry point, which lands on accounts.google.com with
+    # 200. Following redirects would make this check a false positive.
+    r_anon = requests.Session().get(f"{b}/documents/{doc}", timeout=60,
+                                    allow_redirects=False)
     results.append(check("OWNER ISOLATION  ",
-                         r_anon.status_code in (401, 403),
+                         r_anon.status_code in (301, 302, 303, 307, 308, 401, 403),
                          f"(anon GET -> {r_anon.status_code})"))
 
     # --- 5-7. Full chain: eval -> backend -> router -> LLM
