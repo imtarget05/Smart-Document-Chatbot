@@ -148,11 +148,11 @@ export default function LoginPage() {
   const handleGoogleCredential = async (credential: string) => {
     setAuthLoading(true);
     setAuthError("");
-    const post = (xsrf: Record<string, string>) =>
+    const post = () =>
       fetch(`${API_BASE_URL}/auth/google`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json", ...xsrf },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential }),
       });
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -162,7 +162,7 @@ export default function LoginPage() {
         await sleep(4000);
       }
       try {
-        res = await post(await ensureCsrfHeaders(attempt > 0));
+        res = await post();
         break;
       } catch (e) {
         continue;
