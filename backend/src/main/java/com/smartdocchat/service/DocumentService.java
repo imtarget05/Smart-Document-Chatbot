@@ -411,7 +411,9 @@ public class DocumentService {
         switch (extension) {
             case "pdf" -> {
                 if (header[0] != 0x25 || header[1] != 0x50 || header[2] != 0x44 || header[3] != 0x46) {
-                    throw new IllegalArgumentException("File content does not match a valid PDF.");
+                    log.warn("PDF magic bytes missing for '{}' — treating as scanned/image PDF, will attempt OCR fallback",
+                            file.getOriginalFilename());
+                    // Allow upload; DocumentParser will attempt OCR fallback
                 }
             }
             case "docx" -> {

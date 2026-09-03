@@ -9,8 +9,8 @@ import com.smartdocchat.metrics.RagMetrics;
 import com.smartdocchat.observability.LangfuseService;
 import com.smartdocchat.security.PromptInjectionDetector;
 import com.smartdocchat.util.LegalQueryNormalizer;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -47,19 +47,7 @@ public class ChatService {
     private final ConcurrentHashMap<String, Long> dedupCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> dlq = new ConcurrentHashMap<>();
 
-    public ChatService(MessageHandler messageHandler, HistoryService historyService,
-                       CragConfig cragConfig, RetrievalService retrievalService,
-                       QueryReformulator queryReformulator, WebSearchService webSearchService,
-                       PromptInjectionDetector promptInjectionDetector,
-                       PromptInjectionProperties promptInjectionProperties,
-                       RagMetrics ragMetrics, DocumentService documentService,
-                       LangfuseService langfuse, AgentClient agentClient,
-                       LegalQueryNormalizer normalizer) {
-        this(messageHandler, historyService, cragConfig, retrievalService, queryReformulator,
-                webSearchService, promptInjectionDetector, promptInjectionProperties,
-                ragMetrics, documentService, langfuse, agentClient, normalizer, 0);
-    }
-
+    @Autowired
     public ChatService(MessageHandler messageHandler, HistoryService historyService,
                        CragConfig cragConfig, RetrievalService retrievalService,
                        QueryReformulator queryReformulator, WebSearchService webSearchService,
@@ -84,6 +72,20 @@ public class ChatService {
         this.normalizer = normalizer;
         int threads = sseThreads > 0 ? sseThreads : Math.max(4, Runtime.getRuntime().availableProcessors());
         this.streamExecutor = Executors.newFixedThreadPool(threads);
+    }
+
+    // Package-private constructor for testing (defaults sseThreads to 0)
+    ChatService(MessageHandler messageHandler, HistoryService historyService,
+                CragConfig cragConfig, RetrievalService retrievalService,
+                QueryReformulator queryReformulator, WebSearchService webSearchService,
+                PromptInjectionDetector promptInjectionDetector,
+                PromptInjectionProperties promptInjectionProperties,
+                RagMetrics ragMetrics, DocumentService documentService,
+                LangfuseService langfuse, AgentClient agentClient,
+                LegalQueryNormalizer normalizer) {
+        this(messageHandler, historyService, cragConfig, retrievalService, queryReformulator,
+                webSearchService, promptInjectionDetector, promptInjectionProperties,
+                ragMetrics, documentService, langfuse, agentClient, normalizer, 0);
     }
 
     private boolean isDuplicateRequest(String ownerUsername, ChatRequest request) {

@@ -101,10 +101,19 @@ class DocumentServiceTest {
     }
 
     @Test
-    void rejectsPdfWithoutMagicHeader() {
+    void allowsPdfWithoutMagicHeader_OcrFallback() throws Exception {
+        // PDFs without magic bytes are now accepted (OCR fallback will handle them)
         MockMultipartFile file = new MockMultipartFile(
-                "file", "fake.pdf", "application/pdf", "not a pdf at all".getBytes());
-        assertThrows(IllegalArgumentException.class, () -> documentService.uploadDocument(file, "alice"));
+                "file", "scanned.pdf", "application/pdf", "scanned content".getBytes());
+
+        when(storageService.upload(anyString(), any())).thenReturn("uploads/scanned.pdf");
+        when(storageService.download(anyString())).thenReturn(new File("scanned.pdf"));
+        when(documentParser.extractText(any(File.class), anyString())).thenReturn("scanned text");
+        when(documentParser.chunkText(anyString(), anyInt(), anyInt())).thenReturn(List.of("chunk"));
+        when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Document saved = documentService.uploadDocument(file, "alice");
+        assertEquals("pdf", saved.getFileType());
     }
 
     @Test
