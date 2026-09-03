@@ -64,3 +64,54 @@ groups:
         annotations:
           summary: "Low disk space"
           description: "Less than 10% disk space remaining."
+
+      # ── SLO / Burn Rate (availability 99.5% over 30m, p95 10s) ──
+      # Recording rules for SLO would live in prometheus.yml; these alerts approximate burn rate
+      - alert: SloBurnFast
+        expr: (1 - (sum(rate(http_server_requests_seconds_count{status!~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count[5m])))) > (1 - 0.995) * 2
+        for: 5m
+        labels:
+          severity: critical
+          slo: "availability"
+        annotations:
+          summary: "SLO fast burn: availability < 99.5% *2"
+          description: "Error budget burning at 2x (5m window). Current availability below 99.0%."
+
+      - alert: SloBurnSlow
+        expr: (1 - (sum(rate(http_server_requests_seconds_count{status!~"5.."}[30m])) / sum(rate(http_server_requests_seconds_count[30m])))) > (1 - 0.995) * 1
+        for: 15m
+        labels:
+          severity: warning
+          slo: "availability"
+        annotations:
+          summary: "SLO slow burn: availability < 99.5%"
+          description: "Error budget burning at 1x over 30m window."
+
+      - alert: SloLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) > 10
+        for: 15m
+        labels:
+          severity: warning
+          slo: "latency"
+        annotations:
+          summary: "SLO latency p95 >10s"
+          description: "95th percentile latency exceeds SLO 10s for 15m."
+
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker OPEN"
+          description: "Circuit breaker has been open for >2m (agent_id label)."
+
+      - alert: HighCostRate
+        expr: sum(rate(llm_cost_usd_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          slo: "cost"
+        annotations:
+          summary: "High LLM cost rate"
+          description: "LLM cost > $0.05/min for 10m."

@@ -71,6 +71,12 @@ services:
   plan: free
   dockerfilePath: docker/Dockerfile.backend
   autoDeploy: true
+  # Previews for canary (enable in dashboard; free tier supports preview envs)
+  # Scaling (paid): uncomment to enable HPA
+  # scaling:
+  #   minInstances: 2
+  #   maxInstances: 5
+  #   targetCPUPercent: 70
   healthCheckPath: /api/actuator/health
   envVars:
   - key: SPRING_PROFILES_ACTIVE

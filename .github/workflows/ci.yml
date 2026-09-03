@@ -286,12 +286,39 @@ jobs:
           echo "Golden dataset validation OK"
 
   # ═══════════════════════════════════════════════════════════════
+  # Chaos Engineering (fault injection)
+  # ═══════════════════════════════════════════════════════════════
+  chaos-test:
+    name: Chaos Test (circuit breaker fault injection)
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: local
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: agent/requirements.txt
+      - name: Install agent dependencies
+        run: pip install -r agent/requirements.txt
+      - name: Run chaos tests
+        working-directory: ./agent
+        run: python -m pytest tests/test_chaos.py -v
+
+  # ═══════════════════════════════════════════════════════════════
   # Security Scan
   # ═══════════════════════════════════════════════════════════════
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -313,6 +340,53 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           extra_args: --only-verified
+
+      - name: Semgrep SAST (Python + JS)
+        continue-on-error: true
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+          generateSarif: "true"
+
+      - name: Initialize CodeQL
+        continue-on-error: true
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java, javascript, python
+
+      - name: Autobuild
+        continue-on-error: true
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        continue-on-error: true
+        uses: github/codeql-action/analyze@v3
+
+  # ═══════════════════════════════════════════════════════════════
+  # Canary Smoke (preview URL if available)
+  # ═══════════════════════════════════════════════════════════════
+  canary-smoke:
+    name: Canary Smoke (preview)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run preview smoke (if PREVIEW_URL set)
+        env:
+          PREVIEW_URL: ${{ secrets.RENDER_PREVIEW_URL }}
+        run: |
+          if [ -z "$PREVIEW_URL" ]; then echo "No PREVIEW_URL, skip canary (see docs/CANARY.md)"; exit 0; fi
+          python -m pip install --quiet requests
+          python scripts/production_smoke.py --base-url "$PREVIEW_URL" || echo "Smoke failed but not blocking (preview may be cold)"
+
 
   # ═══════════════════════════════════════════════════════════════
   # Contract Test (Pact stub - validates OpenAPI spec)

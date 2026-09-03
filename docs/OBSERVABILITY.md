@@ -36,15 +36,22 @@ INTERNAL_SERVICE_TOKEN=<random-service-token>
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4318/v1/traces
 ```
 
-## Alerts and Service Levels
+## Alerts and Service Levels (SLO: 99.5% availability, p95 <10s)
 
-Start with these review thresholds and tune after collecting traffic:
+SLOs codified in `docker/monitoring/alert-rules.yml`:
 
-| Signal | Alert threshold |
-| --- | --- |
-| API availability | less than 99.5% over 30 minutes |
-| Chat p95 latency | above 10 seconds for 15 minutes |
-| LLM failure ratio | above 5% for 10 minutes |
-| Corrective/general fallback ratio | above 30% for 30 minutes |
+| Signal | SLO | Alert | Burn |
+| --- | --- | --- | --- |
+| API availability | 99.5% over 30m | SloBurnSlow (warning) | 1x |
+| API availability fast burn | 99.5% over 5m *2 | SloBurnFast (critical) | 2x |
+| Chat p95 latency | <10s for 15m | SloLatencyP95 | - |
+| LLM failure ratio | <5% for 10m | HighErrorRate (>5%) | - |
+| Circuit breaker OPEN | 0 open | CircuitBreakerOpen | - |
+| Cost rate | < $0.05/min | HighCostRate | - |
+| Corrective/general fallback ratio | <30% for 30m | (review threshold) | - |
+
+Burn rate formula: `(1 - availability) > (1 - 0.995)*burn`. Error budget = 0.5% * window.
 
 The fallback ratio is a retrieval-quality warning, not merely an infrastructure incident.
+
+Distributed tracing now active via `X-Request-Id` + `X-Langfuse-Trace-Id` propagation (Phase1). See `backend/src/main/java/com/smartdocchat/config/RequestIdFilter.java` and `agent/main.py:tracing_correlation`.
