@@ -37,7 +37,12 @@ for COL in documents supply_chain; do
 done
 
 # 3. R2 versioning check
-echo "[3/3] R2 bucket versioning: ensure R2_BUCKET_NAME=$R2_BUCKET_NAME has versioning enabled (Cloudflare dashboard)"
+R2_BUCKET_NAME=${R2_BUCKET_NAME:-}
+if [[ -n "$R2_BUCKET_NAME" ]]; then
+  echo "[3/3] R2 bucket versioning: ensure R2_BUCKET_NAME=$R2_BUCKET_NAME has versioning enabled (Cloudflare dashboard)"
+else
+  echo "[3/3] SKIP R2 versioning check (R2_BUCKET_NAME not set)"
+fi
 
 echo "Backup done -> $BACKUP_DIR"
 ls -lh "$BACKUP_DIR" | tail -10
