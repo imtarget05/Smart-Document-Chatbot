@@ -476,11 +476,15 @@ export default function ChatPage(_props: ChatPageProps) {
         }}
       />
 
-      <VersionHistory
-        documentId={versionDoc?.id ?? null}
-        documentName={versionDoc?.title || versionDoc?.fileName || ""}
-        onClose={() => setVersionDoc(null)}
-      />
+      {/* Version history panel — render only when a document is selected,
+          otherwise the fixed fullscreen overlay blocks the rest of the UI */}
+      {versionDoc && (
+        <VersionHistory
+          documentId={versionDoc.id}
+          documentName={versionDoc.title || versionDoc.fileName || ""}
+          onClose={() => setVersionDoc(null)}
+        />
+      )}
     </div>
   );
 }
