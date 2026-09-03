@@ -49,3 +49,21 @@ scrape_configs:
         labels:
           app: 'smart-doc-chatbot'
           component: 'qdrant'
+
+  # Agent Service (FastAPI /metrics)
+  - job_name: 'agent'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['agent:9000']
+        labels:
+          app: 'smart-doc-chatbot'
+          component: 'agent'
+
+  # LLM Router
+  - job_name: 'llm-router'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['llm-router:8001']
+        labels:
+          app: 'smart-doc-chatbot'
+          component: 'llm-router'

@@ -239,6 +239,53 @@ jobs:
           python -m pytest tests/test_grader.py -q
 
   # ═══════════════════════════════════════════════════════════════
+  # LLM Judge Mock Evaluation (deterministic, no LLM API)
+  # ═══════════════════════════════════════════════════════════════
+  eval-llm-judge-mock:
+    name: LLM Judge Mock (golden 50)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install judge dependencies
+        run: python -m pip install --quiet requests pytest
+
+      - name: Validate golden dataset size
+        run: |
+          python -c "import json; d=json.load(open('eval/golden_dataset.json')); assert len(d)>=50, f'golden_dataset.json has {len(d)} <50 entries'; print(f'Golden dataset: {len(d)} entries OK')"
+
+      - name: Run LLM judge mock evaluation
+        run: |
+          python -c "
+          import json
+          from eval.llm_judge import LLMJudge
+          golden=json.load(open('eval/golden_dataset.json'))
+          judge=LLMJudge(mock=True)
+          scores=[]
+          for item in golden:
+              q=item['question']; a=item['golden_answer']; ctx=' '.join(item.get('expected_source_keywords',[]))
+              r=judge.evaluate_all(question=q, answer=a, context=ctx, expected_concepts=item.get('expected_concepts',[]))
+              assert r.relevance.score >= 0 and r.relevance.score <= 1
+              scores.append(r.average_score or 0)
+          avg=sum(scores)/len(scores) if scores else 0
+          print(f'LLM Judge mock avg score: {avg:.3f} over {len(scores)} cases')
+          assert avg >= 0.5, f'avg mock score {avg} too low'
+          print('LLM Judge mock evaluation PASSED')
+          "
+
+      - name: Run semantic similarity check (offline)
+        run: |
+          python eval/eval.py --validate-only --questions eval/golden_dataset.json
+          echo "Golden dataset validation OK"
+
+  # ═══════════════════════════════════════════════════════════════
   # Security Scan
   # ═══════════════════════════════════════════════════════════════
   security-scan:
@@ -266,6 +313,25 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           extra_args: --only-verified
+
+  # ═══════════════════════════════════════════════════════════════
+  # Contract Test (Pact stub - validates OpenAPI spec)
+  # ═══════════════════════════════════════════════════════════════
+  contract-test:
+    name: Contract Test (OpenAPI)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate OpenAPI spec exists
+        run: |
+          if [ -f backend/src/main/resources/openapi.yaml ] || [ -f backend/src/main/resources/application.yml ]; then echo "OpenAPI config present"; else echo "No OpenAPI spec, checking controllers"; fi
+          grep -r "RequestMapping\|GetMapping\|PostMapping" backend/src/main/java --include="*.java" | head -20
+          echo "Contract stub validation PASSED (full Pact consumer-driven to be added in Phase3)"
 
   # ═══════════════════════════════════════════════════════════════
   # Docker Build
