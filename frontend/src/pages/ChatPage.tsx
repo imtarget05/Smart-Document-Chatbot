@@ -18,7 +18,11 @@ import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
 import VersionHistory from "../components/VersionHistory";
 import { useRenameDocument, useDeleteDocument } from "../hooks/useDocumentMutations";
 
-export default function ChatPage() {
+interface ChatPageProps {
+  onNavigate?: (view: "chat" | "admin" | "supply-chain") => void;
+}
+
+export default function ChatPage({ onNavigate }: ChatPageProps) {
   const { token, username, logout } = useAuth();
   const queryClient = useQueryClient();
 

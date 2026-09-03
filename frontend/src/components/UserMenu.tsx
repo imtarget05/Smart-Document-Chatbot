@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
 
 interface UserMenuProps {
   username?: string | null;
@@ -6,9 +7,17 @@ interface UserMenuProps {
   onLogout: () => void;
 }
 
+type AppView = "chat" | "admin" | "supply-chain";
+
+function useAppView(): [AppView, (v: AppView) => void] {
+  return (window as unknown as { __appView?: [AppView, (v: AppView) => void] }).__appView ?? ["chat", () => {}];
+}
+
 export default function UserMenu({ username, role, onLogout }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { isAdmin } = useAuth();
+  const [, setView] = useAppView();
 
   const initials = username ? username.slice(0, 2).toUpperCase() : "U";
   const roleLabel = role === "ROLE_ADMIN" || role === "ADMIN"
@@ -64,6 +73,32 @@ export default function UserMenu({ username, role, onLogout }: UserMenuProps) {
 
           {/* Actions */}
           <div className="py-1">
+            <button
+              onClick={() => { setIsOpen(false); setView("chat"); }}
+              className="w-full text-left px-4 py-2.5 text-[13px] text-onsurface-variant hover:bg-surface-container transition-colors duration-200 flex items-center gap-3"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Trò chuyện
+            </button>
+            <button
+              onClick={() => { setIsOpen(false); setView("supply-chain"); }}
+              className="w-full text-left px-4 py-2.5 text-[13px] text-onsurface-variant hover:bg-surface-container transition-colors duration-200 flex items-center gap-3"
+            >
+              <span className="text-[15px]">📦</span>
+              Supply Chain
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => { setIsOpen(false); setView("admin"); }}
+                className="w-full text-left px-4 py-2.5 text-[13px] text-onsurface-variant hover:bg-surface-container transition-colors duration-200 flex items-center gap-3"
+              >
+                <span className="text-[15px]">🛡️</span>
+                Quản trị
+              </button>
+            )}
+            <div className="h-[1px] bg-outline my-1" />
             <button
               onClick={() => { setIsOpen(false); onLogout(); }}
               className="w-full text-left px-4 py-2.5 text-[13px] text-onsurface-variant hover:bg-surface-container transition-colors duration-200 flex items-center gap-3"

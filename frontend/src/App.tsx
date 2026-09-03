@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ReactNode } from "react";
+import { Suspense, lazy, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -8,6 +8,10 @@ import "./App.css";
 // login screen loads instantly without pulling in the chat/document code.
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const SupplyChainPage = lazy(() => import("./pages/SupplyChainPage"));
+
+type AppView = "chat" | "admin" | "supply-chain";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +41,7 @@ function SuspensePage({ children }: { children: ReactNode }) {
 
 function AppContent() {
   const { isAuthenticated } = useAuth();
+  const [view, setView] = useState<AppView>("chat");
 
   if (!isAuthenticated) {
     return (
@@ -46,10 +51,15 @@ function AppContent() {
     );
   }
 
+  // Persist view choice on the window so UserMenu/Header can switch views
+  (window as unknown as { __appView?: [AppView, (v: AppView) => void] }).__appView = [view, setView];
+
   return (
     <ErrorBoundary>
       <SuspensePage>
-        <ChatPage />
+        {view === "admin" && <AdminPage />}
+        {view === "supply-chain" && <SupplyChainPage />}
+        {view === "chat" && <ChatPage onNavigate={setView} />}
       </SuspensePage>
     </ErrorBoundary>
   );
