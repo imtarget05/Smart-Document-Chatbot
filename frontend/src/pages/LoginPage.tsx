@@ -178,6 +178,16 @@ export default function LoginPage() {
   }, []);
 
   const handleGoogleLogin = async () => {
+    // Re-fetch client ID on demand (module-load fetch can fail during backend cold start)
+    if (!GOOGLE_CLIENT_ID) {
+      try {
+        const r = await fetch(`${API_BASE_URL}/auth/google-client-id`);
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.clientId) GOOGLE_CLIENT_ID = d.clientId;
+        }
+      } catch { /* ignore, modal will show unconfigured state */ }
+    }
     setGoogleModalOpen(true);
   };
 
