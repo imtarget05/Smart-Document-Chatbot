@@ -19,10 +19,10 @@ import VersionHistory from "../components/VersionHistory";
 import { useRenameDocument, useDeleteDocument } from "../hooks/useDocumentMutations";
 
 interface ChatPageProps {
-  onNavigate?: (view: "chat" | "admin" | "supply-chain") => void;
+  // Navigation between views is wired via UserMenu -> window.__appView bridge (set in App).
 }
 
-export default function ChatPage({ onNavigate }: ChatPageProps) {
+export default function ChatPage(_props: ChatPageProps) {
   const { token, username, logout } = useAuth();
   const queryClient = useQueryClient();
 

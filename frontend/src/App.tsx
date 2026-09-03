@@ -59,7 +59,7 @@ function AppContent() {
       <SuspensePage>
         {view === "admin" && <AdminPage />}
         {view === "supply-chain" && <SupplyChainPage />}
-        {view === "chat" && <ChatPage onNavigate={setView} />}
+        {view === "chat" && <ChatPage />}
       </SuspensePage>
     </ErrorBoundary>
   );

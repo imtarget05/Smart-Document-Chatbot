@@ -8,7 +8,11 @@ export interface ForecastRequest {
 
 export interface ForecastResponse {
   forecast?: number[];
+  method?: string;
+  history_points?: number;
+  trend_per_period?: number;
   error?: string;
+  detail?: string;
 }
 
 export interface RouteRequest {
@@ -18,8 +22,9 @@ export interface RouteRequest {
 }
 
 export interface RouteResponse {
-  routes?: unknown[];
+  routes?: { stops: number[]; distance: number }[];
   total_distance?: number;
+  method?: string;
   error?: string;
 }
 
@@ -32,7 +37,14 @@ export interface SupplierRiskRequest {
 export interface SupplierRiskResponse {
   risk_score?: number;
   risk_grade?: string;
+  method?: string;
+  components?: {
+    lead_time_variability: number;
+    defect_rate: number;
+    on_time: number;
+  };
   error?: string;
+  detail?: string;
 }
 
 export interface AnomalyRequest {
@@ -41,9 +53,12 @@ export interface AnomalyRequest {
 }
 
 export interface AnomalyResponse {
-  anomalies?: number[];
-  indices?: number[];
+  anomalies?: { index: number; value: number; z?: number; score?: number }[];
+  count?: number;
+  threshold?: number;
+  method?: string;
   error?: string;
+  detail?: string;
 }
 
 export interface InventoryRequest {
@@ -59,7 +74,12 @@ export interface InventoryResponse {
   eoq?: number;
   safety_stock?: number;
   reorder_point?: number;
+  daily_demand?: number;
+  service_level?: number;
+  z_score?: number;
+  method?: string;
   error?: string;
+  detail?: string;
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
