@@ -16,13 +16,11 @@ declare global {
   }
 }
 
-// Fetch the Google OAuth client ID from the backend (non-secret, public).
 let GOOGLE_CLIENT_ID = "";
 void fetch(`${API_BASE_URL}/auth/google-client-id`)
   .then((r) => (r.ok ? r.json() : null))
   .then((d) => { if (d?.clientId) GOOGLE_CLIENT_ID = d.clientId; })
   .catch(() => {});
-
 function DocIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" className={className}>
@@ -148,15 +146,8 @@ export default function LoginPage() {
   const googleBtnRef = useRef<HTMLDivElement | null>(null);
 
   const handleGoogleCredential = async (credential: string) => {
-    setAuthLoading(true); setAuthError("");
-    const post = (xsrf: Record<string, string>) =>
-      fetch(`${API_BASE_URL}/auth/google`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...xsrf },
-        body: JSON.stringify({ credential }),
-      });
-  const handleGoogleCredential = async (credential: string) => {
-    setAuthLoading(true); setAuthError("");
+    setAuthLoading(true);
+    setAuthError("");
     const post = (xsrf: Record<string, string>) =>
       fetch(`${API_BASE_URL}/auth/google`, {
         method: "POST",
@@ -164,29 +155,26 @@ export default function LoginPage() {
         body: JSON.stringify({ credential }),
       });
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    let res: Response | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await sleep(4000);
+      }
+      try {
+        res = await post(await ensureCsrfHeaders(attempt > 0));
+        break;
+      } catch (e) {
+        lastErr = e;
+        continue;
+      }
+    }
+    if (!res) {
+      setAuthLoading(false);
+      setAuthError("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
+      return;
+    }
     try {
-      let res: Response | null = null;
-      let lastErr: unknown = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) {
-          // Backend is likely cold-starting — wait before retrying
-          await sleep(4000);
-        }
-        try {
-          res = await post(await ensureCsrfHeaders(attempt > 0));
-          break;
-        } catch (e) {
-          lastErr = e;
-          // TypeError: network/CORS failure — keep retrying
-          continue;
-        }
-      }
-      if (!res) {
-        if (lastErr instanceof TypeError) {
-          throw new TypeError("network");
-        }
-        throw lastErr instanceof Error ? lastErr : new Error("Đăng nhập Google thất bại");
-      }
       const text = await res.text();
       let data: Record<string, string> = {};
       try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
@@ -199,20 +187,9 @@ export default function LoginPage() {
       } else {
         setAuthError(err instanceof Error ? err.message : "Đăng nhập Google thất bại");
       }
-    } finally { setAuthLoading(false); }
-  };
-      let data: Record<string, string> = {};
-      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
-      if (!res.ok) throw new Error(data.error || data.message || text || "Đăng nhập Google thất bại");
-      setGoogleModalOpen(false);
-      login(data.token, data.username, data.role);
-    } catch (err: unknown) {
-      if (err instanceof TypeError) {
-        setAuthError("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
-      } else {
-        setAuthError(err instanceof Error ? err.message : "Đăng nhập Google thất bại");
-      }
-    } finally { setAuthLoading(false); }
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const renderGoogleButton = useCallback(() => {
@@ -223,11 +200,9 @@ export default function LoginPage() {
       callback: (resp) => { void handleGoogleCredential(resp.credential); },
     });
     window.google.accounts.id.renderButton(el, { theme: "outline", size: "large", width: 320, text: "continue_with", locale: "vi" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleGoogleLogin = async () => {
-    // Re-fetch client ID on demand (module-load fetch can fail during backend cold start)
     if (!GOOGLE_CLIENT_ID) {
       try {
         const r = await fetch(`${API_BASE_URL}/auth/google-client-id`);
@@ -235,7 +210,7 @@ export default function LoginPage() {
           const d = await r.json();
           if (d?.clientId) GOOGLE_CLIENT_ID = d.clientId;
         }
-      } catch { /* ignore, modal will show unconfigured state */ }
+      } catch { /* modal shows unconfigured state */ }
     }
     setGoogleModalOpen(true);
   };
