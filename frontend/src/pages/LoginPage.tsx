@@ -155,22 +155,52 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json", ...xsrf },
         body: JSON.stringify({ credential }),
       });
+  const handleGoogleCredential = async (credential: string) => {
+    setAuthLoading(true); setAuthError("");
+    const post = (xsrf: Record<string, string>) =>
+      fetch(`${API_BASE_URL}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...xsrf },
+        body: JSON.stringify({ credential }),
+      });
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     try {
       let res: Response | null = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          // Backend is likely cold-starting — wait before retrying
+          await sleep(4000);
+        }
         try {
           res = await post(await ensureCsrfHeaders(attempt > 0));
           break;
         } catch (e) {
-          // TypeError: network/CORS failure — often caused by a missing CSRF
-          // token (backend 302-redirects, which fails CORS). Refresh the token
-          // and retry once before giving up.
-          if (attempt === 0) continue;
-          throw e;
+          lastErr = e;
+          // TypeError: network/CORS failure — keep retrying
+          continue;
         }
       }
-      if (!res) throw new TypeError("no response");
+      if (!res) {
+        if (lastErr instanceof TypeError) {
+          throw new TypeError("network");
+        }
+        throw lastErr instanceof Error ? lastErr : new Error("Đăng nhập Google thất bại");
+      }
       const text = await res.text();
+      let data: Record<string, string> = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
+      if (!res.ok) throw new Error(data.error || data.message || text || "Đăng nhập Google thất bại");
+      setGoogleModalOpen(false);
+      login(data.token, data.username, data.role);
+    } catch (err: unknown) {
+      if (err instanceof TypeError) {
+        setAuthError("Không thể kết nối máy chủ. Máy chủ có thể đang khởi động — vui lòng thử lại sau vài giây.");
+      } else {
+        setAuthError(err instanceof Error ? err.message : "Đăng nhập Google thất bại");
+      }
+    } finally { setAuthLoading(false); }
+  };
       let data: Record<string, string> = {};
       try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
       if (!res.ok) throw new Error(data.error || data.message || text || "Đăng nhập Google thất bại");
