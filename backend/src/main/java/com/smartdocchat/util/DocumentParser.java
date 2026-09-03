@@ -96,6 +96,9 @@ public class DocumentParser {
         try (PDDocument document = Loader.loadPDF(file)) {
             var stripper = new org.apache.pdfbox.text.PDFTextStripper();
             text.append(stripper.getText(document));
+        } catch (IOException e) {
+            log.warn("PDF loading failed for '{}', returning empty text for OCR fallback: {}", file.getName(), e.getMessage());
+            return "";
         }
         return text.toString();
     }
