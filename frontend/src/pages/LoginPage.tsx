@@ -1,7 +1,27 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../context/apiConfig";
 import { ensureCsrfHeaders } from "../csrf";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { client_id: string; callback: (resp: { credential: string }) => void }) => void;
+          renderButton: (el: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
+
+// Fetch the Google OAuth client ID from the backend (non-secret, public).
+let GOOGLE_CLIENT_ID = "";
+void fetch(`${API_BASE_URL}/auth/google-client-id`)
+  .then((r) => (r.ok ? r.json() : null))
+  .then((d) => { if (d?.clientId) GOOGLE_CLIENT_ID = d.clientId; })
+  .catch(() => {});
 
 function DocIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
@@ -124,9 +144,59 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = `${API_BASE_URL}/oauth2/authorization/google`;
+  const [googleModalOpen, setGoogleModalOpen] = useState(false);
+  const googleBtnRef = useRef<HTMLDivElement | null>(null);
+
+  const handleGoogleCredential = async (credential: string) => {
+    setAuthLoading(true); setAuthError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await ensureCsrfHeaders()) },
+        body: JSON.stringify({ credential }),
+      });
+      const text = await res.text();
+      let data: Record<string, string> = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
+      if (!res.ok) throw new Error(data.error || data.message || text || "Đăng nhập Google thất bại");
+      setGoogleModalOpen(false);
+      login(data.token, data.username, data.role);
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : "Đăng nhập Google thất bại");
+    } finally { setAuthLoading(false); }
   };
+
+  const renderGoogleButton = useCallback(() => {
+    const el = googleBtnRef.current;
+    if (!el || !window.google?.accounts?.id) return;
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: (resp) => { void handleGoogleCredential(resp.credential); },
+    });
+    window.google.accounts.id.renderButton(el, { theme: "outline", size: "large", width: 320, text: "continue_with", locale: "vi" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    setGoogleModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!googleModalOpen) return;
+    let cancelled = false;
+    const init = () => { if (!cancelled) renderGoogleButton(); };
+    if (GOOGLE_CLIENT_ID) {
+      if (window.google?.accounts?.id) init();
+      else {
+        const s = document.createElement("script");
+        s.src = "https://accounts.google.com/gsi/client";
+        s.async = true; s.defer = true;
+        s.onload = init;
+        document.head.appendChild(s);
+      }
+    }
+    return () => { cancelled = true; };
+  }, [googleModalOpen, renderGoogleButton]);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,6 +376,20 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {googleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setGoogleModalOpen(false)}>
+          <div className="bg-white rounded-material-lg shadow-material-3 p-8 max-w-sm w-[90%] text-center" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[16px] font-medium text-onsurface mb-1">Đăng nhập bằng Google</h3>
+            <p className="text-[13px] text-onsurface-muted mb-5">Chọn tài khoản Google trong cửa sổ bật lên.</p>
+            <div className="flex justify-center" ref={googleBtnRef} />
+            {!GOOGLE_CLIENT_ID && (
+              <p className="text-[13px] text-google-red mt-4">Chưa cấu hình Google Login trên máy chủ.</p>
+            )}
+            <button onClick={() => setGoogleModalOpen(false)} className="mt-5 text-google-blue text-[14px] font-medium px-4 py-2 rounded-material-full hover:bg-surface-container">Đóng</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -36,6 +36,99 @@ public class AuthController {
     private static final String JWT_COOKIE_NAME = "jwt_token";
     private static final int JWT_COOKIE_MAX_AGE_SECONDS = 86400;
 
+    @org.springframework.beans.factory.annotation.Value("${oauth2.client-id:}")
+    private String googleClientId;
+
+    /**
+     * Public endpoint exposing the Google OAuth client ID so the SPA can
+     * initialize Google Identity Services (popup flow).
+     */
+    @GetMapping("/google-client-id")
+    public ResponseEntity<?> googleClientId() {
+        if (googleClientId == null || googleClientId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(java.util.Map.of("clientId", ""));
+        }
+        return ResponseEntity.ok(java.util.Map.of("clientId", googleClientId));
+    }
+
+    /**
+     * Google Identity Services sign-in: verifies the ID token issued by the
+     * GIS popup client-side, then issues the standard app JWT. Unlike the
+     * redirect flow this does not depend on Google session cookies, which
+     * Safari's ITP breaks (chooser loop).
+     */
+    @PostMapping("/google")
+    public ResponseEntity<?> googleLogin(@RequestBody java.util.Map<String, String> body,
+                                         HttpServletRequest request,
+                                         HttpServletResponse response) {
+        String idToken = body == null ? null : body.get("credential");
+        if (idToken == null || idToken.isBlank()) {
+            return ResponseEntity.badRequest().body("Missing Google credential");
+        }
+
+        java.util.Map<String, Object> info;
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(
+                            "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken))
+                    .GET().build();
+            java.net.http.HttpResponse<String> resp =
+                    client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid Google token");
+            }
+            info = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(resp.body(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Google tokeninfo verification failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Google verification failed");
+        }
+
+        // Verify audience, expiry and email verification
+        String aud = String.valueOf(info.get("aud"));
+        if (googleClientId.isBlank() || !googleClientId.equals(aud)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Google token audience mismatch");
+        }
+        if (!Boolean.parseBoolean(String.valueOf(info.get("email_verified")))) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Google email not verified");
+        }
+        long exp = Long.parseLong(String.valueOf(info.getOrDefault("exp", "0")));
+        if (System.currentTimeMillis() / 1000 >= exp) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Google token expired");
+        }
+
+        String email = String.valueOf(info.get("email"));
+        User user = userRepository.findByUsername(email).orElseGet(() -> {
+            User created = User.builder()
+                    .username(email)
+                    .password(passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
+                    .email(email)
+                    .role(Role.ROLE_USER)
+                    .enabled(true)
+                    .build();
+            return userRepository.save(created);
+        });
+
+        String token = tokenProvider.generateToken(user.getUsername(), user.getRole().name());
+        auditLogService.record(user.getUsername(), "auth.login.google", "user",
+                user.getUsername(), getClientIp(request), "success");
+
+        Cookie jwtCookie = new Cookie(JWT_COOKIE_NAME, token);
+        jwtCookie.setHttpOnly(true);
+        jwtCookie.setPath("/");
+        jwtCookie.setMaxAge(JWT_COOKIE_MAX_AGE_SECONDS);
+        jwtCookie.setAttribute("SameSite", "Lax");
+        jwtCookie.setSecure(request.isSecure());
+        response.addCookie(jwtCookie);
+
+        return ResponseEntity.ok(AuthResponse.builder()
+                .token(token)
+                .username(user.getUsername())
+                .role(user.getRole().name())
+                .build());
+    }
+
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
         log.info("Registering user: {}", registerRequest.getUsername());
