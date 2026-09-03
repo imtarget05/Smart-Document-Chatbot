@@ -29,4 +29,7 @@ public class ChatRequest {
 
     private boolean deepThinking;
     private boolean webSearch;
+
+    /** Chat mode: "rag" (default) or "agent" (multi-agent orchestrator). */
+    private String mode;
 }

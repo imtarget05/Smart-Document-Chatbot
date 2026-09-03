@@ -37,10 +37,11 @@ export interface ChatMessage {
   aiResponse: string;
   sourceChunks?: string | null;
   sources?: SourceCitation[] | null;
-  ragStrategy?: RagStrategy | null;
+  ragStrategy?: RagStrategy | "agentic" | null;
   confidence?: "high" | "medium" | "low" | null;
   documentId?: number | null;
   isStreaming?: boolean;
+  agentType?: string | null;
 }
 
 export interface LegalChunkDTO {

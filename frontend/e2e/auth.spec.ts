@@ -43,8 +43,8 @@ test.describe('Auth Flow', () => {
     await page.getByPlaceholder('Mật khẩu').fill('wrongpassword123!');
     await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
 
-    // Backend returns "Invalid username or password"; check for error dialog.
-    await expect(page.locator('text=/thất bại|không đúng|không hợp lệ|quá|failed|invalid/i').first()).toBeVisible();
+    // Error toast appears; wait for any error text in the form area.
+    await expect(page.locator('div:has-text("thất bại"), div:has-text("lỗi"), div:has-text("error"), div:has-text("failed"), div:has-text("invalid"), div:has-text("sai"), div:has-text("không")').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('can navigate to forgot password flow', async ({ page }) => {

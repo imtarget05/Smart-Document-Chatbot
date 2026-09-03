@@ -84,6 +84,11 @@ llm:
   max-attempts: ${LLM_MAX_ATTEMPTS:3}
   retry-backoff-ms: ${LLM_RETRY_BACKOFF_MS:250}
 
+# Supply Chain module (FastAPI proxy)
+supply:
+  chain:
+    api-url: ${SUPPLY_CHAIN_API_URL:http://localhost:8000}
+
 # Document ingestion (chunking) — size in tokens (~4 chars/token), overlap
 # carries the tail of one chunk into the next so boundary sentences keep
 # context during retrieval.

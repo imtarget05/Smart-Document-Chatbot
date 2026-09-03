@@ -9,17 +9,25 @@ Default target is the Spring Boot proxy:
 Direct agent service mode:
   python eval/agent_eval.py --base-url http://localhost:9000 --internal-token <token> \
       --direct-agent --document-ids conn_sharepoint_xxx
+
+With LLM Judge:
+  python eval/agent_eval.py --base-url http://localhost:8080/api --token <jwt> \
+      --llm-judge --llm-judge-mock
 """
 
 import argparse
 import json
 import os
 import statistics
+import sys
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
+
+# Add eval to path for LLMJudge import
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 
 def load_questions(path: str) -> List[Dict[str, Any]]:
@@ -95,8 +103,13 @@ def invoke_agent(
         }
 
 
-def evaluate_result(result: Dict[str, Any], question: Dict[str, Any]) -> Dict[str, Any]:
-    answer = result.get("answer", "").lower()
+def evaluate_result(
+    result: Dict[str, Any],
+    question: Dict[str, Any],
+    llm_judge: Optional[Any] = None,
+) -> Dict[str, Any]:
+    answer = result.get("answer", "")
+    answer_lower = answer.lower()
     sources = result.get("sources") or []
     source_text = " ".join(
         f"{src.get('document_name', '')} {src.get('chunk_text', '')}".lower()
@@ -109,7 +122,7 @@ def evaluate_result(result: Dict[str, Any], question: Dict[str, Any]) -> Dict[st
     )
 
     answer_keywords = [k.lower() for k in question.get("expected_answer_contains", [])]
-    answer_hits = [k for k in answer_keywords if k in answer]
+    answer_hits = [k for k in answer_keywords if k in answer_lower]
     answer_complete = (
         len(answer_hits) == len(answer_keywords) if answer_keywords else None
     )
@@ -124,11 +137,11 @@ def evaluate_result(result: Dict[str, Any], question: Dict[str, Any]) -> Dict[st
         and source_keywords
         and not retrieval_accurate
         and result.get("confidence_score", 0.0) >= 0.45
-        and "not found" not in answer
-        and "no relevant" not in answer
+        and "not found" not in answer_lower
+        and "no relevant" not in answer_lower
     )
 
-    return {
+    eval_dict = {
         "question_id": question["id"],
         "status": result["status"],
         "agent_type": result.get("agent_type"),
@@ -145,6 +158,33 @@ def evaluate_result(result: Dict[str, Any], question: Dict[str, Any]) -> Dict[st
         "confidence_score": result.get("confidence_score", 0.0),
         "error": result.get("error"),
     }
+
+    # LLM Judge evaluation
+    if llm_judge and result["status"] == "success" and answer:
+        try:
+            context = source_text if source_text else ""
+            expected_concepts = question.get("expected_answer_contains", [])
+            judge_result = llm_judge.evaluate_all(
+                question=question["question"],
+                answer=answer,
+                context=context,
+                expected_concepts=expected_concepts if expected_concepts else None,
+                expected_tone="professional",
+            )
+            if judge_result.average_score is not None:
+                eval_dict["llm_judge_score"] = judge_result.average_score
+            if judge_result.faithfulness:
+                eval_dict["llm_faithfulness"] = judge_result.faithfulness.score
+            if judge_result.relevance:
+                eval_dict["llm_relevance"] = judge_result.relevance.score
+            if judge_result.completeness:
+                eval_dict["llm_completeness"] = judge_result.completeness.score
+            if judge_result.tone:
+                eval_dict["llm_tone"] = judge_result.tone.score
+        except Exception as e:
+            eval_dict["llm_judge_error"] = str(e)
+
+    return eval_dict
 
 
 def rate(items: List[Any], key: str) -> float:
@@ -202,6 +242,16 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     session_id = f"agent-eval-{int(time.time())}"
     details = []
 
+    # Initialize LLM Judge if requested
+    llm_judge = None
+    if args.llm_judge:
+        try:
+            from llm_judge import LLMJudge
+            llm_judge = LLMJudge(mock=args.llm_judge_mock, base_url=args.llm_judge_base_url, model=args.llm_judge_model)
+            print(f"LLM Judge enabled (mock={args.llm_judge_mock})")
+        except ImportError as e:
+            print(f"Warning: Could not import LLMJudge: {e}")
+
     print(f"Running agent evaluation: {len(questions)} cases")
     print(
         f"Target: {args.base_url} ({'direct-agent' if args.direct_agent else 'spring-proxy'})"
@@ -211,7 +261,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     for idx, question in enumerate(questions, 1):
         print(f"[{idx}/{len(questions)}] {question['id']} ... ", end="", flush=True)
         result = invoke_agent(args, question, session_id)
-        evaluation = evaluate_result(result, question)
+        evaluation = evaluate_result(result, question, llm_judge)
         details.append(evaluation)
         status = "ok" if result["status"] == "success" else "error"
         print(f"{status} {result['latency_ms']}ms intent={result.get('agent_type')}")
@@ -267,6 +317,29 @@ def main() -> None:
     parser.add_argument("--output", default="eval/results/agent_eval_results.json")
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--use-web-search", action="store_true")
+
+    # LLM Judge options
+    parser.add_argument(
+        "--llm-judge",
+        action="store_true",
+        help="Enable LLM Judge evaluation (Faithfulness, Relevance, Completeness, Tone)",
+    )
+    parser.add_argument(
+        "--llm-judge-mock",
+        action="store_true",
+        help="Use mock LLM for judge (deterministic, no API calls)",
+    )
+    parser.add_argument(
+        "--llm-judge-base-url",
+        default="",
+        help="Base URL for LLM Judge (default: LLM_JUDGE_BASE_URL env var)",
+    )
+    parser.add_argument(
+        "--llm-judge-model",
+        default="",
+        help="Model name for LLM Judge (default: LLM_JUDGE_MODEL env var)",
+    )
+
     args = parser.parse_args()
 
     if args.direct_agent and not args.internal_token:
@@ -292,6 +365,25 @@ def main() -> None:
     print(f"Average latency:         {summary['average_latency_ms']}ms")
     print(f"P95 latency:             {summary['p95_latency_ms']}ms")
     print(f"Errors:                  {summary['error_count']}")
+
+    # Print LLM Judge scores if available
+    successful = [item for item in summary.get("details", []) if item["status"] == "success"]
+    judge_scores = [item.get("llm_judge_score") for item in successful if item.get("llm_judge_score") is not None]
+    if judge_scores:
+        print(f"LLM Judge avg score:     {statistics.mean(judge_scores):.4f}")
+        faithfulness_scores = [item.get("llm_faithfulness") for item in successful if item.get("llm_faithfulness") is not None]
+        if faithfulness_scores:
+            print(f"  Faithfulness:          {statistics.mean(faithfulness_scores):.4f}")
+        relevance_scores = [item.get("llm_relevance") for item in successful if item.get("llm_relevance") is not None]
+        if relevance_scores:
+            print(f"  Relevance:             {statistics.mean(relevance_scores):.4f}")
+        completeness_scores = [item.get("llm_completeness") for item in successful if item.get("llm_completeness") is not None]
+        if completeness_scores:
+            print(f"  Completeness:          {statistics.mean(completeness_scores):.4f}")
+        tone_scores = [item.get("llm_tone") for item in successful if item.get("llm_tone") is not None]
+        if tone_scores:
+            print(f"  Tone:                  {statistics.mean(tone_scores):.4f}")
+
     print()
     print("Confusion Matrices:")
     print("-" * 60)

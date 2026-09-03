@@ -12,6 +12,7 @@ import DocumentViewer from "../components/DocumentViewer";
 import AppBar from "../components/AppBar";
 import Sidebar from "../components/Sidebar";
 import WelcomeScreen from "../components/WelcomeScreen";
+import AgentModeToggle from "../components/AgentModeToggle";
 
 export default function ChatPage() {
   const { token, username, logout } = useAuth();
@@ -31,6 +32,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [uploadError, setUploadError] = useState("");
+  const [agentMode, setAgentMode] = useState(false);
   // Legal search state (Decision 15)
   const [viewingSource, setViewingSource] = useState<SourceCitation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -92,6 +94,14 @@ export default function ChatPage() {
     setSelectedDoc(null);
   };
 
+  const handleSelectSession = (newSessionId: string) => {
+    setSessionId(newSessionId);
+    localStorage.setItem("sessionId", newSessionId);
+    setMessages([]);
+    setSelectedDoc(null);
+    setInput("");
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -149,6 +159,7 @@ export default function ChatPage() {
       sessionId,
       message: textToSend,
       documentId: selectedDoc?.id || null,
+      mode: agentMode ? "agent" : "rag",
     };
 
     const userMsg: ChatMessageType = {
@@ -228,6 +239,7 @@ export default function ChatPage() {
                       sources: Array.isArray(meta.sources) ? meta.sources : null,
                       ragStrategy: meta.ragStrategy ?? null,
                       confidence: meta.confidence ?? null,
+                      agentType: meta.agentType ?? null,
                     }
                   : msg,
               ),
@@ -245,7 +257,7 @@ export default function ChatPage() {
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === streamingPlaceholderId
-                  ? { ...finalSavedMsg, isStreaming: false }
+                  ? { ...msg, ...finalSavedMsg, isStreaming: false }
                   : msg,
               ),
             );
@@ -306,6 +318,8 @@ export default function ChatPage() {
           onUploadClick={() => fileInputRef.current?.click()}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          activeSessionId={sessionId}
+          onSelectSession={handleSelectSession}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -320,6 +334,18 @@ export default function ChatPage() {
                     <div key={msg.id || idx} className="space-y-3">
                       <MessageBubble content={msg.userMessage} role="user" />
                       <MessageBubble content={msg.aiResponse} role="assistant" isStreaming={msg.isStreaming} />
+                      {msg.agentType && !msg.isStreaming && (
+                        <div data-testid="agent-badge" className="flex items-center gap-2 ml-1">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-material-full bg-google-blue/10 text-google-blue text-[11px] font-medium">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                              <circle cx="12" cy="12" r="3" />
+                              <path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83" />
+                            </svg>
+                            {msg.agentType}
+                          </span>
+                          <span className="text-[11px] text-onsurface-muted">agent xử lý</span>
+                        </div>
+                      )}
                       {!msg.isStreaming && (
                         <EvidenceState ragStrategy={msg.ragStrategy} confidence={msg.confidence} />
                       )}
@@ -350,6 +376,9 @@ export default function ChatPage() {
           {/* Input — always visible */}
           <div className="border-t border-outline px-6 py-4 bg-surface">
             <div className="max-w-3xl mx-auto">
+              {/* Mode toggle: RAG vs Agent */}
+              <AgentModeToggle agentMode={agentMode} onToggle={setAgentMode} />
+
               <div className="flex gap-3 items-end">
                 <textarea
                   value={input}

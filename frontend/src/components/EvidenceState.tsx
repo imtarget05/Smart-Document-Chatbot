@@ -1,7 +1,7 @@
 import type { RagStrategy } from "../types";
 
 interface Props {
-  ragStrategy?: RagStrategy | null;
+  ragStrategy?: RagStrategy | "agentic" | null;
   confidence?: string | null;
 }
 

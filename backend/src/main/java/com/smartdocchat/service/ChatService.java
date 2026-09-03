@@ -79,8 +79,10 @@ public class ChatService {
         String userMessage = request.getMessage();
         ChatResponse response;
 
-        // Supply chain intent → agentic path (chain #4)
-        if (SupplyChainIntentDetector.isSupplyChainIntent(userMessage)) {
+        // Explicit agent mode (user-selected) or supply-chain auto-detection
+        boolean agentMode = "agent".equalsIgnoreCase(request.getMode())
+                || SupplyChainIntentDetector.isSupplyChainIntent(userMessage);
+        if (agentMode) {
             String traceId = langfuse.startTrace("agentic_request", ownerUsername,
                     Map.of("query", userMessage));
             try {
@@ -167,6 +169,39 @@ public class ChatService {
                     emitter.send(SseEmitter.event().name("complete").data(toResponse(ownerUsername, blocked, emptyCrag("blocked"))));
                     emitter.complete();
                     return;
+                }
+
+                // Explicit agent mode: bypass CRAG, call agent orchestrator
+                if ("agent".equalsIgnoreCase(request.getMode())) {
+                    ragMetrics.recordRequest("agentic", "high");
+                    String traceId = langfuse.startTrace("agentic_request", ownerUsername,
+                            Map.of("query", userMessage));
+                    try {
+                        AgentClient.AgentResponse agentResp = agentClient.invokeAgent(
+                                ownerUsername, request.getSessionId(), userMessage, traceId);
+                        langfuse.updateTrace(Map.of("agentAnswer", agentResp.answer()), null);
+
+                        Map<String, Object> agentMeta = new LinkedHashMap<>();
+                        agentMeta.put("ragStrategy", "agentic");
+                        agentMeta.put("agentType", agentResp.agentType() != null ? agentResp.agentType() : "rag");
+                        agentMeta.put("confidence", "high");
+                        agentMeta.put("confidenceScore", agentResp.confidence() != null ? agentResp.confidence() : 0.8);
+                        agentMeta.put("sources", agentResp.sources());
+                        agentMeta.put("sourceChunks", "");
+                        agentMeta.put("documentId", request.getDocumentId());
+                        emitter.send(SseEmitter.event().name("metadata").data(agentMeta));
+                        emitter.send(SseEmitter.event().name("chunk").data(agentResp.answer()));
+
+                        ChatMessage saved = saveResponse(ownerUsername, request, userMessage,
+                                agentResp.answer(), null);
+                        emitter.send(SseEmitter.event().name("complete").data(toResponse(ownerUsername, saved, emptyCrag("agentic"))));
+                        emitter.complete();
+                        return;
+                    } catch (Exception e) {
+                        log.warn("Agentic stream failed, falling back to RAG: {}", e.getMessage());
+                        langfuse.flush();
+                        // fall through to CRAG path below
+                    }
                 }
 
                 CragResult crag;

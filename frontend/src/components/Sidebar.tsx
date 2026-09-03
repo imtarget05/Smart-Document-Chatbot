@@ -1,4 +1,6 @@
 import type { Document } from "../types";
+import SearchInput from "./SearchInput";
+import SessionList from "./SessionList";
 
 interface SidebarProps {
   documents: Document[];
@@ -8,6 +10,8 @@ interface SidebarProps {
   onUploadClick: () => void;
   isOpen: boolean;
   onClose: () => void;
+  activeSessionId: string;
+  onSelectSession: (sessionId: string) => void;
 }
 
 export default function Sidebar({
@@ -18,12 +22,15 @@ export default function Sidebar({
   onUploadClick,
   isOpen,
   onClose,
+  activeSessionId,
+  onSelectSession,
 }: SidebarProps) {
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
         <div
+          data-testid="mobile-overlay"
           className="fixed inset-0 bg-black/30 z-40 lg:hidden"
           onClick={onClose}
         />
@@ -51,6 +58,11 @@ export default function Sidebar({
             </svg>
             <span className="text-[14px] text-onsurface font-medium">Cuộc trò chuyện mới</span>
           </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-3 pt-3">
+          <SearchInput onSelectDoc={(doc) => { onSelectDoc(doc); onClose(); }} />
         </div>
 
         {/* Documents section */}
@@ -108,6 +120,9 @@ export default function Sidebar({
             </div>
           )}
         </div>
+
+        {/* Sessions */}
+        <SessionList activeSessionId={activeSessionId} onSelectSession={(id) => { onSelectSession(id); onClose(); }} />
 
         {/* Footer */}
         <div className="p-3 border-t border-outline">

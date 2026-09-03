@@ -1,0 +1,98 @@
+[
+  {
+    "id": "golden-001",
+    "question": "Hệ thống xử lý thế nào khi retrieval confidence thấp?",
+    "golden_answer": "Khi retrieval confidence thấp, hệ thống sẽ thực hiện query reformulation để viết lại câu hỏi, sau đó re-retrieval để tìm kiếm lại tài liệu. Nếu vẫn không tìm thấy đủ evidence, hệ thống sẽ fallback sang web search để bổ sung thông tin từ internet. Cuối cùng, nếu mọi phương pháp đều thất bại, hệ thống trả về câu trả lời 'no_evidence' với confidence thấp.",
+    "expected_concepts": ["reformulation", "re-retrieval", "web search", "fallback", "no_evidence"],
+    "expected_source_keywords": ["reformulation", "retrieval", "web search"],
+    "category": "core_rag"
+  },
+  {
+    "id": "golden-002",
+    "question": "Quy trình ETL tài liệu PDF trong hệ thống như thế nào?",
+    "golden_answer": "Quy trình ETL PDF bao gồm: 1) Upload file PDF qua API, 2) Spring Boot lưu file vào R2/S3, 3) Python ingestion service trích xuất text từ PDF (sử dụng pdfplumber/pymupdf), 4) Chia nhỏ text thành chunks theo strategy (semantic, fixed-size, hoặc legal structure), 5) Tạo embeddings bằng model embedding (bge-m3 hoặc OpenAI), 6) Lưu chunks và embeddings vào Qdrant vector database, 7) Cập nhật metadata vào PostgreSQL. Hệ thống hỗ trợ idempotent upload - file trùng lặp (cùng hash) sẽ không được ingest lại.",
+    "expected_concepts": ["upload", "R2", "text extraction", "chunking", "embeddings", "Qdrant", "PostgreSQL", "idempotent"],
+    "expected_source_keywords": ["pdfplumber", "chunking", "embedding", "Qdrant", "idempotent"],
+    "category": "etl"
+  },
+  {
+    "id": "golden-003",
+    "question": "Hệ thống đảm bảo owner isolation như thế nào?",
+    "golden_answer": "Owner isolation được thực hiện tại nhiều lớp: 1) Database level - mọi query đều có WHERE owner_id = current_user, 2) API level - Spring Security filter kiểm tra JWT và inject user_id vào request, 3) Vector DB level - Qdrant collections được phân tách theo owner hoặc filter theo owner_id trong payload, 4) Document upload - file được gán owner_id ngay khi tạo, 5) Chat history - sessionId được liên kết với user, không thể truy cập session của user khác. Row-level security trong PostgreSQL bổ sung lớp bảo vệ thứ hai.",
+    "expected_concepts": ["database level", "API level", "vector DB", "document upload", "chat history", "row-level security"],
+    "expected_source_keywords": ["owner_id", "Spring Security", "Qdrant", "PostgreSQL", "JWT"],
+    "category": "security"
+  },
+  {
+    "id": "golden-004",
+    "question": "Các chiến lược RAG (ragStrategy) nào được hỗ trợ và khi nào dùng?",
+    "golden_answer": "Hệ thống hỗ trợ 4 chiến lược RAG: 1) 'direct' - có evidence trực tiếp từ document, confidence cao, trả lời ngay; 2) 'corrective' - evidence yếu hoặc mâu thuẫn, thực hiện re-retrieval với query reformulation; 3) 'web_search' - không có evidence trong document nội bộ, tìm kiếm web bổ sung; 4) 'no_evidence' - không tìm thấy evidence nào, trả lời dựa trên knowledge chung của LLM. Router quyết định strategy dựa trên retrieval confidence score và evidence quality.",
+    "expected_concepts": ["direct", "corrective", "web_search", "no_evidence", "confidence score", "evidence quality", "router"],
+    "expected_source_keywords": ["direct", "corrective", "web_search", "no_evidence", "router"],
+    "category": "rag_strategy"
+  },
+  {
+    "id": "golden-005",
+    "question": "Hệ thống xử lý streaming response như thế nào?",
+    "golden_answer": "Streaming sử dụng Server-Sent Events (SSE) qua endpoint /chat/ask-stream. Flow: 1) Client POST request, 2) Server trả về SSE stream với 3 loại event: 'metadata' (ragStrategy, confidence, sourceChunks), 'chunk' (token-by-token AI response), 'complete' (final saved message JSON), 'error' (error message). Client dùng ReadableStream reader để parse events real-time, cập nhật UI incrementally. Error handling: nếu stream error, hiển thị inline error message trong chat bubble.",
+    "expected_concepts": ["SSE", "metadata", "chunk", "complete", "error", "ReadableStream", "real-time"],
+    "expected_source_keywords": ["SSE", "event:", "chunk", "metadata", "complete"],
+    "category": "streaming"
+  },
+  {
+    "id": "golden-006",
+    "question": "Agent routing logic trong hệ thống multi-agent hoạt động như thế nào?",
+    "golden_answer": "Hệ thống multi-agent sử dụng intent classifier để route câu hỏi đến agent chuyên biệt: 1) 'supply_chain' agent cho câu hỏi về logistics, procurement, inventory; 2) 'legal' agent cho câu hỏi về luật, hợp đồng, compliance; 3) 'general' agent cho câu hỏi chung. Classifier phân tích từ khóa, ngữ cảnh và document_ids để quyết định. Nếu intent_override được cung cấp, bỏ qua classifier. Mỗi agent có prompt template và tool set riêng. Kết quả trả về bao gồm agent_type để client biết agent nào đã xử lý.",
+    "expected_concepts": ["intent classifier", "supply_chain", "legal", "general", "intent_override", "prompt template", "tool set"],
+    "expected_source_keywords": ["classifier", "supply_chain", "legal", "general", "agent_type"],
+    "category": "multi_agent"
+  },
+  {
+    "id": "golden-007",
+    "question": "Cơ chế rate limiting và circuit breaker được triển khai như thế nào?",
+    "golden_answer": "Rate limiting: Spring Boot dùng Bucket4j cho API rate limit (configurable per endpoint/user), token bucket algorithm. Circuit breaker: Resilience4j bao bọc external LLM calls (Ollama, Cloudflare AI), config: failure rate threshold 50%, wait duration 30s, sliding window 10 calls. Bulkhead pattern giới hạn concurrent LLM calls. Timeout: 120s cho LLM calls, 30s cho vector DB. Fallback: khi circuit open, trả về cached response hoặc degraded mode (no_evidence strategy).",
+    "expected_concepts": ["Bucket4j", "token bucket", "Resilience4j", "circuit breaker", "bulkhead", "timeout", "fallback"],
+    "expected_source_keywords": ["Bucket4j", "Resilience4j", "circuit breaker", "bulkhead", "fallback"],
+    "category": "resilience"
+  },
+  {
+    "id": "golden-008",
+    "question": "Hệ thống theo dõi và đo lường hallucination như thế nào?",
+    "golden_answer": "Hallucination detection có 2 lớp: 1) Heuristic (deterministic) - flag khi: answer có nội dung, retrieval không có source keywords, confidence >= 0.45, và answer không chứa 'not found'/'no relevant'. 2) LLM Judge (semantic) - Faithfulness metric so sánh answer với source chunks, score 0-1. Metrics: hallucination_rate (heuristic), faithfulness_score (LLM Judge). Confusion matrix cho hallucination (TP/FP/FN/TN) giúp detect bias. Alert khi hallucination rate tăng > 5% so với baseline.",
+    "expected_concepts": ["heuristic", "LLM Judge", "faithfulness", "confidence", "source keywords", "confusion matrix", "alert"],
+    "expected_source_keywords": ["heuristic", "faithfulness", "hallucination", "confusion matrix"],
+    "category": "evaluation"
+  },
+  {
+    "id": "golden-009",
+    "question": "Quy trình fine-tuning model embedding (bge-m3) cho domain legal tiếng Việt?",
+    "golden_answer": "Fine-tuning bge-m3 cho legal VN: 1) Thu thập data: pháp luật, án lệ, hợp đồng mẫu (~50k samples), 2) Format: (anchor, positive, negative) triplet cho contrastive learning, 3) Sử dụng LoRA (rank=16, alpha=32) trên MLX/Apple Silicon hoặc PEFT/HuggingFace, 4) Loss: InfoNCE với temperature=0.02, 5) Training: 3 epochs, batch=32, lr=2e-5, warmup=100 steps, 6) Evaluation: retrieval accuracy trên benchmark legal QA, so sánh với base model, 7) Deploy: export ONNX, serve qua Ollama hoặc embedding service. Mục tiêu: tăng retrieval accuracy từ ~75% lên >85% trên legal corpus.",
+    "expected_concepts": ["bge-m3", "legal Vietnamese", "triplet", "contrastive", "LoRA", "InfoNCE", "retrieval accuracy", "ONNX"],
+    "expected_source_keywords": ["bge-m3", "LoRA", "contrastive", "InfoNCE", "retrieval accuracy"],
+    "category": "finetune"
+  },
+  {
+    "id": "golden-010",
+    "question": "Hệ thống xử lý multi-document synthesis như thế nào?",
+    "golden_answer": "Multi-document synthesis: 1) Retrieval trả về top-k chunks từ nhiều document, 2) Cross-encoder reranker (bge-reranker) sắp xếp lại theo relevance, 3) Chunks được group theo document, 4) Prompt template yêu cầu LLM cite source cho mỗi claim, 5) Answer generation: LLM tổng hợp thông tin từ multiple sources, cite [doc1], [doc2] inline, 6) Post-processing: extract citations, map về sourceChunks, validate citation coverage. Nếu conflicting info giữa docs, LLM nêu rõ sự khác biệt và cite cả hai nguồn.",
+    "expected_concepts": ["cross-encoder", "reranker", "group by document", "citation", "conflicting info", "synthesis"],
+    "expected_source_keywords": ["reranker", "citation", "multi-document", "synthesis", "conflicting"],
+    "category": "multi_document"
+  },
+  {
+    "id": "golden-011",
+    "question": "Kiến trúc event-driven cho document ingestion pipeline?",
+    "golden_answer": "Event-driven ingestion: 1) Upload API emit 'document.uploaded' event (Kafka/RabbitMQ), 2) Ingestion worker consume event, 3) Parallel processing: text extraction, chunking, embedding generation, 4) Mỗi step emit progress events ('extraction.complete', 'chunking.complete', 'embedding.complete'), 5) Aggregator wait for all steps, then write to Qdrant + PostgreSQL atomically, 6) Emit 'document.ready' event cho search indexing. Dead letter queue cho failed steps, retry với exponential backoff. Idempotency key = file hash.",
+    "expected_concepts": ["event-driven", "Kafka", "RabbitMQ", "parallel processing", "progress events", "dead letter queue", "idempotency", "exponential backoff"],
+    "expected_source_keywords": ["event", "ingestion", "Qdrant", "dead letter", "idempotency", "backoff"],
+    "category": "architecture"
+  },
+  {
+    "id": "golden-012",
+    "question": "Cơ chế A/B testing cho RAG strategies?",
+    "golden_answer": "A/B testing framework: 1) Assignment: user session hash modulo 100 quyết định variant (control/treatment), 2) Variants: khác nhau về ragStrategy priority, chunk size, top-k, reranker on/off, 3) Metrics: answer_correctness, retrieval_accuracy, latency, user satisfaction (thumbs up/down), 3) Statistical significance: sequential testing (SPRT) hoặc fixed horizon t-test, minimum detectable effect 5%, power 80%, 4) Dashboard: real-time metric comparison, auto-stop nếu treatment harmful (p<0.01), 5) Rollout: gradual 10% -> 50% -> 100% nếu significant positive.",
+    "expected_concepts": ["assignment", "variant", "control", "treatment", "sequential testing", "SPRT", "statistical significance", "gradual rollout"],
+    "expected_source_keywords": ["A/B", "variant", "SPRT", "significance", "rollout", "dashboard"],
+    "category": "ab_testing"
+  }
+]
