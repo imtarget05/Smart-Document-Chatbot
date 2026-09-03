@@ -33,8 +33,8 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-# Install curl for health checks
-RUN apk add --no-cache curl
+# Install curl for health checks + tesseract-ocr for PDF OCR fallback
+RUN apk add --no-cache curl tesseract-ocr tesseract-ocr-data-eng tesseract-ocr-data-vie
 
 # Copy the built JAR from build stage (version-agnostic)
 COPY --from=build /app/target/*.jar app.jar

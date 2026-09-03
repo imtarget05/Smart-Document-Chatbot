@@ -130,6 +130,13 @@ export default function ChatPage(_props: ChatPageProps) {
       return;
     }
 
+    // Pre-validate file size before sending (backend limit is 50MB)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      setUploadError("File too large. Maximum size is 50MB.");
+      return;
+    }
+
     setUploadError("");
     const formData = new FormData();
     formData.append("file", file);
@@ -146,7 +153,17 @@ export default function ChatPage(_props: ChatPageProps) {
       });
 
       if (!response.ok) {
-        throw new Error("Upload failed");
+        if (response.status === 413) {
+          throw new Error("File too large. Maximum size is 50MB.");
+        }
+        let detail = `Upload failed (HTTP ${response.status})`;
+        try {
+          const errBody = await response.json();
+          if (errBody?.message) detail = errBody.message;
+        } catch {
+          // response was not JSON — keep generic message
+        }
+        throw new Error(detail);
       }
 
       const data = await response.json();
