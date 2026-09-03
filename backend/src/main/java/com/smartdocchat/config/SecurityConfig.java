@@ -66,6 +66,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository)
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                .ignoringRequestMatchers("/auth/google", "/auth/google-client-id")
             )
             .sessionManagement(session -> session.sessionCreationPolicy(
                     oidcProperties.isEnabled()
