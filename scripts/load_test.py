@@ -31,31 +31,70 @@ class LoadTest:
         self.doc_id = None
 
     async def setup(self):
-        """Login and upload test document."""
+        """Register/login test user and upload test document."""
         async with aiohttp.ClientSession() as session:
             # Get CSRF
             async with session.get(f"{BASE_URL}/csrf") as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"CSRF fetch failed ({resp.status}): {text}")
                 data = await resp.json()
                 self.csrf = data["token"]
-            
-            # Login
-            async with session.post(f"{BASE_URL}/auth/login", 
+
+            # 1. Attempt to register test user (if database is fresh/unseeded)
+            user_payload = {
+                "username": "testuser",
+                "password": "TestPass123!",
+                "email": "testuser@example.com"
+            }
+            try:
+                async with session.post(
+                    f"{BASE_URL}/auth/register",
+                    json=user_payload,
+                    headers={"X-XSRF-TOKEN": self.csrf}
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        self.token = data.get("token")
+                        print("✅ Registered new test user 'testuser'")
+            except Exception as e:
+                print(f"Registration notice: {e}")
+
+            # 2. If user already existed or token not returned from register, log in
+            if not self.token:
+                async with session.post(
+                    f"{BASE_URL}/auth/login",
                     json={"username": "testuser", "password": "TestPass123!"},
-                    headers={"X-XSRF-TOKEN": self.csrf}) as resp:
-                data = await resp.json()
-                self.token = data["token"]
-            
+                    headers={"X-XSRF-TOKEN": self.csrf}
+                ) as resp:
+                    if resp.status != 200:
+                        text = await resp.text()
+                        raise RuntimeError(f"Login failed (HTTP {resp.status}): {text}")
+                    data = await resp.json()
+                    self.token = data.get("token")
+                    print("✅ Logged in test user 'testuser'")
+
+            if not self.token:
+                raise RuntimeError("Failed to obtain JWT token for load test")
+
             # Upload document
             doc_content = "LUẬT DOANH NGHIỆP 2020. Điều 7: Hình thức doanh nghiệp. Điều 10: Thủ tục thành lập."
             data = aiohttp.FormData()
             data.add_field("file", doc_content.encode(), filename="load_test.txt", content_type="text/plain")
-            
-            async with session.post(f"{BASE_URL}/documents/upload",
-                    data=data,
-                    headers={"Authorization": f"Bearer {self.token}", "X-XSRF-TOKEN": self.csrf}) as resp:
-                result = await resp.json()
-                self.doc_id = result.get("documentId")
-            
+
+            try:
+                async with session.post(f"{BASE_URL}/documents/upload",
+                        data=data,
+                        headers={"Authorization": f"Bearer {self.token}", "X-XSRF-TOKEN": self.csrf}) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        self.doc_id = result.get("documentId")
+                    else:
+                        text = await resp.text()
+                        print(f"⚠️ Document upload status {resp.status}: {text}")
+            except Exception as e:
+                print(f"⚠️ Document upload notice: {e}")
+
             print(f"Setup complete: token=...{self.token[-10:]}, doc_id={self.doc_id}")
 
     async def user_session(self, user_id: int):
@@ -93,7 +132,8 @@ class LoadTest:
                             json={
                                 "sessionId": f"load-{user_id}",
                                 "documentId": self.doc_id,
-                                "message": q
+                                "message": q,
+                                "mode": "rag"
                             },
                             headers=headers,
                             timeout=aiohttp.ClientTimeout(total=120)) as resp:
