@@ -127,7 +127,17 @@ class QdrantHybridSearch:
     """Async Qdrant wrapper with hybrid BM25 + semantic search."""
 
     def __init__(self):
-        self._base_url = f"http://{settings.qdrant_host}:{settings.qdrant_port}"
+        host = settings.qdrant_host.strip()
+        if host.startswith("http://") or host.startswith("https://"):
+            self._base_url = host.rstrip("/")
+        else:
+            use_https = (
+                getattr(settings, "qdrant_use_https", False)
+                or settings.qdrant_port == 443
+                or "cloud.qdrant.io" in host
+            )
+            proto = "https" if use_https else "http"
+            self._base_url = f"{proto}://{host}:{settings.qdrant_port}"
         self._api_key = settings.qdrant_api_key
         self._embed_url = f"{settings.llm_base_url}/api/embeddings"
         self._embed_model = settings.llm_embedding_model

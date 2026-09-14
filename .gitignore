@@ -144,3 +144,7 @@ frontend/coverage/
 frontend/test-results/
 *.db
 .wrangler/
+
+# Agent planning artifacts
+plans/
+tasks/

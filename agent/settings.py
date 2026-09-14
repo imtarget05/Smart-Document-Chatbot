@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
     qdrant_api_key: str = ""
+    qdrant_use_https: bool = False
 
     # PostgreSQL (long-term memory) — NO default password. Must be set explicitly.
     postgres_db: str = "smart_doc_chatbot"
