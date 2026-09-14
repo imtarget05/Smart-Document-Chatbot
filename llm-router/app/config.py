@@ -58,12 +58,6 @@ class Settings:
     local_ollama_health_ttl_seconds: float = _float_env(
         "LOCAL_OLLAMA_HEALTH_TTL_SECONDS", 10.0
     )
-    # Supply chain module API (agentic tool backend). Empty = tools fall back
-    # to deterministic mock results (module has no deployed API yet).
-    supply_chain_api_url: str = os.getenv("SUPPLY_CHAIN_API_URL", "")
-    supply_chain_timeout_seconds: float = _float_env(
-        "SUPPLY_CHAIN_TIMEOUT_SECONDS", 15.0
-    )
     # Prompt compression: heuristic-based token reduction before LLM calls.
     prompt_compression_enabled: bool = _bool_env("PROMPT_COMPRESSION_ENABLED", True)
     prompt_compression_ratio: float = _float_env("PROMPT_COMPRESSION_RATIO", 0.5)

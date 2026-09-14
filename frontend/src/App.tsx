@@ -9,9 +9,8 @@ import "./App.css";
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
-const SupplyChainPage = lazy(() => import("./pages/SupplyChainPage"));
 
-type AppView = "chat" | "admin" | "supply-chain";
+type AppView = "chat" | "admin";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,7 +62,6 @@ function AppContent() {
     <ErrorBoundary>
       <SuspensePage>
         {view === "admin" && <AdminPage />}
-        {view === "supply-chain" && <SupplyChainPage />}
         {view === "chat" && <ChatPage />}
       </SuspensePage>
     </ErrorBoundary>

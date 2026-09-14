@@ -7,7 +7,7 @@ interface UserMenuProps {
   onLogout: () => void;
 }
 
-type AppView = "chat" | "admin" | "supply-chain";
+type AppView = "chat" | "admin";
 
 function useAppView(): [AppView, (v: AppView) => void] {
   return (window as unknown as { __appView?: [AppView, (v: AppView) => void] }).__appView ?? ["chat", () => {}];
@@ -81,13 +81,6 @@ export default function UserMenu({ username, role, onLogout }: UserMenuProps) {
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               Trò chuyện
-            </button>
-            <button
-              onClick={() => { setIsOpen(false); setView("supply-chain"); }}
-              className="w-full text-left px-4 py-2.5 text-[13px] text-onsurface-variant hover:bg-surface-container transition-colors duration-200 flex items-center gap-3"
-            >
-              <span className="text-[15px]">📦</span>
-              Supply Chain
             </button>
             {isAdmin && (
               <button

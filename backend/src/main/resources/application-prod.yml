@@ -47,10 +47,6 @@ agent:
   service:
     url: ${AGENT_SERVICE_URL:http://agent:9000}
 
-supply:
-  chain:
-    api-url: ${SUPPLY_CHAIN_API_URL:http://supply-chain:8020}
-
 # Production security headers
 security:
   prompt-injection:

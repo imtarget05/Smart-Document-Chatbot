@@ -28,7 +28,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Hardening test: the supply-chain agentic path must degrade gracefully. When
+ * Hardening test: the generic agentic path must degrade gracefully. When
  * the agent client throws (down/unreachable), ChatService MUST fall back to the
  * RAG path and NEVER propagate the exception to the caller.
  */
@@ -69,8 +69,8 @@ class ChatServiceFallbackHardeningTest {
     }
 
     @Test
-    void supplyChainIntent_agentDown_fallsBackToRagWithoutThrowing() {
-        // a message the static SupplyChainIntentDetector classifies as supply-chain
+    void agentDown_fallsBackToRagWithoutThrowing() {
+        // any non-"rag" message goes through the generic agent path first
         String supplyMsg = "dự báo nhu cầu tồn kho supplier risk lead time";
         when(agentClient.invokeAgent(any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("agent unavailable"));
@@ -84,7 +84,7 @@ class ChatServiceFallbackHardeningTest {
     }
 
     @Test
-    void supplyChainIntent_agentReturnsNull_fallsBackSafely() {
+    void agentReturnsNull_fallsBackSafely() {
         String supplyMsg = "dự báo nhu cầu tồn kho supplier risk lead time";
         when(agentClient.invokeAgent(any(), any(), any(), any())).thenReturn(null);
 

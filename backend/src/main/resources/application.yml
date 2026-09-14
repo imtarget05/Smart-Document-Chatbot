@@ -87,11 +87,6 @@ llm:
 cost:
   per-1k-tokens: ${COST_PER_1K_TOKENS:{}}
 
-# Supply Chain module (FastAPI proxy)
-supply:
-  chain:
-    api-url: ${SUPPLY_CHAIN_API_URL:http://localhost:8000}
-
 # Document ingestion (chunking) — size in tokens (~4 chars/token), overlap
 # carries the tail of one chunk into the next so boundary sentences keep
 # context during retrieval.
@@ -248,7 +243,7 @@ ratelimit:
   upload-per-minute: 10
   auth-per-minute: 10
 
-# Agent (supply-chain) — backend -> llm-router agentic path (#4)
+# Agent — backend -> llm-router agentic path (#4)
 agent:
   base-url: ${AGENT_BASE_URL:http://localhost:9000}
   timeout-ms: ${AGENT_TIMEOUT_MS:15000}
@@ -293,7 +288,3 @@ langfuse:
   # Propagate the trace id to the FastAPI llm-router so a single request
   # shows both Java and Python spans in one tree.
   router-trace-header: X-Langfuse-Trace-Id
-
-supply:
-  chain:
-    api-url: ${SUPPLY_CHAIN_API_URL:http://localhost:8020}

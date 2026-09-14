@@ -1,9 +1,8 @@
 """LangGraph agent graph (Phase 0 → 2): intent -> execute tool -> answer.
 
-Stateful multi-step agent cho supply chain + document tools.
-- execute_tool_node gọi supply-chain-module HTTP API thật qua httpx khi
-  ``SUPPLY_CHAIN_API_URL`` được cấu hình; nếu không / khi API lỗi, fallback
-  về deterministic mock result (grounded safety: không hallucinate).
+Stateful multi-step agent cho document tools (module dự báo đã gỡ).
+- execute_tool_node trả deterministic/abstain cho các tool cũ
+  (không hallucinate, không gọi HTTP ngoài).
 - Mỗi node tạo Langfuse span (joined vào trace backend qua X-Langfuse-Trace-Id)
   khi observability được enable.
 """
@@ -11,18 +10,14 @@ Stateful multi-step agent cho supply chain + document tools.
 import operator
 from typing import Annotated, Any, Dict, Optional, Sequence, TypedDict
 
-import httpx
 from langgraph.graph import END, StateGraph
 
 try:  # chạy như top-level package (uvicorn app.main:app từ llm-router/)
-    from app.config import settings
     from app import observability
 except (ImportError, ValueError):  # agent được import như sub-package của root package
     try:
-        from ..app.config import settings
         from ..app import observability
     except (ImportError, ValueError):
-        from llm_router.app.config import settings
         from llm_router.app import observability
 
 
@@ -36,12 +31,12 @@ class AgentState(TypedDict):
     parent_span_id: Optional[str]
 
 
-# Map tool -> supply-chain-module endpoint path. Cập nhật khi module có API.
-SUPPLY_CHAIN_ENDPOINTS = {
-    "forecast_demand": "/forecast",
-    "optimize_delivery_route": "/optimize-route",
-    "check_supplier_risk": "/supplier-risk",
-}
+# Các tool chuỗi cung ứng cũ đã gỡ backend: trả abstain xác định.
+UNSUPPORTED_LEGACY_TOOLS = frozenset({
+    "forecast_demand",
+    "optimize_delivery_route",
+    "check_supplier_risk",
+})
 
 
 def _last_message(state: AgentState) -> str:
@@ -73,49 +68,21 @@ async def intent_node(state: AgentState) -> Dict[str, Any]:
     return {"tool_choice": choice}
 
 
-async def _call_supply_chain_api(endpoint: str, message: str,
-                                 params: Optional[dict] = None) -> Dict[str, Any]:
-    """Gọi supply-chain-module API. Trả dict với key 'status' và 'source'."""
-    base = settings.supply_chain_api_url
-    if not base:
-        return {
-            "status": "mock",
-            "source": "deterministic_fallback",
-            "detail": "SUPPLY_CHAIN_API_URL chưa cấu hình — module chưa có API deploy",
-        }
-    if not base.startswith("http"):  # Render fromService host = hostname only
-        base = f"https://{base}"
-    payload = {"query": message, **(params or {})}
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.supply_chain_timeout_seconds
-        ) as client:
-            resp = await client.post(f"{base.rstrip('/')}{endpoint}", json=payload)
-            resp.raise_for_status()
-            return {"status": "ok", "source": "supply_chain_api", "data": resp.json()}
-    except Exception as exc:
-        # Fallback: không hallucinate, báo rõ nguồn dữ liệu
-        return {
-            "status": "error",
-            "source": "deterministic_fallback",
-            "detail": f"supply chain API unavailable: {exc}",
-        }
-
-
 async def execute_tool_node(state: AgentState) -> Dict[str, Any]:
     tool = state.get("tool_choice", "none")
     if tool == "none":
         result = {"status": "skipped", "tool": "none"}
+    elif tool in UNSUPPORTED_LEGACY_TOOLS:
+        # Module dự báo đã gỡ: deterministic abstain, không gọi API ngoài.
+        result = {
+            "status": "unsupported",
+            "source": "deterministic_abstain",
+            "tool": tool,
+            "detail": "không hỗ trợ dự báo chuỗi cung ứng",
+        }
     else:
-        endpoint = SUPPLY_CHAIN_ENDPOINTS.get(tool)
-        if endpoint:
-            result = await _call_supply_chain_api(
-                endpoint, _last_message(state), state.get("tool_params") or {}
-            )
-            result["tool"] = tool
-        else:
-            # doc_search / tool chưa nối API — deterministic placeholder
-            result = {"status": "mock", "source": "deterministic_fallback", "tool": tool}
+        # doc_search / tool chưa nối API — deterministic placeholder
+        result = {"status": "mock", "source": "deterministic_fallback", "tool": tool}
     return {"tool_result": result}
 
 
@@ -129,12 +96,16 @@ async def generate_answer_node(state: AgentState) -> Dict[str, Any]:
     tool = state.get("tool_choice", "none")
     if tool == "none":
         answer = (
-            "Xin chào! Tôi có thể giúp bạn về dự báo nhu cầu, tối ưu tuyến "
-            "giao hàng, rủi ro nhà cung cấp, hoặc tìm kiếm tài liệu."
+            "Xin chào! Tôi có thể giúp bạn tìm kiếm tài liệu."
+        )
+    elif result.get("status") == "unsupported":
+        answer = (
+            f"Không hỗ trợ dự báo chuỗi cung ứng với công cụ '{tool}' — "
+            f"không đưa ra dự đoán thiếu nguồn. Chi tiết: {result.get('detail')}"
         )
     elif result.get("status") == "ok":
         answer = (
-            f"Kết quả từ công cụ '{tool}' (nguồn: supply chain API): "
+            f"Kết quả từ công cụ '{tool}': "
             f"{result.get('data')}"
         )
     else:
