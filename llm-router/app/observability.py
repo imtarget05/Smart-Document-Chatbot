@@ -19,7 +19,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from langfuse import Langfuse
+try:
+    from langfuse import Langfuse
+except ImportError:
+    Langfuse = None
 
 PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
@@ -27,9 +30,9 @@ HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
 TRACE_HEADER = "X-Langfuse-Trace-Id"
 
-_client: Langfuse | None = None
+_client: Any = None
 
-if PUBLIC_KEY and SECRET_KEY:
+if PUBLIC_KEY and SECRET_KEY and Langfuse is not None:
     try:
         _client = Langfuse(public_key=PUBLIC_KEY, secret_key=SECRET_KEY, host=HOST)
     except Exception:  # pragma: no cover - network/env issues must not crash the router

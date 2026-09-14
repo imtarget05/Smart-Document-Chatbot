@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -234,5 +235,49 @@ class ChatServiceTest {
         // The duplicate (identical message within the 5s TTL) must be suppressed,
         // so the agent service is contacted exactly once.
         verify(agentClient, times(1)).invokeAgent(anyString(), anyString(), anyString(), nullable(String.class));
+    }
+
+    @Test
+    void allQuestionsDefaultToAgentModeEvenWithoutExplicitMode() {
+        when(agentClient.invokeAgent(eq("alice"), eq("session-1"),
+                eq("general question"), nullable(String.class)))
+                .thenReturn(new AgentClient.AgentResponse("agent answer", "general",
+                        List.of(), 0.95, "trace-10"));
+        stubSaveReturnsArgument();
+
+        ChatRequest req = ChatRequest.builder()
+                .sessionId("session-1")
+                .documentId(1L)
+                .message("general question")
+                .build(); // mode is not set (null)
+
+        ChatResponse response = chatService.processQuery("alice", req);
+
+        assertEquals("agentic", response.getRagStrategy());
+        assertEquals("agent answer", response.getAiResponse());
+        verify(agentClient, times(1)).invokeAgent(eq("alice"), eq("session-1"), eq("general question"), nullable(String.class));
+        verifyNoInteractions(retrievalService);
+    }
+
+    @Test
+    void explicitRagModeBypassesAgentDirectlyToCrag() {
+        when(retrievalService.retrieve(eq("alice"), eq(1L), anyString(), anyInt()))
+                .thenReturn(List.of(new RetrievalService.RetrievalResult("direct content", 0.9)));
+        when(messageHandler.buildPrompt(anyString(), anyList())).thenReturn("direct prompt");
+        when(messageHandler.callLLM("direct prompt")).thenReturn("rag answer");
+        stubSaveReturnsArgument();
+
+        ChatRequest req = ChatRequest.builder()
+                .sessionId("session-1")
+                .documentId(1L)
+                .message("direct rag request")
+                .mode("rag")
+                .build();
+
+        ChatResponse response = chatService.processQuery("alice", req);
+
+        assertEquals("direct", response.getRagStrategy());
+        assertEquals("rag answer", response.getAiResponse());
+        verifyNoInteractions(agentClient);
     }
 }

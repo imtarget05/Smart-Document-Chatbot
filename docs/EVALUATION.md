@@ -190,7 +190,7 @@ reproducible, dependency-free, and deterministic.
 
 ```bash
 # Offline grader unit tests (no backend/LLM needed)
-python3 -m pytest tests/test_grader.py -v
+python3 -m pytest eval/tests/test_grader.py -v
 
 # Full fixture benchmark against an environment
 python eval/run_fixture_eval.py --base-url "$BASE_URL"

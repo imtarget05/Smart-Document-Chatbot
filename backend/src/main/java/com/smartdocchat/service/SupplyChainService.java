@@ -27,7 +27,7 @@ public class SupplyChainService {
     }
 
 
-    @Value("${supply.chain.api-url:http://localhost:8000}")
+    @Value("${supply.chain.api-url:http://localhost:8020}")
     private String supplyChainBaseUrl;
 
     @Value("${SUPPLY_CHAIN_INTERNAL_TOKEN:}")

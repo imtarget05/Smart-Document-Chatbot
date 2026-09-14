@@ -293,3 +293,7 @@ langfuse:
   # Propagate the trace id to the FastAPI llm-router so a single request
   # shows both Java and Python spans in one tree.
   router-trace-header: X-Langfuse-Trace-Id
+
+supply:
+  chain:
+    api-url: ${SUPPLY_CHAIN_API_URL:http://localhost:8020}

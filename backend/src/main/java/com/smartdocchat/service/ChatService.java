@@ -22,9 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @Service
 @Slf4j
@@ -43,9 +40,9 @@ public class ChatService {
     private final LangfuseService langfuse;
     private final AgentClient agentClient;
     private final LegalQueryNormalizer normalizer;
-    private final ExecutorService streamExecutor;
-    private final ConcurrentHashMap<String, Long> dedupCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, String> dlq = new ConcurrentHashMap<>();
+    private final ChatDedupService dedupService;
+    private final ChatDlqService dlqService;
+    private final SseStreamManager sseStreamManager;
 
     @Autowired
     public ChatService(MessageHandler messageHandler, HistoryService historyService,
@@ -56,7 +53,9 @@ public class ChatService {
                        RagMetrics ragMetrics, DocumentService documentService,
                        LangfuseService langfuse, AgentClient agentClient,
                        LegalQueryNormalizer normalizer,
-                       @org.springframework.beans.factory.annotation.Value("${chat.sse.threads:0}") int sseThreads) {
+                       ChatDedupService dedupService,
+                       ChatDlqService dlqService,
+                       SseStreamManager sseStreamManager) {
         this.messageHandler = messageHandler;
         this.historyService = historyService;
         this.cragConfig = cragConfig;
@@ -70,8 +69,25 @@ public class ChatService {
         this.langfuse = langfuse;
         this.agentClient = agentClient;
         this.normalizer = normalizer;
-        int threads = sseThreads > 0 ? sseThreads : Math.max(4, Runtime.getRuntime().availableProcessors());
-        this.streamExecutor = Executors.newFixedThreadPool(threads);
+        this.dedupService = dedupService;
+        this.dlqService = dlqService;
+        this.sseStreamManager = sseStreamManager;
+    }
+
+    // Constructor with sseThreads for testing / backwards compatibility
+    public ChatService(MessageHandler messageHandler, HistoryService historyService,
+                       CragConfig cragConfig, RetrievalService retrievalService,
+                       QueryReformulator queryReformulator, WebSearchService webSearchService,
+                       PromptInjectionDetector promptInjectionDetector,
+                       PromptInjectionProperties promptInjectionProperties,
+                       RagMetrics ragMetrics, DocumentService documentService,
+                       LangfuseService langfuse, AgentClient agentClient,
+                       LegalQueryNormalizer normalizer,
+                       int sseThreads) {
+        this(messageHandler, historyService, cragConfig, retrievalService, queryReformulator,
+                webSearchService, promptInjectionDetector, promptInjectionProperties,
+                ragMetrics, documentService, langfuse, agentClient, normalizer,
+                new ChatDedupService(), new ChatDlqService(), new SseStreamManager(sseThreads));
     }
 
     // Package-private constructor for testing (defaults sseThreads to 0)
@@ -88,32 +104,8 @@ public class ChatService {
                 ragMetrics, documentService, langfuse, agentClient, normalizer, 0);
     }
 
-    private boolean isDuplicateRequest(String ownerUsername, ChatRequest request) {
-        String key = ownerUsername + ":" + request.getSessionId() + ":" + request.getMessage().hashCode();
-        long now = System.currentTimeMillis();
-        Long prev = dedupCache.get(key);
-        if (prev != null && (now - prev) < 5000) {
-            log.warn("Duplicate agent request suppressed key={}", key);
-            return true;
-        }
-        dedupCache.put(key, now);
-        // evict old entries >30s
-        dedupCache.entrySet().removeIf(e -> (now - e.getValue()) > 30000);
-        return false;
-    }
-
-    private void recordDlq(String ownerUsername, String sessionId, String query, String error) {
-        String key = sessionId + ":" + System.currentTimeMillis();
-        dlq.put(key, ownerUsername + "|" + query + "|" + error);
-        if (dlq.size() > 1000) {
-            // drop oldest
-            dlq.keySet().stream().sorted().limit(dlq.size() - 1000).forEach(dlq::remove);
-        }
-        log.warn("DLQ recorded key={} session={} err={}", key, sessionId, error);
-    }
-
     public Map<String, String> getDlqSnapshot() {
-        return Map.copyOf(dlq);
+        return dlqService.getDlqSnapshot();
     }
 
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
@@ -144,10 +136,18 @@ public class ChatService {
         String userMessage = request.getMessage();
         ChatResponse response;
 
-        // Explicit agent mode (user-selected) or supply-chain auto-detection
-        boolean agentMode = "agent".equalsIgnoreCase(request.getMode())
-                || SupplyChainIntentDetector.isSupplyChainIntent(userMessage);
-        if (agentMode && isDuplicateRequest(ownerUsername, request)) {
+        if (isBlockedInjection(userMessage)) {
+            ragMetrics.recordInjectionBlocked();
+            ChatMessage blocked = saveResponse(ownerUsername, request, userMessage,
+                    messageHandler.buildInjectionBlockedResponse(), null);
+            response = toResponse(ownerUsername, blocked, emptyCrag("blocked"));
+            ragMetrics.recordLatency(System.currentTimeMillis() - started);
+            return response;
+        }
+
+        // All questions default to Agent mode unless explicitly requested as "rag"
+        boolean agentMode = !"rag".equalsIgnoreCase(request.getMode());
+        if (agentMode && dedupService.isDuplicateRequest(ownerUsername, request)) {
             // dedup: treat as already processed, fall through to RAG
             agentMode = false;
         }
@@ -157,6 +157,9 @@ public class ChatService {
             try {
                 AgentClient.AgentResponse agentResp = agentClient.invokeAgent(
                         ownerUsername, request.getSessionId(), userMessage, traceId);
+                if (agentResp == null) {
+                    throw new IllegalStateException("Agent returned null response");
+                }
                 langfuse.updateTrace(Map.of("agentAnswer", agentResp.answer()), null);
                 ChatMessage saved = saveResponse(ownerUsername, request, userMessage,
                         agentResp.answer(), null);
@@ -173,47 +176,40 @@ public class ChatService {
             }
         }
 
-        if (isBlockedInjection(userMessage)) {
-            ragMetrics.recordInjectionBlocked();
-            ChatMessage blocked = saveResponse(ownerUsername, request, userMessage,
-                    messageHandler.buildInjectionBlockedResponse(), null);
-            response = toResponse(ownerUsername, blocked, emptyCrag("blocked"));
-        } else {
-            try {
-                CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
+        try {
+            CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
 
-                String aiResponse = "no_evidence".equals(crag.strategy())
-                        ? messageHandler.buildAbstentionResponse()
-                        : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
-                ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
-                response = toResponse(ownerUsername, saved, crag);
+            String aiResponse = "no_evidence".equals(crag.strategy())
+                    ? messageHandler.buildAbstentionResponse()
+                    : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
+            ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
+            response = toResponse(ownerUsername, saved, crag);
 
-                if ("no_evidence".equals(crag.strategy())) {
-                    ragMetrics.recordAbstention();
-                }
-                String confidenceLabel;
-                double confidenceScore;
-                if ("no_evidence".equals(crag.strategy())) {
-                    confidenceLabel = "low";
-                    confidenceScore = 0.0;
-                } else {
-                    confidenceLabel = confidenceLabel(crag.confidenceScore());
-                    confidenceScore = crag.confidenceScore();
-                }
-                ragMetrics.recordRequest(crag.strategy(), confidenceLabel);
-                ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
-            } catch (RuntimeException e) {
-                // CRAG orchestration failure (retrieval down, reformulator bug, web
-                // search exception, etc.) must NEVER escape as 5xx. Return a safe
-                // abstention labelled "error" so the frontend can show a clear
-                // "không thể trả lời" instead of a generic failure, and we keep
-                // an audit trail via ragMetrics + log.
-                log.error("CRAG path failed, serving safe abstention: {}", e.getMessage(), e);
-                String abstain = messageHandler.buildAbstentionResponse();
-                ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstain, null);
-                response = toResponse(ownerUsername, saved, emptyCrag("error"));
+            if ("no_evidence".equals(crag.strategy())) {
                 ragMetrics.recordAbstention();
             }
+            String confidenceLabel;
+            double confidenceScore;
+            if ("no_evidence".equals(crag.strategy())) {
+                confidenceLabel = "low";
+                confidenceScore = 0.0;
+            } else {
+                confidenceLabel = confidenceLabel(crag.confidenceScore());
+                confidenceScore = crag.confidenceScore();
+            }
+            ragMetrics.recordRequest(crag.strategy(), confidenceLabel);
+            ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
+        } catch (RuntimeException e) {
+            // CRAG orchestration failure (retrieval down, reformulator bug, web
+            // search exception, etc.) must NEVER escape as 5xx. Return a safe
+            // abstention labelled "error" so the frontend can show a clear
+            // "không thể trả lời" instead of a generic failure, and we keep
+            // an audit trail via ragMetrics + log.
+            log.error("CRAG path failed, serving safe abstention: {}", e.getMessage(), e);
+            String abstain = messageHandler.buildAbstentionResponse();
+            ChatMessage saved = saveResponse(ownerUsername, request, userMessage, abstain, null);
+            response = toResponse(ownerUsername, saved, emptyCrag("error"));
+            ragMetrics.recordAbstention();
         }
 
         ragMetrics.recordLatency(System.currentTimeMillis() - started);
@@ -223,7 +219,7 @@ public class ChatService {
     public SseEmitter processQueryStream(String ownerUsername, ChatRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L);
 
-        streamExecutor.execute(() -> {
+        sseStreamManager.execute(() -> {
             try {
                 String userMessage = request.getMessage();
                 if (isBlockedInjection(userMessage)) {
@@ -240,14 +236,22 @@ public class ChatService {
                     return;
                 }
 
-                // Explicit agent mode: bypass CRAG, call agent orchestrator
-                if ("agent".equalsIgnoreCase(request.getMode())) {
-                    ragMetrics.recordRequest("agentic", "high");
+                // All questions default to Agent mode unless explicitly requested as "rag"
+                boolean agentMode = !"rag".equalsIgnoreCase(request.getMode());
+                if (agentMode && dedupService.isDuplicateRequest(ownerUsername, request)) {
+                    agentMode = false;
+                }
+
+                if (agentMode) {
                     String traceId = langfuse.startTrace("agentic_request", ownerUsername,
                             Map.of("query", userMessage));
                     try {
                         AgentClient.AgentResponse agentResp = agentClient.invokeAgent(
                                 ownerUsername, request.getSessionId(), userMessage, traceId);
+                        if (agentResp == null) {
+                            throw new IllegalStateException("Agent returned null response");
+                        }
+                        ragMetrics.recordRequest("agentic", "high");
                         langfuse.updateTrace(Map.of("agentAnswer", agentResp.answer()), null);
 
                         Map<String, Object> agentMeta = new LinkedHashMap<>();
@@ -369,7 +373,7 @@ public class ChatService {
                 // DLQ stub — retain failed SSE for manual replay/debugging
                 try {
                     String userMessage = request.getMessage();
-                    recordDlq(ownerUsername, request.getSessionId(), userMessage, e.getMessage());
+                    dlqService.recordDlq(ownerUsername, request.getSessionId(), userMessage, e.getMessage());
                 } catch (Exception ignored) {}
                 try {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));

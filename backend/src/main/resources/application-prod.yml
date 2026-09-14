@@ -1,19 +1,29 @@
+# ============================================
+# Production Profile Configuration
+# Activated with SPRING_PROFILES_ACTIVE=prod
+# ============================================
+
 spring:
   config:
     import: "optional:file:.env[.properties]"
   jpa:
     hibernate:
       ddl-auto: validate
+    show-sql: false
   flyway:
     enabled: true
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
   data:
     redis:
-      enabled: ${REDIS_ENABLED:true}
-      host: ${REDIS_HOST}
+      enabled: ${REDIS_ENABLED:false}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       ssl:
-        enabled: ${REDIS_SSL_ENABLED:true}
+        enabled: ${REDIS_SSL_ENABLED:false}
       timeout: 5000ms
       lettuce:
         pool:
@@ -22,21 +32,30 @@ spring:
           min-idle: 2
 
 server:
-  port: ${SERVER_PORT:8443}
+  port: ${SERVER_PORT:8080}
   ssl:
-    enabled: true
+    enabled: ${SSL_ENABLED:false}
     key-store: ${SSL_KEY_STORE:classpath:keystore.p12}
-    key-store-password: ${SSL_KEY_STORE_PASSWORD}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:changeit}
     key-store-type: PKCS12
     key-alias: smartdoc
     protocol: TLS
     enabled-protocols: TLSv1.2,TLSv1.3
 
+# In production Docker network, agent service is reachable by container name
+agent:
+  service:
+    url: ${AGENT_SERVICE_URL:http://agent:9000}
+
+supply:
+  chain:
+    api-url: ${SUPPLY_CHAIN_API_URL:http://supply-chain:8020}
+
 # Production security headers
 security:
   prompt-injection:
     enabled: true
-  internal-token: ${INTERNAL_SERVICE_TOKEN}
+  internal-token: ${INTERNAL_SERVICE_TOKEN:}
 
 # Production rate limits (higher for internal users)
 ratelimit:
@@ -57,10 +76,8 @@ logging:
   level:
     root: WARN
     com.smartdocchat: INFO
-  file:
-    name: /var/log/smartdoc/application.log
-    max-size: 50MB
-    max-history: 60
+    org.springframework: WARN
+    org.hibernate: WARN
 
 management:
   health:

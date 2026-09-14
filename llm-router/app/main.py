@@ -106,7 +106,7 @@ def create_app(
         message = body.get("message", "")
         trace_id = trace_id_from_headers(dict(request.headers))
         try:
-            from agent.graph import run_agent
+            from agent.graph import run_agent  # type: ignore[attr-defined]
         except ImportError:
             from ..agent.graph import run_agent
 
@@ -126,7 +126,7 @@ def create_app(
         params = body.get("params")
         job_id = await jobs.create_job("agent_invoke", {"message": message})
         try:
-            from agent.graph import run_agent
+            from agent.graph import run_agent  # type: ignore[attr-defined]
         except ImportError:
             from ..agent.graph import run_agent
         asyncio.get_running_loop().create_task(
@@ -210,7 +210,7 @@ def create_app(
     async def embeddings(request: Request, payload: dict[str, Any]):
         trace_id = trace_id_from_headers(dict(request.headers))
         try:
-            result = await service.providers.embeddings(payload)
+            result = await service.providers.embeddings(payload)  # type: ignore[attr-defined]
             if langfuse_enabled() and trace_id is not None:
                 langfuse_generation(
                     trace_id, "router_embeddings",

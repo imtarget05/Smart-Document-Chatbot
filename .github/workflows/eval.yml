@@ -33,7 +33,7 @@ jobs:
 
       # Offline, deterministic grader unit tests (no network, no LLM).
       - name: Offline grader tests
-        run: python -m pytest tests/test_grader.py -q
+        run: python -m pytest eval/tests/test_grader.py -q
 
       # Hermetic local LLM stack: mock Ollama (Ollama protocol, :11434) plus a
       # mock backend (:8081). No Render/cloud-LLM dependency — the eval can no

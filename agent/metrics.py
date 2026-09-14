@@ -6,7 +6,7 @@ Exposes /metrics endpoint for Prometheus scraping.
 import os
 import time
 from functools import wraps
-from typing import Callable
+from typing import Any, Callable
 
 # prometheus_client reads PROMETHEUS_MULTIPROC_DIR (multiproc mode) at import
 # time and crashes if the directory does not exist. Ensure it exists first.
@@ -17,7 +17,7 @@ if _multiproc_dir:
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from prometheus_client import REGISTRY
 
-def _get_or_create(metric_cls, name, documentation, labelnames=None, **kwargs):
+def _get_or_create(metric_cls, name, documentation, labelnames=None, **kwargs) -> Any:
     # Return existing collector if already registered (pytest re-imports)
     try:
         if name in REGISTRY._names_to_collectors:

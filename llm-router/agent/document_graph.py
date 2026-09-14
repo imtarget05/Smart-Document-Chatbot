@@ -11,9 +11,13 @@ from typing import Any, Dict, Optional, TypedDict
 try:  # chạy như top-level package (uvicorn app.main:app từ llm-router/)
     from app import observability
     from app.document_ocr import classify_document_type
-except ImportError:
-    from ..app import observability
-    from ..app.document_ocr import classify_document_type
+except (ImportError, ValueError):
+    try:
+        from ..app import observability
+        from ..app.document_ocr import classify_document_type
+    except (ImportError, ValueError):
+        from llm_router.app import observability
+        from llm_router.app.document_ocr import classify_document_type
 
 from langgraph.graph import END, StateGraph
 
@@ -95,8 +99,6 @@ def map_schema_node(state: DocumentState) -> Dict[str, Any]:
         "extra": [k for k in extracted if k not in schema],
     }
     return {"schema_mapping": mapping}
-    confidence: float
-    final_result: Dict[str, Any]
 
 
 def _num(value: Any) -> Optional[float]:

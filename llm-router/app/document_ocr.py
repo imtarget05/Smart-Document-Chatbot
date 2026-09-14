@@ -10,8 +10,15 @@ import io
 import re
 from typing import Optional
 
-import pdfplumber
-import docx
+try:
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
+
+try:
+    import docx
+except ImportError:
+    docx = None
 
 
 # ----------------------------------------------------------------------
@@ -20,6 +27,8 @@ import docx
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract text from PDF using pdfplumber."""
+    if pdfplumber is None:
+        return ""
     text_parts = []
     try:
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -35,6 +44,8 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
     """Extract text from DOCX using python-docx."""
+    if docx is None:
+        return ""
     try:
         doc = docx.Document(io.BytesIO(file_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
@@ -49,6 +60,8 @@ def extract_tables_from_pdf(file_bytes: bytes) -> list[list[list[str]]]:
     Returns list of pages, each page a list of tables, each table a list of
     rows (list of string cells). Empty list on failure — never raises.
     """
+    if pdfplumber is None:
+        return []
     pages: list[list[list[str]]] = []
     try:
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:

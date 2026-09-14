@@ -236,7 +236,7 @@ jobs:
         run: |
           # eval/eval.py (unit under test) imports `requests` at module load.
           python -m pip install --quiet pytest requests
-          python -m pytest tests/test_grader.py -q
+          python -m pytest eval/tests/test_grader.py -q
 
   # ═══════════════════════════════════════════════════════════════
   # LLM Judge Mock Evaluation (deterministic, no LLM API)

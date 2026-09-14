@@ -1,7 +1,7 @@
 """Offline deterministic tests for the eval.py grader (Decision 10).
 
-Run:  cd <repo-root> && python3 -m pytest tests/test_grader.py -q
-      (or: python3 -m unittest tests.test_grader -v)
+Run:  cd <repo-root> && python3 -m pytest eval/tests/test_grader.py -q
+      (or: python3 -m unittest eval/tests/test_grader.py -v)
 
 No network, no LLM, no production access.
 """
@@ -9,16 +9,26 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "eval"))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from eval import (  # noqa: E402
-    evaluate_answer,
-    grade_concepts,
-    is_provider_error,
-    load_concepts_overrides,
-    normalize_text,
-    resolve_concepts,
-)
+try:
+    from eval.eval import (  # noqa: E402
+        evaluate_answer,
+        grade_concepts,
+        is_provider_error,
+        load_concepts_overrides,
+        normalize_text,
+        resolve_concepts,
+    )
+except ImportError:
+    from eval import (  # noqa: E402
+        evaluate_answer,
+        grade_concepts,
+        is_provider_error,
+        load_concepts_overrides,
+        normalize_text,
+        resolve_concepts,
+    )
 
 
 def make_result(answer, strategy="direct", confidence="medium", sources="evidence text"):

@@ -17,9 +17,13 @@ from langgraph.graph import END, StateGraph
 try:  # chạy như top-level package (uvicorn app.main:app từ llm-router/)
     from app.config import settings
     from app import observability
-except ImportError:  # agent được import như sub-package của root package
-    from ..app.config import settings
-    from ..app import observability
+except (ImportError, ValueError):  # agent được import như sub-package của root package
+    try:
+        from ..app.config import settings
+        from ..app import observability
+    except (ImportError, ValueError):
+        from llm_router.app.config import settings
+        from llm_router.app import observability
 
 
 class AgentState(TypedDict):

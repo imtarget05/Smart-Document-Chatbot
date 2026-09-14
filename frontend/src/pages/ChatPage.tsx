@@ -40,7 +40,7 @@ export default function ChatPage(_props: ChatPageProps) {
   const [loading, setLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [uploadError, setUploadError] = useState("");
-  const [agentMode, setAgentMode] = useState(false);
+  const [agentMode, setAgentMode] = useState(true);
   // Legal search state (Decision 15)
   const [viewingSource, setViewingSource] = useState<SourceCitation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);

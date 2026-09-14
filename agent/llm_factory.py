@@ -5,7 +5,19 @@ The router talks to Cloudflare Workers AI behind the scenes; this client speaks
 the Ollama wire format to the router endpoint.
 """
 
-from langchain_ollama import ChatOllama
+try:
+    from langchain_ollama import ChatOllama
+except ImportError:
+    try:
+        from langchain_community.chat_models import ChatOllama
+    except ImportError:
+        class ChatOllama:  # type: ignore[no-redef]
+            def __init__(self, *args, **kwargs):
+                self.args = args
+                self.kwargs = kwargs
+
+            def invoke(self, *args, **kwargs):
+                raise RuntimeError("langchain_ollama is not installed")
 
 from settings import settings
 
