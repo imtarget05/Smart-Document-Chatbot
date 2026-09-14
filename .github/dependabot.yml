@@ -14,11 +14,25 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
 
-  # Docker
+  # Docker (Dockerfiles and compose files in /docker)
   - package-ecosystem: "docker"
-    directory: "/"
+    directory: "/docker"
     schedule:
       interval: "weekly"
+
+  # Python dependencies (agent)
+  - package-ecosystem: "pip"
+    directory: "/agent"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Python dependencies (llm-router)
+  - package-ecosystem: "pip"
+    directory: "/llm-router"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

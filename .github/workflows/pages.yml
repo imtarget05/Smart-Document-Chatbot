@@ -25,12 +25,20 @@ jobs:
       - run: npm run build
         working-directory: frontend
         env:
-          VITE_API_URL: https://smart-doc-backend-h4mt.onrender.com/api
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'https://smart-doc-backend.onrender.com/api' }}
+      - name: Ensure Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            npx wrangler pages project create "${{ vars.CLOUDFLARE_PAGES_PROJECT || 'smart-doc-chatbot' }}" --production-branch main || true
+          fi
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: smart-doc-chatbot
+          projectName: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'smart-doc-chatbot' }}
           directory: frontend/dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
