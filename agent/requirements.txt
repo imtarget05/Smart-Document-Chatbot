@@ -10,7 +10,7 @@ python-multipart==0.0.9
 
 # LangGraph & LangChain (Phase 2 - Multi-agent orchestration)
 # NOTE: langgraph 0.2.76 requires langchain-core >= 0.2.43
-langgraph==0.2.76
+langgraph==1.2.11
 langchain==0.2.16
 langchain-core==0.2.43
 langchain-community==0.2.16
