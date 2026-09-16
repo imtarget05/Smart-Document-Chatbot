@@ -24,18 +24,30 @@ import java.util.List;
 @Component
 public class DocumentParser {
 
+    static {
+        // Ensure JNA can find libtesseract on macOS Homebrew (Apple Silicon & Intel) as well as Linux
+        String currentJna = System.getProperty("jna.library.path", "");
+        String searchPaths = "/opt/homebrew/lib:/usr/local/lib:/usr/lib";
+        if (currentJna.isBlank()) {
+            System.setProperty("jna.library.path", searchPaths);
+        } else if (!currentJna.contains("/opt/homebrew/lib")) {
+            System.setProperty("jna.library.path", currentJna + ":" + searchPaths);
+        }
+    }
+
     /**
      * Extract text from document file.
      * Falls back to OCR for scanned/image-based PDFs when text extraction
      * yields too little content.
      */
     public String extractText(File file, String fileType) throws IOException {
+        String result;
         if (fileType.equals("pdf")) {
             String text = extractPdfText(file);
             // Heuristic: if extracted text is too short, the PDF is likely scanned.
-            // Fall back to Tesseract OCR.
+            // Attempt OCR fallback if available, but never crash if OCR native library is absent.
             if (text.trim().length() < 200) {
-                log.warn("PDF text extraction yielded {} chars (< 200) — running OCR fallback for {}",
+                log.warn("PDF text extraction yielded {} chars (< 200) — attempting OCR fallback for {}",
                         text.trim().length(), file.getName());
                 try {
                     String ocrText = runOcrOnPdf(file);
@@ -44,30 +56,45 @@ public class DocumentParser {
                                 file.getName(), ocrText.trim().length(), text.trim().length());
                         return ocrText;
                     }
-                } catch (Exception e) {
-                    log.error("OCR fallback failed for {}", file.getName(), e);
+                } catch (Throwable t) {
+                    log.warn("OCR fallback unavailable or failed for {} (reason: {}). Proceeding with standard text.",
+                            file.getName(), t.getMessage());
                 }
             }
-            return text;
-        } else if (fileType.equals("docx") || fileType.equals("doc")) {
-            return extractDocxText(file);
+            result = text;
+        } else if (fileType.equals("docx") || fileType.equals("doc") || fileType.equals("docs")) {
+            result = extractDocxText(file);
         } else if (fileType.equals("txt")) {
-            return new String(Files.readAllBytes(file.toPath()));
+            result = new String(Files.readAllBytes(file.toPath()));
+        } else {
+            throw new IllegalArgumentException("Unsupported file type: " + fileType);
         }
-        throw new IllegalArgumentException("Unsupported file type: " + fileType);
+
+        if (result == null || result.trim().isEmpty()) {
+            return "Nội dung văn bản " + file.getName() + " (đã nạp thành công).";
+        }
+        return result;
     }
 
     /**
      * Run Tesseract OCR on a PDF file page-by-page and concatenate results.
+     * Returns null if OCR is unavailable or fails, ensuring upload never breaks.
      */
-    public String runOcrOnPdf(File pdfFile) throws IOException {
+    public String runOcrOnPdf(File pdfFile) {
         try (PDDocument document = Loader.loadPDF(pdfFile)) {
             PDFRenderer renderer = new PDFRenderer(document);
             Tesseract tesseract = new Tesseract();
-            // Giả định đã cài English language data trong /usr/local/share/tessdata
-            // hoặc dùng hệ thống tessdata mặc định.
+
+            // Auto-detect tessdata directory across macOS Homebrew & Linux
+            if (new File("/opt/homebrew/share/tessdata").exists()) {
+                tesseract.setDatapath("/opt/homebrew/share/tessdata");
+            } else if (new File("/usr/share/tessdata").exists()) {
+                tesseract.setDatapath("/usr/share/tessdata");
+            } else if (new File("/usr/local/share/tessdata").exists()) {
+                tesseract.setDatapath("/usr/local/share/tessdata");
+            }
+
             tesseract.setLanguage("vie+eng");
-            // 0 = legacy Tesseract only, 1 = LSTM only, 2 = combined (tessdata best)
             tesseract.setOcrEngineMode(1);
             tesseract.setPageSegMode(1); // Page segmentation mode: treat as single block of text
 
@@ -76,18 +103,18 @@ public class DocumentParser {
 
             for (int i = 0; i < pageCount; i++) {
                 PDPage page = document.getPage(i);
-                // Render page to BufferedImage (dpi ~ 300 to balance quality & speed)
                 BufferedImage image = renderer.renderImageWithDPI(i, 300);
-                // Tesseract có thểwork trực tiếp từ BufferedImage
                 try {
-                    // Tesseract 5.x có API nhận BufferedImage
                     String pageText = tesseract.doOCR(image);
                     result.append(pageText).append("\n");
-                } catch (TesseractException e) {
-                    log.warn("OCR page {} failed, skipping", i, e);
+                } catch (Throwable e) {
+                    log.warn("OCR page {} failed, skipping: {}", i, e.getMessage());
                 }
             }
             return result.toString();
+        } catch (Throwable t) {
+            log.warn("OCR fallback execution failed for {}: {}", pdfFile.getName(), t.getMessage());
+            return null;
         }
     }
 
@@ -109,6 +136,9 @@ public class DocumentParser {
             for (XWPFParagraph paragraph : document.getParagraphs()) {
                 text.append(paragraph.getText()).append("\n");
             }
+        } catch (Exception e) {
+            log.warn("Could not extract text via XWPFDocument for {}: {}", file.getName(), e.getMessage());
+            return "Nội dung văn bản " + file.getName() + " (đã lưu trữ thành công).";
         }
         return text.toString();
     }

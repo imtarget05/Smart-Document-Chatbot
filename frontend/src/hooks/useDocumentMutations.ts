@@ -44,6 +44,29 @@ export function useDeleteDocument() {
         const text = await res.text();
         throw new Error(text || "Xóa thất bại");
       }
+      return res.text();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+}
+
+export function useDeleteDocumentsBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch(`${API_BASE_URL}/documents/batch`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", ...(await csrfHeaders()) },
+        credentials: "include",
+        body: JSON.stringify(ids),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Xóa hàng loạt thất bại");
+      }
       return res.json();
     },
     onSuccess: () => {

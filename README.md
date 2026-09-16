@@ -11,7 +11,7 @@
   [![LangGraph](https://img.shields.io/badge/LangGraph-000000?style=flat-square&logo=langchain&logoColor=white)](https://langchain.com/)
   [![Qdrant](https://img.shields.io/badge/Qdrant-FE3C00?style=flat-square&logo=qdrant&logoColor=white)](https://qdrant.tech/)
   [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
-  [![Tests](https://img.shields.io/badge/Tests-549%20passing-success?style=flat-square)](#)
+  [![Tests](https://img.shields.io/badge/Tests-665%20passing-success?style=flat-square)](#)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
   [![CI/CD](https://github.com/imtarget05/Smart-Document-Chatbot/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/Smart-Document-Chatbot/actions)
@@ -31,10 +31,11 @@ Core workflow: `Upload → Retrieve → Verify → Cite → Answer`
 4. **LangGraph Agent Orchestration**: Multi-agent architecture with 9 specialized agents (RAG, CSKH, Research, Report, Engineering Analysis, Ingestion, Action, Comparator) orchestrated by a central agent with state persistence.
 5. **Human-in-the-Loop (HITL)**: Side-effect actions (document ingestion, external API calls) require explicit human approval before execution, preventing unintended mutations.
 6. **Agent-First Routing**: All chat queries default to Agent mode (LangGraph multi-step reasoning) with RAG as fallback. The agent *reasons*, the RAG *retrieves* — each has its lane.
-7. **Enterprise Security Stack**: JWT + CSRF + Rate Limiting (fail-closed) + CORS + SSO/Keycloak + Audit Logging + PII-aware guardrails. `SecretStrengthValidator` enforces strong secrets in staging/production.
+7. **Enterprise Security Stack**: JWT + CSRF + Rate Limiting (sliding-window; **fail-open** on Redis outage — deliberate availability-over-strictness trade-off) + CORS + SSO/Keycloak + Audit Logging + PII-aware guardrails. `SecretStrengthValidator` enforces strong secrets in staging/production.
 8. **Real-Time Streaming**: Server-Sent Events (SSE) for token-by-token streaming with dedicated `SseStreamManager`, deduplication via `ChatDedupService`, and dead-letter queue via `ChatDlqService`.
 9. **A/B Testing Framework**: Built-in experiment framework for comparing model performance, retrieval strategies, and prompt variants with statistical significance tracking.
 10. **Cloud-Native Storage**: Neon PostgreSQL (managed), Qdrant Cloud (vector), Cloudflare R2 (document blobs) — all connected and verified.
+11. **Durable Ingestion Queue (ADR-004)**: the async document workflow runs as a DB-backed job (idempotent enqueue via partial unique index, `FOR UPDATE SKIP LOCKED` claiming, exponential-backoff retry, lease-timeout crash recovery) with a durable dead-letter state replayable by admins — replacing the previous fire-and-forget `CompletableFuture`.
 
 ---
 
@@ -211,7 +212,7 @@ npm run dev
 │   │   ├── repository/         # Spring Data JPA repos
 │   │   ├── config/             # Security, CORS, Rate Limiting, Flyway
 │   │   └── dto/                # Request/Response DTOs
-│   └── src/test/               # 270 JUnit tests (51 test classes)
+│   └── src/test/               # 283 JUnit tests (53 test classes)
 ├── agent/                      # Python Agent Service (FastAPI + LangGraph)
 │   ├── agents/                 # 9 specialized agents (RAG, CSKH, Research, Report...)
 │   ├── graph/                  # LangGraph StateGraph workflow
@@ -245,10 +246,10 @@ npm run dev
 
 ## 🧪 Testing
 
-The platform maintains **549 tests** across all services, runnable entirely offline.
+The platform maintains **665 tests** across all services, runnable entirely offline.
 
 ```bash
-# Backend (270 tests)
+# Backend (285 tests)
 cd backend && mvn test
 
 # Agent Service (199 tests)
@@ -257,7 +258,7 @@ cd agent && APP_ENV=test pytest tests/ -v
 # LLM Router (80 tests)
 cd llm-router && pytest tests/ -v
 
-# Frontend
+# Frontend (101 tests)
 cd frontend && npm test
 ```
 
@@ -271,12 +272,16 @@ cd frontend && npm test
 
 ## ☁️ Deployment
 
-- **Backend & Agent**: Deployed on **Render** via `render.yaml` Blueprint (Docker)
-- **Frontend**: **Cloudflare Pages** (global CDN)
-- **Database**: **Neon PostgreSQL** (serverless, Flyway-managed schema V1–V15)
-- **Vector Store**: **Qdrant Cloud** (managed, AP Southeast-1)
-- **Object Storage**: **Cloudflare R2** (S3-compatible)
+> **Chi tiết từng bước trên hạ tầng 100% miễn phí**: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+
+- **Backend & Agent**: Deployed on **Render** via `render.yaml` Blueprint (Docker, `plan: free`)
+- **Frontend**: **Cloudflare Pages** (global CDN, unlimited bandwidth) — auto-deploy qua `pages.yml`
+- **Database**: **Neon PostgreSQL** (serverless, free vĩnh viễn — không dùng Render free Postgres vì hết hạn sau 30 ngày; Flyway-managed schema V1–V17)
+- **Vector Store**: **Qdrant Cloud** (managed, free cluster 1GB)
+- **Object Storage**: **Cloudflare R2** (S3-compatible, 10GB free)
+- **LLM & Embeddings**: **Cloudflare Workers AI** (10k neurons/day free)
 - **CI/CD**: **GitHub Actions** — automated testing, compliance checks, and deployment
+- **Chi phí tổng: $0/tháng** — mọi component đều trong free tier vĩnh viễn
 
 ---
 

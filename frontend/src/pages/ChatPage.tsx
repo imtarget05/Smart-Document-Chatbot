@@ -16,10 +16,10 @@ import AgentModeToggle from "../components/AgentModeToggle";
 import RenameDialog from "../components/RenameDialog";
 import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
 import VersionHistory from "../components/VersionHistory";
-import { useRenameDocument, useDeleteDocument } from "../hooks/useDocumentMutations";
+import { useRenameDocument, useDeleteDocument, useDeleteDocumentsBatch } from "../hooks/useDocumentMutations";
 
 interface ChatPageProps {
-  // Navigation between views is wired via UserMenu -> window.__appView bridge (set in App).
+  // Navigation between views is wired via window.__appView bridge (set in App).
 }
 
 export default function ChatPage(_props: ChatPageProps) {
@@ -46,12 +46,14 @@ export default function ChatPage(_props: ChatPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [renameDoc, setRenameDoc] = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [batchDeleteIds, setBatchDeleteIds] = useState<number[] | null>(null);
   const [versionDoc, setVersionDoc] = useState<Document | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const renameMutation = useRenameDocument();
   const deleteMutation = useDeleteDocument();
+  const batchDeleteMutation = useDeleteDocumentsBatch();
 
   // Fetch documents
   const { data: documents = [] } = useQuery<Document[]>({
@@ -120,12 +122,14 @@ export default function ChatPage(_props: ChatPageProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const allowedTypes = [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/plain",
-    ];
-    if (!allowedTypes.includes(file.type)) {
+    const fileName = file.name.toLowerCase();
+    const isPdf = fileName.endsWith(".pdf") || file.type === "application/pdf";
+    const isDocx = fileName.endsWith(".docx") || fileName.endsWith(".doc") || fileName.endsWith(".docs") ||
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      file.type === "application/msword";
+    const isTxt = fileName.endsWith(".txt") || file.type === "text/plain";
+
+    if (!isPdf && !isDocx && !isTxt) {
       setUploadError("Only PDF, DOCX, and TXT files are supported");
       return;
     }
@@ -356,13 +360,17 @@ export default function ChatPage(_props: ChatPageProps) {
           onRenameDoc={setRenameDoc}
           onDeleteDoc={setDeleteDoc}
           onViewVersions={setVersionDoc}
+          onDeleteBatchDocs={setBatchDeleteIds}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
           {/* Messages or Welcome */}
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
-              <WelcomeScreen onUploadClick={() => fileInputRef.current?.click()} />
+              <WelcomeScreen
+                onUploadClick={() => fileInputRef.current?.click()}
+                onSelectPrompt={(text) => setInput(text)}
+              />
             ) : (
               <div className="px-6 py-6" role="log" aria-label="Lịch sử trò chuyện" tabIndex={0}>
                 <div className="max-w-3xl mx-auto space-y-6">
@@ -454,7 +462,7 @@ export default function ChatPage(_props: ChatPageProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.docx"
+            accept=".pdf,.txt,.docx,.doc,.docs"
             className="hidden"
             onChange={handleFileUpload}
           />
@@ -491,6 +499,22 @@ export default function ChatPage(_props: ChatPageProps) {
                 setSelectedDoc((prev) => (prev?.id === deleteDoc.id ? null : prev));
               },
             });
+          }
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={batchDeleteIds != null && batchDeleteIds.length > 0}
+        documentName={`${batchDeleteIds?.length ?? 0} tài liệu đã chọn`}
+        onClose={() => setBatchDeleteIds(null)}
+        loading={batchDeleteMutation.isPending}
+        onConfirm={async () => {
+          if (batchDeleteIds && batchDeleteIds.length > 0) {
+            await batchDeleteMutation.mutateAsync(batchDeleteIds);
+            if (selectedDoc && batchDeleteIds.includes(selectedDoc.id)) {
+              setSelectedDoc(null);
+            }
+            setBatchDeleteIds(null);
           }
         }}
       />

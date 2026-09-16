@@ -116,7 +116,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
+        // Origin PATTERNS (not exact origins): supports wildcards such as
+        // https://*.smart-doc-chatbot.pages.dev so Cloudflare Pages preview
+        // deployments (random subdomains) pass CORS preflights too.
+        configuration.setAllowedOriginPatterns(
+                Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Cache-Control", "X-XSRF-TOKEN"));
         configuration.setExposedHeaders(Arrays.asList("Authorization", "X-Request-Id", "X-XSRF-TOKEN"));

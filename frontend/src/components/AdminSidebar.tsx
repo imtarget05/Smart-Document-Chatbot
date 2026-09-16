@@ -15,6 +15,18 @@ export default function AdminSidebar({ activeTab, onTabChange }: AdminSidebarPro
         <h2 className="text-[14px] font-semibold text-onsurface">Admin Dashboard</h2>
         <p className="text-[11px] text-onsurface-muted mt-0.5">Quản trị hệ thống</p>
       </div>
+      <div className="p-2 border-b border-outline">
+        <button
+          onClick={() => {
+            const bridge = (window as unknown as { __appView?: ["chat" | "admin", (v: "chat" | "admin") => void] }).__appView;
+            if (bridge) bridge[1]("chat");
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-material text-[13px] text-google-blue hover:bg-google-blue/10 transition font-medium"
+        >
+          <span>←</span>
+          <span>Quay lại Trò chuyện</span>
+        </button>
+      </div>
       <nav className="flex-1 p-2 space-y-0.5">
         {TABS.map((tab) => (
           <button

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.File;
@@ -41,6 +42,7 @@ class DocumentServiceIdempotencyTest {
     @Mock private com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
     @Mock private com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
     @Mock private com.smartdocchat.service.DocumentWorkflowClient documentWorkflowClient;
+    @Mock private com.smartdocchat.service.DocumentJobService documentJobService;
 
     private DocumentService documentService;
 
@@ -48,7 +50,7 @@ class DocumentServiceIdempotencyTest {
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
                 legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient,
-                new com.smartdocchat.config.IngestionConfig(), documentVersionService);
+                new com.smartdocchat.config.IngestionConfig(), documentVersionService, documentJobService);
     }
 
     private MockMultipartFile txtFile(String name, String content) {
@@ -104,5 +106,55 @@ class DocumentServiceIdempotencyTest {
 
         assertNotNull(saved.getId() == null ? saved : saved);
         verify(storageService).upload(anyString(), any());
+    }
+
+    /**
+     * V17 partial unique index (uq_documents_owner_content_hash): when two
+     * concurrent uploads of identical content both pass the application-level
+     * check, exactly one INSERT wins; the loser must surface the winner's
+     * document instead of failing or duplicating metadata.
+     */
+    @Test
+    void concurrentDuplicateUploadLostRaceReturnsExistingDocument() throws Exception {
+        Document winner = Document.builder().id(42L).fileName("report.txt")
+                .ownerUsername("alice").fileType("txt").contentHash("same-hash").build();
+        when(documentRepository.findByOwnerUsernameAndContentHash(eq("alice"), anyString()))
+                .thenReturn(Optional.empty())          // fast-path check: nobody there yet
+                .thenReturn(Optional.of(winner));      // re-check after losing the insert race
+        stubHappyPath();
+        when(documentRepository.save(any(Document.class)))
+                .thenThrow(new DataIntegrityViolationException("uq_documents_owner_content_hash"));
+
+        Document result = documentService.uploadDocument(txtFile("report.txt", "same content"), "alice");
+
+        assertEquals(42L, result.getId());
+        // The request did upload a blob before losing the race — it must be
+        // cleaned up so no orphan is left behind.
+        verify(storageService).delete(anyString());
+        verify(documentVersionService, never()).createVersion(any(), anyString(), anyString());
+        verify(documentJobService, never()).enqueueWorkflowJob(any(), anyString());
+    }
+
+    /**
+     * V17: replacing a document with content that already exists as another
+     * document of the same owner would violate the unique index — must be
+     * rejected before any side effect (version archival, storage upload).
+     */
+    @Test
+    void replaceWithContentDuplicateOfSiblingDocumentIsRejected() throws Exception {
+        Document current = Document.builder().id(7L).fileName("old.txt")
+                .ownerUsername("alice").fileType("txt").contentHash("old-hash").build();
+        Document sibling = Document.builder().id(99L).fileName("sibling.txt")
+                .ownerUsername("alice").fileType("txt").contentHash("new-hash").build();
+        when(documentRepository.findByOwnerUsernameAndContentHash(eq("alice"), anyString()))
+                .thenReturn(Optional.of(sibling));
+
+        IllegalArgumentException thrown = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> documentService.replaceDocument(current, txtFile("new.txt", "sibling content"), "alice"));
+
+        org.junit.jupiter.api.Assertions.assertTrue(thrown.getMessage().contains("99"));
+        verify(documentVersionService, never()).createVersion(any(), anyString(), anyString());
+        verify(storageService, never()).upload(anyString(), any());
     }
 }

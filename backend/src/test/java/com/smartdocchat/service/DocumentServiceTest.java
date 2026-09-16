@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,7 @@ class DocumentServiceTest {
     @Mock private com.smartdocchat.util.LegalQueryNormalizer legalQueryNormalizer;
     @Mock private com.smartdocchat.util.LegalDateExtractor legalDateExtractor;
     @Mock private com.smartdocchat.service.DocumentWorkflowClient documentWorkflowClient;
+    @Mock private com.smartdocchat.service.DocumentJobService documentJobService;
 
     private DocumentService documentService;
 
@@ -46,7 +48,7 @@ class DocumentServiceTest {
     void setUp() {
         documentService = new DocumentService(documentRepository, documentParser, storageService,
                 legalStructureParser, legalChunkRepository, legalQueryNormalizer, legalDateExtractor, documentWorkflowClient,
-                new com.smartdocchat.config.IngestionConfig(), documentVersionService);
+                new com.smartdocchat.config.IngestionConfig(), documentVersionService, documentJobService);
     }
 
     private Document document(long id, String chunks) {
@@ -194,5 +196,23 @@ class DocumentServiceTest {
         assertEquals(List.of("chunk one", "chunk two"), documentService.getDocumentChunks(1L, "alice"));
         assertTrue(documentService.getDocumentChunks(2L, "alice").isEmpty());
         assertTrue(documentService.getDocumentChunks(3L, "alice").isEmpty());
+    }
+
+    @Test
+    void uploadEnqueuesDurableWorkflowJobInsteadOfInlineCall() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.txt", "text/plain", "Queued workflow content.".getBytes(StandardCharsets.UTF_8));
+        when(storageService.upload(anyString(), any())).thenReturn("uploads/report.txt");
+        when(storageService.download("uploads/report.txt")).thenReturn(new File("report.txt"));
+        when(documentParser.extractText(any(File.class), anyString())).thenReturn("extracted text");
+        when(documentParser.chunkText("extracted text", 500, 100)).thenReturn(List.of("chunk1"));
+        when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Document saved = documentService.uploadDocument(file, "alice");
+
+        // ADR-004: the llm-router workflow is enqueued as a durable job — the
+        // backend must not call the router inline from the upload request path.
+        verify(documentJobService).enqueueWorkflowJob(saved, "report.txt");
+        verify(documentWorkflowClient, never()).runWorkflow(anyString(), anyString());
     }
 }

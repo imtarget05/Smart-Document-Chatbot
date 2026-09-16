@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE_URL } from "../context/apiConfig";
 import type { LegalDocumentDetail, SourceCitation } from "../types";
@@ -39,6 +40,29 @@ export default function DocumentViewer({
     },
     enabled: documentId != null && !!token,
   });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (citedChunkId == null || !data?.chunks) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`legal-chunk-${citedChunkId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [citedChunkId, data]);
 
   const title = data?.title?.trim() || data?.fileName || "Không xác định tên văn bản";
 
@@ -103,9 +127,17 @@ export default function DocumentViewer({
               </div>
             )}
             {data.chunks.length === 0 ? (
-              <p className="text-xs text-onsurface-muted text-center py-8">
-                Tài liệu này chưa có cấu trúc điều/khoản được nhận diện.
-              </p>
+              <div className="py-4 space-y-3">
+                <p className="text-xs text-onsurface-muted text-center">
+                  Tài liệu này chưa có cấu trúc điều/khoản được nhận diện.
+                </p>
+                {citation.content && (
+                  <div className="p-3 rounded-material-lg border border-google-blue bg-google-blue/5 text-left">
+                    <p className="text-[11px] font-medium text-google-blue mb-1">Đoạn trích dẫn liên quan</p>
+                    <p className="text-xs text-onsurface leading-relaxed whitespace-pre-wrap">{citation.content}</p>
+                  </div>
+                )}
+              </div>
             ) : (
               data.chunks.map((chunk) => {
                 const label = [

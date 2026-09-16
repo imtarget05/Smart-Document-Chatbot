@@ -28,7 +28,6 @@ import java.util.regex.Pattern;
 @Component
 public class LegalQueryNormalizer {
 
-    /** Small, explicit, test-covered abbreviation map. Order matters: longest first. */
     private static final List<String[]> ABBREVIATIONS = List.of(
             new String[]{"nsdlđ", "người sử dụng lao động"},
             new String[]{"nsdld", "người sử dụng lao động"},
@@ -38,24 +37,37 @@ public class LegalQueryNormalizer {
             new String[]{"nld", "người lao động"},
             new String[]{"blhs", "bộ luật hình sự"},
             new String[]{"bltt", "bộ luật tố tụng"},
-            new String[]{"blđs", "bộ luật dân sự"}
+            new String[]{"blđs", "bộ luật dân sự"},
+            new String[]{"ndcp", "nghị định chính phủ"},
+            new String[]{"nđcp", "nghị định chính phủ"},
+            new String[]{"nd", "nghị định"},
+            new String[]{"nđ", "nghị định"},
+            new String[]{"tt", "thông tư"},
+            new String[]{"qd", "quyết định"},
+            new String[]{"qđ", "quyết định"},
+            new String[]{"bca", "bộ công an"},
+            new String[]{"atttm", "an toàn thông tin mạng"},
+            new String[]{"attt", "an toàn thông tin"},
+            new String[]{"sla", "cam kết chất lượng dịch vụ"}
     );
 
     private static final Pattern ARTICLE_REF = Pattern.compile(
             "(?i)dieu\\s+(\\d{1,3})(?:\\s*,?\\s*khoan\\s+(\\d{1,3}))?(?:\\s*,?\\s*diem\\s+([a-z]))?");
     /** Document numbers like 45/2019/QH14 — kept as one match unit. */
-    private static final Pattern DOC_NUMBER = Pattern.compile("[\\p{L}\\p{N}]+/\\d{2,4}/[\\p{L}\\p{N}]+");
+    private static final Pattern DOC_NUMBER = Pattern.compile("[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)*/\\d{2,4}/[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)*");
 
     /**
-     * Vietnamese function words (Benchmark 2026-08-26, doc #101/#102): question
-     * frames like "Cách hệ thống xử lý X?" otherwise contribute "cach",
-     * "thong", "xu ly" to the term set — inflating the coverage denominator and
-     * dragging legitimate queries toward MIN_SCORE. Folded forms listed.
+     * Vietnamese grammatical function words. Semantic legal terms like
+     * 'thong' (thông báo), 'su', 'co' (sự cố), 'bien' (biện pháp) are kept.
+     * 'an' is dropped: folded it collides with the English article "an",
+     * letting incidental 2/6 overlaps (e.g. "an"+"bo" in a preamble) pass
+     * MIN_SCORE for irrelevant queries; no benchmark legitimate query relies
+     * on standalone "an" (an-toan queries still match via toan/tin/mang).
      */
     private static final Set<String> VI_STOPWORDS = Set.of(
-            "cach", "thong", "he", "su", "dung", "duoc", "nhu", "the", "nao",
-            "gi", "la", "cua", "va", "cho", "voi", "tu", "trong", "mot", "nhung",
-            "cac", "co", "khong", "den", "khi", "de", "lam", "bien", "phap");
+            "la", "cua", "va", "cho", "voi", "tu", "trong", "mot", "nhung",
+            "cac", "khong", "den", "de", "lam", "nhu", "the", "nao", "gi",
+            "cach", "thong", "he", "dung", "xu", "ly", "an");
 
     public record ArticleRef(String article, String clause, String point) {
     }
@@ -133,7 +145,7 @@ public class LegalQueryNormalizer {
         String folded = fold(expanded);
         Set<String> terms = new LinkedHashSet<>();
         for (String word : folded.split("[^\\p{L}\\p{N}_]+")) {
-            if (!word.isEmpty() && word.length() >= 3 && !VI_STOPWORDS.contains(word)
+            if (!word.isEmpty() && word.length() >= 2 && !VI_STOPWORDS.contains(word)
                     && !"dieu".equals(word) && !"khoan".equals(word)) {
                 terms.add(word);
             }
@@ -161,7 +173,7 @@ public class LegalQueryNormalizer {
         String[] tokens = fold(expanded).split("[^\\p{L}\\p{N}_]+");
         List<String> contentWords = new ArrayList<>();
         for (String w : tokens) {
-            if (!w.isEmpty() && w.length() >= 3 && !VI_STOPWORDS.contains(w)) {
+            if (!w.isEmpty() && w.length() >= 2 && !VI_STOPWORDS.contains(w)) {
                 contentWords.add(w);
             }
         }

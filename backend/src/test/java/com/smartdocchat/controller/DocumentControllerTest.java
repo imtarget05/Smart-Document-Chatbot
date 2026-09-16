@@ -151,4 +151,16 @@ class DocumentControllerTest {
         assertEquals("Document deleted successfully", controller.deleteDocument(1L, principal()).getBody());
         assertEquals(HttpStatus.NOT_FOUND, controller.deleteDocument(5L, principal()).getStatusCode());
     }
+
+    @Test
+    void deleteDocumentsBatchReturnsOk() {
+        controller = new DocumentController(documentService, documentAccessService, auditLogService, documentVersionService);
+        when(documentService.deleteDocumentsBatch(List.of(1L, 2L), "alice", com.smartdocchat.entity.Role.ROLE_ENGINEER))
+                .thenReturn(2);
+
+        var response = controller.deleteDocumentsBatch(List.of(1L, 2L), principal());
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(2, response.getBody().get("deletedCount"));
+    }
 }

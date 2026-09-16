@@ -9,7 +9,7 @@ export default function AuditLogTable() {
   const [usernameFilter, setUsernameFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
 
-  const { data, isLoading, isFetching } = useAuditLogs({
+  const { data, isLoading, isFetching, isError, refetch } = useAuditLogs({
     page,
     size: PAGE_SIZE,
     username: usernameFilter || undefined,
@@ -48,6 +48,18 @@ export default function AuditLogTable() {
       <div className="flex-1 overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-full"><span className="w-8 h-8 border-2 border-google-blue border-t-transparent rounded-full animate-spin" /></div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-6">
+            <span className="text-3xl mb-2">⚠️</span>
+            <p className="text-[14px] text-[#a50e0e] font-medium mb-1">Không thể tải nhật ký hoạt động</p>
+            <p className="text-[12px] text-onsurface-muted mb-4">Vui lòng kiểm tra kết nối tới máy chủ.</p>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 bg-google-blue hover:bg-google-blueDark text-white rounded-material text-[13px] font-medium transition"
+            >
+              Thử lại
+            </button>
+          </div>
         ) : !data || data.logs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-onsurface-muted text-[14px]">Không có dữ liệu.</div>
         ) : (

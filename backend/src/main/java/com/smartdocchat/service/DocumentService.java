@@ -13,6 +13,7 @@ import com.smartdocchat.util.LegalStructureParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -38,12 +39,13 @@ public class DocumentService {
     private final DocumentWorkflowClient documentWorkflowClient;
     private final com.smartdocchat.config.IngestionConfig ingestionConfig;
     private final DocumentVersionService documentVersionService;
+    private final DocumentJobService documentJobService;
 
     /** Matches an explicit "Số: NN/YYYY/AAA" document-number line only. */
     private static final Pattern DOCUMENT_NUMBER =
             Pattern.compile("(?im)^\\s*Số\\s*:\\s*(\\S+/\\d{4}/\\S+)");
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "txt");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "docx", "doc", "docs", "txt");
 
     public Document uploadDocument(MultipartFile file, String ownerUsername) throws IOException {
         String originalFileName = sanitizeFileName(file.getOriginalFilename());
@@ -108,24 +110,34 @@ public class DocumentService {
             document.setIssueDate(dates.issueDate());
             document.setEffectiveDate(dates.effectiveDate());
         }
-        Document saved = documentRepository.save(document);
+        // Durable async workflow (ADR-004): enqueue a persisted job instead of
+        // fire-and-forget CompletableFuture. DocumentJobService claims the job,
+        // calls llm-router, retries with exponential backoff and dead-letters
+        // after max attempts — surviving restarts and router outages.
+        Document saved;
+        try {
+            saved = documentRepository.save(document);
+        } catch (org.springframework.dao.DataIntegrityViolationException lostRace) {
+            // Lost the insert race: a concurrent upload of identical content
+            // won (partial unique index uq_documents_owner_content_hash, V17).
+            // The upload stays idempotent — return the winning row and clean
+            // up the storage blob this request uploaded before the insert.
+            Document winner = documentRepository
+                    .findByOwnerUsernameAndContentHash(ownerUsername, contentHash)
+                    .orElseThrow(() -> lostRace);
+            log.info("Concurrent duplicate upload '{}' for {} — existing document id {} returned",
+                    originalFileName, ownerUsername, winner.getId());
+            try {
+                storageService.delete(document.getFilePath());
+            } catch (Exception cleanupFailure) {
+                log.warn("Could not delete orphaned blob '{}' after lost dedup race",
+                        document.getFilePath(), cleanupFailure);
+            }
+            return winner;
+        }
 
         // Document versioning (V10): record version 1 for the initial upload.
         documentVersionService.createVersion(saved, ownerUsername, "Initial upload");
-
-        // Phase 2 wiring (#7): fire document workflow (classify → extract → map → match)
-        // to llm-router asynchronously. Không block upload response; nếu lỗi, upload
-        // vẫn thành công và workflowResult giữ null (graceful degradation).
-        try {
-            String workflowResult = documentWorkflowClient.runWorkflow(extractedText, originalFileName);
-            if (workflowResult != null) {
-                saved.setWorkflowResult(workflowResult);
-                saved = documentRepository.save(saved);
-                log.info("Document {} workflow completed", saved.getId());
-            }
-        } catch (Exception e) {
-            log.warn("Document workflow post-processing skipped for {}: {}", saved.getId(), e.getMessage());
-        }
 
         if (!legalUnits.isEmpty()) {
             int ordinal = 0;
@@ -143,6 +155,11 @@ public class DocumentService {
             log.info("Document '{}' ingested as structured legal text: {} evidence units",
                     originalFileName, legalUnits.size());
         }
+
+        // Phase 2 wiring (#7): the document workflow (classify → extract → map →
+        // match) runs through the durable ingestion queue (ADR-004) so it never
+        // blocks the upload response, survives restarts and retries on failure.
+        documentJobService.enqueueWorkflowJob(saved, originalFileName);
 
         return saved;
     }
@@ -165,6 +182,17 @@ public class DocumentService {
                     originalFileName, current.getVersionNumber(), current.getId());
             return current;
         }
+
+        // Replacing with content that already exists as a sibling document
+        // would violate uq_documents_owner_content_hash (V17) — reject before
+        // any side effect (version archival, storage upload) happens.
+        documentRepository.findByOwnerUsernameAndContentHash(current.getOwnerUsername(), newHash)
+                .filter(other -> !other.getId().equals(current.getId()))
+                .ifPresent(other -> {
+                    throw new IllegalArgumentException(
+                            "Content is identical to existing document #" + other.getId()
+                                    + " — replacing this document would create a duplicate.");
+                });
 
         // Archive current version before replacing
         documentVersionService.createVersion(current, actorUsername, "Document updated");
@@ -261,11 +289,38 @@ public class DocumentService {
         return getDocumentById(id, callerUsername);
     }
 
+    @Transactional
     public void deleteDocument(Long id, String ownerUsername) {
         Document document = getDocumentById(id, ownerUsername);
         storageService.delete(document.getFilePath());
         legalChunkRepository.deleteByDocumentId(id);
+        documentVersionService.deleteVersionsByDocumentId(id);
         documentRepository.delete(document);
+    }
+
+    @Transactional
+    public int deleteDocumentsBatch(List<Long> ids, String callerUsername, Role role) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (Long id : ids) {
+            try {
+                Document doc = getDocumentByIdForRole(id, callerUsername, role);
+                storageService.delete(doc.getFilePath());
+                legalChunkRepository.deleteByDocumentId(id);
+                documentVersionService.deleteVersionsByDocumentId(id);
+                documentRepository.delete(doc);
+                count++;
+            } catch (Exception e) {
+                log.warn("Failed to delete document id {} in batch: {}", id, e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    public Document saveDocument(Document document) {
+        return documentRepository.save(document);
     }
 
     @SuppressWarnings("unchecked")
@@ -321,10 +376,14 @@ public class DocumentService {
                         match = true;
                     }
                     if (!match && !terms.isEmpty()) {
-                        long hits = terms.stream().filter(haystack::contains).count();
-                        match = hits >= Math.min(terms.size(), 1);
+                        long hits = terms.stream().filter(t -> containsWord(haystack, t)).count();
+                        if (terms.size() == 1) {
+                            match = hits >= 1;
+                        } else {
+                            match = hits >= 2 && hits / (double) terms.size() >= 0.4;
+                        }
                     }
-                    if (!match && haystack.contains(foldedQuery) && !foldedQuery.isBlank()) {
+                    if (!match && !foldedQuery.isBlank() && containsWord(haystack, foldedQuery)) {
                         match = true;
                     }
                     return match ? toDTO(doc) : null;
@@ -342,6 +401,32 @@ public class DocumentService {
 
     private String nullSafe(String s) {
         return s == null ? "" : s;
+    }
+
+    /**
+     * Word-boundary-aware contains: a term only matches when surrounded by
+     * non-letter characters (mirrors RetrievalService.indexOfWord). Prevents
+     * short folded terms ("bo", "pho") matching inside unrelated longer words.
+     */
+    private static boolean containsWord(String text, String term) {
+        return indexOfWord(text, term, 0) >= 0;
+    }
+
+    private static int indexOfWord(String text, String term, int from) {
+        if (text == null || term == null || term.isEmpty()) {
+            return -1;
+        }
+        int idx = text.indexOf(term, from);
+        while (idx >= 0) {
+            boolean leftOk = idx == 0 || !Character.isLetter(text.charAt(idx - 1));
+            int end = idx + term.length();
+            boolean rightOk = end >= text.length() || !Character.isLetter(text.charAt(end));
+            if (leftOk && rightOk) {
+                return idx;
+            }
+            idx = text.indexOf(term, idx + 1);
+        }
+        return -1;
     }
 
     private DocumentDTO toDTO(Document d) {
@@ -416,17 +501,23 @@ public class DocumentService {
                     // Allow upload; DocumentParser will attempt OCR fallback
                 }
             }
-            case "docx" -> {
+            case "docx", "docs" -> {
                 if (header[0] != 0x50 || header[1] != 0x4B || header[2] != 0x03 || header[3] != 0x04) {
                     throw new IllegalArgumentException("File content does not match a valid DOCX (ZIP) archive.");
                 }
             }
+            case "doc" -> {
+                boolean isZip = header[0] == 0x50 && header[1] == 0x4B;
+                boolean isOle = (header[0] & 0xFF) == 0xD0 && (header[1] & 0xFF) == 0xCF;
+                if (!isZip && !isOle) {
+                    log.warn("Non-standard DOC header for '{}', proceeding with best-effort parsing", file.getOriginalFilename());
+                }
+            }
             case "txt" -> {
                 byte[] sample = file.getBytes();
-                int sampleLen = Math.min(sample.length, 4096);
                 try {
                     CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
-                    decoder.decode(java.nio.ByteBuffer.wrap(sample, 0, sampleLen));
+                    decoder.decode(java.nio.ByteBuffer.wrap(sample));
                 } catch (java.nio.charset.CharacterCodingException e) {
                     throw new IllegalArgumentException("TXT file contains invalid UTF-8 characters.");
                 }

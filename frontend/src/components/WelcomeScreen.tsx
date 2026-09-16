@@ -1,5 +1,6 @@
 interface WelcomeScreenProps {
   onUploadClick: () => void;
+  onSelectPrompt?: (text: string) => void;
 }
 
 const SUGGESTED_PROMPTS = [
@@ -9,7 +10,7 @@ const SUGGESTED_PROMPTS = [
   { icon: "📋", text: "Trích xuất các điểm chính" },
 ];
 
-export default function WelcomeScreen({ onUploadClick }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onUploadClick, onSelectPrompt }: WelcomeScreenProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 animate-fade-in">
       {/* Logo + heading */}
@@ -37,7 +38,7 @@ export default function WelcomeScreen({ onUploadClick }: WelcomeScreenProps) {
           {SUGGESTED_PROMPTS.map((prompt, i) => (
             <button
               key={i}
-              onClick={onUploadClick}
+              onClick={() => onSelectPrompt ? onSelectPrompt(prompt.text) : onUploadClick()}
               className="flex items-center gap-3 px-4 py-3.5 rounded-material-lg border border-outline hover:bg-surface-container hover:shadow-material-btn transition-all duration-200 text-left group"
             >
               <span className="text-[20px]">{prompt.icon}</span>

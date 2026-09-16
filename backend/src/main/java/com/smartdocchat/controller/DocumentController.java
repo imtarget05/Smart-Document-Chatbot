@@ -52,7 +52,7 @@ public class DocumentController {
     }
 
     private void audit(String action, String username, String resourceType, String resourceId, String detail) {
-        auditLogService.record(username, action, resourceType, resourceId, null, detail);
+        auditLogService.record(username != null ? username : "system", action, resourceType, resourceId, null, detail);
     }
 
     private void auditDocumentAccess(String action, Long id, String owner, boolean granted) {
@@ -72,11 +72,12 @@ public class DocumentController {
 
     @GetMapping("/{id}/legal-chunks")
     public ResponseEntity<?> getLegalChunks(@PathVariable Long id, Principal principal) {
+        String username = principal.getName();
         try {
-            Document document = documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
+            Document document = documentService.getDocumentByIdForRole(id, username, currentRole());
             List<com.smartdocchat.entity.LegalChunk> chunks =
-                    documentService.getLegalChunksForRole(id, principal.getName(), currentRole());
-            auditDocumentAccess("document.read", id, principal.getName(), true);
+                    documentService.getLegalChunksForRole(id, username, currentRole());
+            auditDocumentAccess("document.read", id, username, true);
             Map<String, Object> body = new java.util.LinkedHashMap<>();
             body.put("documentId", id);
             body.put("fileName", document.getFileName());
@@ -151,8 +152,9 @@ public class DocumentController {
     public ResponseEntity<List<DocumentDTO>> getAllDocuments(Principal principal) {
         List<Document> documents =
                 documentService.getAllDocumentsForRole(principal.getName(), currentRole());
+        Map<Long, Long> versionCounts = documentVersionService.getAllVersionCounts();
         List<DocumentDTO> dtos = documents.stream()
-                .map(this::convertToDTO)
+                .map(doc -> convertToDTO(doc, versionCounts != null ? versionCounts.get(doc.getId()) : null))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
     }
@@ -177,6 +179,23 @@ public class DocumentController {
         }
     }
 
+    @DeleteMapping("/batch")
+    public ResponseEntity<Map<String, Object>> deleteDocumentsBatch(
+            @RequestBody List<Long> ids,
+            Principal principal) {
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "No document IDs provided"));
+        }
+        int deletedCount = documentService.deleteDocumentsBatch(ids, principal.getName(), currentRole());
+        audit("document.batch_delete", principal.getName(), "document",
+                ids.toString(), "count=" + deletedCount);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "deletedCount", deletedCount,
+                "message", "Deleted " + deletedCount + " documents successfully"
+        ));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteDocument(@PathVariable Long id, Principal principal) {
         try {
@@ -192,7 +211,32 @@ public class DocumentController {
         }
     }
 
-    @PutMapping("/{id}")
+    @PatchMapping("/{id}")
+    public ResponseEntity<DocumentDTO> updateDocumentMetadata(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> payload,
+            Principal principal) {
+        Document document = documentService.getDocumentByIdForRole(id, principal.getName(), currentRole());
+        documentAccessService.checkReplace(currentRole(), document.getOwnerUsername(), principal.getName());
+        if (payload.containsKey("title")) {
+            document.setTitle(payload.get("title"));
+        }
+        if (payload.containsKey("documentNumber")) {
+            document.setDocumentNumber(payload.get("documentNumber"));
+        }
+        Document saved = documentService.saveDocument(document);
+        return ResponseEntity.ok(convertToDTO(saved));
+    }
+
+    @PutMapping(value = "/{id}", consumes = "application/json")
+    public ResponseEntity<DocumentDTO> updateDocumentMetadataPut(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> payload,
+            Principal principal) {
+        return updateDocumentMetadata(id, payload, principal);
+    }
+
+    @PutMapping(value = "/{id}", consumes = "multipart/form-data")
     public ResponseEntity<?> replaceDocument(@PathVariable Long id,
                                              @RequestParam("file") MultipartFile file,
                                              Principal principal) {
@@ -243,6 +287,10 @@ public class DocumentController {
     }
 
     private DocumentDTO convertToDTO(Document document) {
+        return convertToDTO(document, documentVersionService.getVersionCount(document.getId()));
+    }
+
+    private DocumentDTO convertToDTO(Document document, Long versionCount) {
         return DocumentDTO.builder()
                 .id(document.getId())
                 .fileName(document.getFileName())
@@ -259,7 +307,7 @@ public class DocumentController {
                 .sourceType(document.getSourceType() != null
                         ? document.getSourceType().name() : null)
                 .versionNumber(document.getVersionNumber())
-                .versionCount(documentVersionService.getVersionCount(document.getId()))
+                .versionCount(versionCount != null ? versionCount : 1L)
                 .workflowResult(document.getWorkflowResult())
                 .build();
     }

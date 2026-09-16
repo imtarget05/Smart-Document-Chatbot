@@ -115,4 +115,12 @@ class LegalDateExtractorTest {
         assertEquals("ngay ban hanh", LegalDateExtractor.fold("Ngay ban hanh"));
         assertEquals("ngay co hieu", LegalDateExtractor.fold("Ngay Co Hieu"));
     }
+
+    @Test
+    void extractsVietnameseStatutoryDate() {
+        LegalDateExtractor.LegalDateMetadata m = extractor.extract(
+                "Hà Nội, ngày ban hành 17 tháng 04 năm 2023\nNghị định này có hiệu lực thi hành từ ngày 01 tháng 07 năm 2023\n");
+        assertEquals(LocalDate.of(2023, 4, 17), m.issueDate());
+        assertEquals(LocalDate.of(2023, 7, 1), m.effectiveDate());
+    }
 }

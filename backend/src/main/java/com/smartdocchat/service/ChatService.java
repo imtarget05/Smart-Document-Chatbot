@@ -179,9 +179,18 @@ public class ChatService {
         try {
             CragResult crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
 
-            String aiResponse = "no_evidence".equals(crag.strategy())
-                    ? messageHandler.buildAbstentionResponse()
-                    : strategyPrefix(crag) + messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
+            String aiResponse;
+            if ("no_evidence".equals(crag.strategy())) {
+                aiResponse = messageHandler.buildAbstentionResponse();
+            } else {
+                String llmRaw = messageHandler.callLLM(buildPromptForStrategy(userMessage, crag));
+                if (isUnavailableOrFailed(llmRaw)) {
+                    log.info("LLM unavailable or failed; falling back to extractive grounded legal synthesis for: {}", userMessage);
+                    aiResponse = synthesizeExtractiveLegalAnswer(userMessage, crag);
+                } else {
+                    aiResponse = strategyPrefix(crag) + llmRaw;
+                }
+            }
             ChatMessage saved = saveResponse(ownerUsername, request, userMessage, aiResponse, buildSourceChunks(crag));
             response = toResponse(ownerUsername, saved, crag);
 
@@ -350,14 +359,23 @@ public class ChatService {
                     emitter.send(SseEmitter.event().name("chunk").data(prefix));
                 }
 
-                messageHandler.streamLLM(prompt, token -> {
-                    aiResponseBuilder.append(token);
+                try {
+                    messageHandler.streamLLM(prompt, token -> {
+                        aiResponseBuilder.append(token);
+                        try {
+                            emitter.send(SseEmitter.event().name("chunk").data(token));
+                        } catch (IOException e) {
+                            throw new IllegalStateException("SSE client disconnected during stream", e);
+                        }
+                    });
+                } catch (Exception streamEx) {
+                    log.warn("LLM stream unavailable ({}), falling back to extractive grounded legal synthesis", streamEx.getMessage());
+                    String extracted = synthesizeExtractiveLegalAnswer(userMessage, crag);
+                    aiResponseBuilder.append(extracted);
                     try {
-                        emitter.send(SseEmitter.event().name("chunk").data(token));
-                    } catch (IOException e) {
-                        throw new IllegalStateException("SSE client disconnected during stream", e);
-                    }
-                });
+                        emitter.send(SseEmitter.event().name("chunk").data(extracted));
+                    } catch (IOException ignored) {}
+                }
 
                 ragMetrics.recordRequest(crag.strategy(), confidenceLabel(crag.confidenceScore()));
                 ragMetrics.recordAnswer(crag.strategy(), buildSourceChunks(crag) != null);
@@ -602,7 +620,7 @@ public class ChatService {
         java.util.Set<String> tokens = new java.util.HashSet<>();
         String folded = normalizer.fold(text.toLowerCase());
         for (String raw : folded.split("[^\\p{L}]+")) {
-            if (raw.length() >= 3 && !STOPWORDS.contains(raw)) {
+            if (raw.length() >= 2 && !STOPWORDS.contains(raw)) {
                 tokens.add(raw);
             }
         }
@@ -696,6 +714,51 @@ public class ChatService {
             sources.add(s);
         }
         return sources;
+    }
+
+    private boolean isUnavailableOrFailed(String response) {
+        if (response == null || response.isBlank()) {
+            return true;
+        }
+        return response.startsWith(LlmClient.UNAVAILABLE_RESPONSE)
+                || response.startsWith(LlmClient.NO_RESPONSE_PLACEHOLDER)
+                || response.contains("language model is temporarily unavailable")
+                || response.contains("could not generate a response");
+    }
+
+    public String synthesizeExtractiveLegalAnswer(String query, CragResult crag) {
+        if (crag.results() == null || crag.results().isEmpty()) {
+            return messageHandler.buildAbstentionResponse();
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Căn cứ vào dữ liệu văn bản quy phạm pháp luật và quy chế doanh nghiệp đã được xác thực trong hệ thống:\n\n");
+        int idx = 1;
+        for (RetrievalService.RetrievalResult r : crag.results()) {
+            sb.append("### ").append(idx++).append(". ");
+            boolean hasLegalRef = false;
+            if (r.article() != null && !r.article().isBlank()) {
+                sb.append("Điều ").append(r.article());
+                hasLegalRef = true;
+            }
+            if (r.clause() != null && !r.clause().isBlank()) {
+                sb.append(" (Khoản ").append(r.clause()).append(")");
+                hasLegalRef = true;
+            }
+            if (r.point() != null && !r.point().isBlank()) {
+                sb.append(" Điểm ").append(r.point());
+                hasLegalRef = true;
+            }
+            if (!hasLegalRef) {
+                sb.append("Căn cứ quy định liên quan");
+            }
+            sb.append(" — *Độ tin cậy: ").append(Math.round(r.score() * 100)).append("%*\n\n");
+
+            String content = r.chunk() != null ? r.chunk().trim() : "";
+            sb.append("> ").append(content.replace("\n", "\n> ")).append("\n\n");
+        }
+        sb.append("────────────────────────────────────────\n");
+        sb.append("📋 *Nội dung được trích xuất trực tiếp từ các văn bản chính thức theo quy chế pháp lý.*");
+        return sb.toString();
     }
 
     private String confidenceLabel(double score) {

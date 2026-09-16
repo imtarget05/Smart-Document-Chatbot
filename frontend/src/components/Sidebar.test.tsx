@@ -50,6 +50,7 @@ function renderSidebar(props: Partial<{
   onRenameDoc: (doc: Document) => void;
   onDeleteDoc: (doc: Document) => void;
   onViewVersions: (doc: Document) => void;
+  onDeleteBatchDocs?: (ids: number[]) => void;
 }> = {}) {
   return render(
     <Sidebar
@@ -65,6 +66,7 @@ function renderSidebar(props: Partial<{
       onRenameDoc={props.onRenameDoc ?? vi.fn()}
       onDeleteDoc={props.onDeleteDoc ?? vi.fn()}
       onViewVersions={props.onViewVersions ?? vi.fn()}
+      onDeleteBatchDocs={props.onDeleteBatchDocs}
     />,
     { wrapper: createWrapper() },
   );
@@ -144,11 +146,11 @@ describe("Sidebar", () => {
     const onSelectDoc = vi.fn();
     renderSidebar({ documents: mockDocuments, selectedDoc: mockDocuments[0], onSelectDoc });
 
-    const selectedButton = screen.getByText("Document One").closest("button");
+    const selectedButton = screen.getByText("Document One").closest('[role="button"]');
     expect(selectedButton).toHaveClass("bg-google-blue/10");
     expect(selectedButton).toHaveClass("text-google-blue");
 
-    const unselectedButton = screen.getByText("Document Two").closest("button");
+    const unselectedButton = screen.getByText("Document Two").closest('[role="button"]');
     expect(unselectedButton).not.toHaveClass("bg-google-blue/10");
     expect(unselectedButton).not.toHaveClass("text-google-blue");
   });
@@ -187,5 +189,42 @@ describe("Sidebar", () => {
     const { container: openContainer } = renderSidebar({ isOpen: true });
     const openSidebar = openContainer.querySelector("aside");
     expect(openSidebar).toHaveClass("translate-x-0");
+  });
+
+  it("toggles multi-select mode and allows selecting all documents", async () => {
+    const user = userEvent.setup();
+    renderSidebar({ documents: mockDocuments });
+
+    // Click "Chọn nhiều"
+    const toggleButton = screen.getByRole("button", { name: "Chọn nhiều" });
+    await user.click(toggleButton);
+
+    expect(screen.getByRole("button", { name: "Hủy chọn" })).toBeInTheDocument();
+    expect(screen.getByText("Chọn tất cả (2)")).toBeInTheDocument();
+
+    // Click "Chọn tất cả"
+    const selectAllCheckbox = screen.getByLabelText("Chọn tất cả tài liệu");
+    await user.click(selectAllCheckbox);
+
+    expect(screen.getByText("Đã chọn: 2")).toBeInTheDocument();
+    expect(screen.getByText("Xóa 2 tài liệu đã chọn")).toBeInTheDocument();
+  });
+
+  it("calls onDeleteBatchDocs when batch delete button is clicked", async () => {
+    const user = userEvent.setup();
+    const onDeleteBatchDocs = vi.fn();
+    renderSidebar({ documents: mockDocuments, onDeleteBatchDocs });
+
+    // Enter multi-select
+    await user.click(screen.getByRole("button", { name: "Chọn nhiều" }));
+    // Select all
+    await user.click(screen.getByLabelText("Chọn tất cả tài liệu"));
+
+    // Click delete batch
+    const deleteButton = screen.getByRole("button", { name: /Xóa 2 tài liệu đã chọn/ });
+    await user.click(deleteButton);
+
+    expect(onDeleteBatchDocs).toHaveBeenCalledTimes(1);
+    expect(onDeleteBatchDocs).toHaveBeenCalledWith([1, 2]);
   });
 });

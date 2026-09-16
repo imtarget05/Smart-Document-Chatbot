@@ -79,7 +79,7 @@ public class RetrievalService {
                     documentId, e.getMessage());
             return List.of();
         }
-        terms.removeIf(t -> t.length() < 3);
+        terms.removeIf(t -> t.length() < 2);
 
         List<LegalChunk> legalChunks;
         List<String> allChunks;
@@ -89,7 +89,7 @@ public class RetrievalService {
                 return scoreAndTopK(legalChunks.stream()
                         .map(c -> new Candidate(c.getContent(), c.getId(),
                                 c.getArticleNumber(), c.getClauseNumber(), c.getPointLabel()))
-                        .toList(), terms, ref, docNumber, topK);
+                        .toList(), terms, query, ref, docNumber, topK);
             }
             allChunks = documentService.getDocumentChunks(documentId, ownerUsername);
         } catch (RuntimeException e) {
@@ -103,7 +103,7 @@ public class RetrievalService {
         return scoreAndTopK(allChunks.stream()
                 .filter(c -> c != null && !c.isBlank())
                 .map(c -> new Candidate(c, null, null, null, null))
-                .toList(), terms, ref, docNumber, topK);
+                .toList(), terms, query, ref, docNumber, topK);
     }
 
     /** Internal candidate: chunk text plus optional structured metadata. */
@@ -119,47 +119,42 @@ public class RetrievalService {
      */
     private static final double MIN_SCORE = 0.3;
 
-    private List<RetrievalResult> scoreAndTopK(List<Candidate> candidates, Set<String> terms,
+    private List<RetrievalResult> scoreAndTopK(List<Candidate> candidates,
+                                               Set<String> terms,
+                                               String query,
                                                java.util.Optional<com.smartdocchat.util.LegalQueryNormalizer.ArticleRef> ref,
-                                               java.util.Optional<String> docNumber, int topK) {
-        if (terms.isEmpty() && ref.isEmpty()) {
+                                               java.util.Optional<String> docNumber,
+                                               int topK) {
+        if (candidates == null || candidates.isEmpty() || (terms.isEmpty() && ref.isEmpty() && docNumber.isEmpty())) {
             return List.of();
         }
-        String foldedDocNumber = docNumber.map(normalizer::foldContent).orElse(null);
-        boolean docHasNumber = foldedDocNumber != null && candidates.stream()
-                .anyMatch(c -> normalizer.foldContent(c.chunk()).contains(foldedDocNumber));
-
-        // Document-level constraint: an explicit document number must exist
-        // somewhere in this document's text; otherwise the document cannot be
-        // the cited source at all. When it does exist, individual chunks are
-        // NOT dropped — legal text references the number once (typically the
-        // preamble) while provisions live elsewhere.
-        if (foldedDocNumber != null && !docHasNumber) {
-            return List.of();
-        }
+        boolean docHasNumber = docNumber.isPresent();
+        String foldedDocNumber = docHasNumber ? normalizer.fold(docNumber.get()) : "";
 
         record Scored(RetrievalResult result, double score) {
         }
         List<Scored> scored = new ArrayList<>();
         for (Candidate c : candidates) {
             double score = scoreChunkFolded(c.chunk(), terms);
+            String foldedChunk = normalizer.foldContent(c.chunk());
+            double bonus = normalizer.phraseBonus(query, foldedChunk, 5, 0.15);
+            score = Math.min(1.0, score + bonus);
 
             // Structured metadata match is authoritative evidence of relevance:
-            // "Điều 35" in the query boosts only chunks whose article_number == 35.
+            // "Điều 35" in the query boosts chunks whose article_number == 35,
+            // while still allowing lexical scoring to distinguish the best clause.
             if (ref.isPresent()) {
                 var r = ref.get();
                 boolean articleMatch = r.article() != null && r.article().equals(c.article());
                 boolean clauseMatch = r.clause() == null || r.clause().equals(c.clause())
-                        || (r.clause() != null && c.clause() == null); // heading unit keeps article context
+                        || (r.clause() != null && c.clause() == null);
                 boolean pointMatch = r.point() == null || r.point().equals(c.point());
                 if (articleMatch && clauseMatch && pointMatch) {
-                    score = Math.max(score, 1.0);
+                    score = Math.max(score, 0.85);
                 }
             }
-            if (docHasNumber && normalizer.foldContent(c.chunk()).contains(foldedDocNumber)) {
-                // The chunk carrying the document number itself is authoritative
-                // evidence for a number-exact query.
-                score = Math.max(score, 1.0);
+            if (docHasNumber && foldedChunk.contains(foldedDocNumber)) {
+                score = Math.max(score, 0.80);
             }
             if (score <= MIN_SCORE) {
                 continue;

@@ -82,4 +82,27 @@ public class DocumentVersionService {
     public Long getVersionCount(Long documentId) {
         return versionRepository.countByDocumentId(documentId);
     }
+
+    /**
+     * Batch fetch version counts for all documents in 1 single query (eliminates N+1).
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, Long> getAllVersionCounts() {
+        List<Object[]> counts = versionRepository.countAllGroupedByDocumentId();
+        java.util.Map<Long, Long> result = new java.util.HashMap<>(counts.size());
+        for (Object[] row : counts) {
+            if (row[0] != null && row[1] != null) {
+                result.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Bulk delete all version records of a document in 1 single query.
+     */
+    @Transactional
+    public void deleteVersionsByDocumentId(Long documentId) {
+        versionRepository.deleteByDocumentId(documentId);
+    }
 }

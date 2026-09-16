@@ -71,10 +71,18 @@ services:
     sync: false
   - key: R2_BUCKET_NAME
     value: smart-doc-documents
+  # DB = Neon Postgres free tier (permanent free, unlike Render free Postgres
+  # which expires after 30 days). Set the three SPRING_DATASOURCE_* vars from
+  # the Neon dashboard connection string (see docs/DEPLOYMENT.md).
   - key: SPRING_DATASOURCE_URL
     sync: false
+  - key: SPRING_DATASOURCE_USERNAME
+    sync: false
+  - key: SPRING_DATASOURCE_PASSWORD
+    sync: false
+  # Flyway owns the schema (V1..V17). Hibernate must never mutate it.
   - key: SPRING_JPA_HIBERNATE_DDL_AUTO
-    value: update
+    value: validate
   - key: QDRANT_HOST
     sync: false
   - key: QDRANT_PORT
@@ -89,8 +97,12 @@ services:
     sync: false
   - key: INTERNAL_SERVICE_TOKEN
     sync: false
+  # Must match the real Cloudflare Pages domain (project name is set by
+  # CLOUDFLARE_PAGES_PROJECT in .github/workflows/pages.yml). Wildcards cover
+  # per-PR preview deployments (random subdomains) — backend now uses
+  # setAllowedOriginPatterns, so wildcard patterns are honored.
   - key: CORS_ALLOWED_ORIGINS
-    value: https://smart-doc-chatbot.pages.dev,https://*.smart-doc-chatbot.pages.dev,https://smart-doc.pages.dev,https://smart-doc-frontend.pages.dev
+    value: https://smart-doc-chatbot.pages.dev,https://*.smart-doc-chatbot.pages.dev
   # Langfuse Cloud (opt-in, zero overhead when keys empty — now ENABLED per contract)
   - key: LANGFUSE_ENABLED
     value: 'true'
@@ -100,13 +112,16 @@ services:
     sync: false
   - key: LANGFUSE_SECRET_KEY
     sync: false
-  # Redis for distributed rate limiting (optional, falls back to in-memory)
+  # Redis for distributed rate limiting (optional, falls back to in-memory).
+  # Upstash free tier requires TLS → set REDIS_SSL_ENABLED=true.
   - key: REDIS_HOST
     sync: false
   - key: REDIS_PORT
     value: '6379'
   - key: REDIS_PASSWORD
     sync: false
+  - key: REDIS_SSL_ENABLED
+    value: 'true'
   # SSO prod (Keycloak/Azure AD/Okta) — disabled until Keycloak public URL ready (local http://localhost:8180 not reachable from Render)
   # Set to 'true' and fill SSO_OIDC_ISSUER_URI with https://smartdoc-keycloak.onrender.com/realms/smartdoc after Keycloak service is healthy
   - key: SSO_OIDC_ENABLED

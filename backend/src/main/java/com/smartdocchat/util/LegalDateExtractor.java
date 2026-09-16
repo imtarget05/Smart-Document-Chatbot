@@ -23,6 +23,10 @@ public class LegalDateExtractor {
     private static final Pattern DATE =
             Pattern.compile("(\\d{1,2})[/.\\-](\\d{1,2})[/.\\-](\\d{4})");
 
+    /** Vietnamese text statutory date: (ngay) 17 thang 04 nam 2023 */
+    private static final Pattern DATE_TEXT =
+            Pattern.compile("(?:\\bngay\\s+)?(\\d{1,2})\\s+thang\\s+(\\d{1,2})\\s+nam\\s+(\\d{4})");
+
     /**
      * Issue-date marker (ngày ban hà nh). Folds to plain ASCII. The phrase is
      * anchored to an issue label, never a bare date.
@@ -57,7 +61,10 @@ public class LegalDateExtractor {
             String line = fold(rawLine);
             Matcher dateMatcher = DATE.matcher(line);
             if (!dateMatcher.find()) {
-                continue; // no date token on this line
+                dateMatcher = DATE_TEXT.matcher(line);
+                if (!dateMatcher.find()) {
+                    continue; // no date token on this line
+                }
             }
             LocalDate parsed = parse(dateMatcher);
             if (parsed == null) {
