@@ -7,6 +7,8 @@ class RoutingContext(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     task_type: str | None = None
+    classification: str = "internal"  # confidential | internal | public
+
     document_count: int = Field(default=0, ge=0)
     page_count: int = Field(default=0, ge=0)
     confidence_score: float | None = Field(default=None, ge=0.0, le=1.0)

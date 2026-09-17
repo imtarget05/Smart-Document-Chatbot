@@ -229,3 +229,24 @@ def test_stream_failure_propagates_as_provider_error(settings):
 
     with pytest.raises(ProviderError):
         asyncio.run(run())
+@pytest.mark.asyncio
+async def test_policy_guard_rejects_confidential_to_cloud(settings):
+    from app.service import LLMRouter
+    from app.models import ChatRequest, RoutingContext, ChatMessage
+    from app.providers import ProviderError
+    
+    class FakeLocal:
+        async def close(self): pass
+        async def is_available(self): return False
+        
+    class FakeCloud:
+        async def close(self): pass
+        
+    router = LLMRouter(settings, providers=FakeCloud(), local=FakeLocal())
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="hi")],
+        routing=RoutingContext(classification="confidential")
+    )
+    
+    with pytest.raises(ProviderError, match="policy_violation"):
+        await router._active(req)

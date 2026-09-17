@@ -8,7 +8,7 @@ from typing import Any
 from .config import Settings
 from .models import ChatRequest, RouteDecision
 from .prompt_compressor import compress_messages
-from .providers import CloudflareProvider, LocalOllamaProvider, ProviderLike
+from .providers import CloudflareProvider, LocalOllamaProvider, ProviderLike, ProviderError
 from .response_cache import ResponseCache
 from .routing import choose_route
 
@@ -48,9 +48,16 @@ class LLMRouter:
         await self.providers.close()
         await self.local.close()
 
-    async def _active(self) -> ProviderLike:
-        if await self.local.is_available():
+    async def _active(self, request: ChatRequest) -> ProviderLike:
+        classification = request.routing.classification
+        local_available = await self.local.is_available()
+        
+        if local_available:
             return self.local
+            
+        if classification == "confidential":
+            raise ProviderError("policy_violation: Cannot route CONFIDENTIAL documents to public Cloudflare Workers AI.")
+            
         return self.providers
 
     def _relabel_decision(
@@ -135,7 +142,7 @@ class LLMRouter:
                 self._log("cache_hit", request_id, decision, **meta)
                 return cached
 
-        active = await self._active()
+        active = await self._active(request)
         if active is self.local:
             decision = self._relabel_decision(decision, active)
         started = time.monotonic()
@@ -163,7 +170,7 @@ class LLMRouter:
         request_id = request.routing.request_id or str(uuid.uuid4())
         request, meta = self._prepare_request(request)
         decision = choose_route(request, self.settings)
-        active = await self._active()
+        active = await self._active(request)
         if active is self.local:
             decision = self._relabel_decision(decision, active)
         started = time.monotonic()
