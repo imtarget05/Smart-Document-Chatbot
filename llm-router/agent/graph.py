@@ -80,8 +80,37 @@ async def execute_tool_node(state: AgentState) -> Dict[str, Any]:
             "tool": tool,
             "detail": "không hỗ trợ dự báo chuỗi cung ứng",
         }
+    elif tool == "doc_search":
+        # doc_search noi API that: reuse document workflow hien co.
+        try:
+            try:  # chay nhu top-level package (tu llm-router/)
+                from agent.document_graph import run_document_workflow
+            except (ImportError, ValueError):
+                try:
+                    from .document_graph import run_document_workflow
+                except (ImportError, ValueError):
+                    from llm_router.agent.document_graph import run_document_workflow
+            params = state.get("tool_params") or {}
+            data = run_document_workflow(
+                text=params.get("text", ""),
+                filename=params.get("filename", ""),
+                counterpart_fields=params.get("counterpart_fields"),
+            )
+            result = {
+                "status": "ok",
+                "source": "document_workflow",
+                "tool": tool,
+                "data": data,
+            }
+        except Exception as exc:
+            result = {
+                "status": "error",
+                "source": "document_workflow",
+                "tool": tool,
+                "detail": str(exc),
+            }
     else:
-        # doc_search / tool chưa nối API — deterministic placeholder
+        # Tool chua noi API — deterministic placeholder
         result = {"status": "mock", "source": "deterministic_fallback", "tool": tool}
     return {"tool_result": result}
 

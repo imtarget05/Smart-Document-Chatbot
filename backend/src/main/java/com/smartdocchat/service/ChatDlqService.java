@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * Service managing Dead Letter Queue (DLQ) for failed SSE streaming chat tasks.
@@ -55,6 +56,39 @@ public class ChatDlqService {
      */
     public Map<String, String> getSnapshot() {
         return getDlqSnapshot();
+    }
+
+    /**
+     * Structured view of a recorded DLQ entry.
+     */
+    public record DlqEntry(String ownerUsername, String sessionId, String query, String error) {
+    }
+
+    /**
+     * Replay a single DLQ entry: removes it from the queue and hands it to
+     * the given retry handler (caller reuses its own executor/service path).
+     *
+     * @param key     DLQ key from {@link #getDlqSnapshot()}
+     * @param handler retry logic, e.g. re-submit the query for processing
+     * @return true when the entry existed and was handed to the handler
+     */
+    public boolean replay(String key, Consumer<DlqEntry> handler) {
+        String raw = dlq.remove(key);
+        if (raw == null) {
+            return false;
+        }
+        handler.accept(parse(key, raw));
+        log.info("DLQ replayed key={}", key);
+        return true;
+    }
+
+    private DlqEntry parse(String key, String raw) {
+        String[] parts = raw.split("\\|", 3);
+        String sessionId = key.contains(":") ? key.substring(0, key.lastIndexOf(':')) : key;
+        if (parts.length < 3) {
+            return new DlqEntry("", sessionId, raw, "");
+        }
+        return new DlqEntry(parts[0], sessionId, parts[1], parts[2]);
     }
 
     public void clear() {

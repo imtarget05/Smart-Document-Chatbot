@@ -129,7 +129,7 @@ graph TD
 
 ```bash
 cp .env.example .env   # Fill in your credentials
-docker compose up --build -d
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
 ### Option 2: Local Development
@@ -229,9 +229,10 @@ npm run dev
 │   └── tests/                  # 80 pytest tests (9 test files)
 ├── frontend/                   # React 18 + TypeScript SPA
 │   └── src/
-│       ├── pages/              # ChatPage, LoginPage, DocumentsPage
+│       ├── pages/              # ChatPage, LoginPage, AdminPage
 │       ├── components/         # Reusable UI components
 │       ├── services/           # API client layer
+│       ├── hooks/              # Data-fetching hooks (chat sessions, documents, audit logs)
 │       └── context/            # Auth context provider
 ├── docker/                     # Dockerfiles & compose configs
 ├── docs/                       # Architecture docs, reports, benchmarks

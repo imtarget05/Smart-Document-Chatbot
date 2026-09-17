@@ -108,6 +108,20 @@ public class ChatService {
         return dlqService.getDlqSnapshot();
     }
 
+    /**
+     * Replay one DLQ entry through the existing SSE streaming path (which
+     * reuses {@code sseStreamManager}'s executor). Returns false when the key
+     * does not exist.
+     */
+    public boolean replayDlq(String key) {
+        return dlqService.replay(key, entry -> processQueryStream(entry.ownerUsername(),
+                com.smartdocchat.dto.ChatRequest.builder()
+                        .sessionId(entry.sessionId())
+                        .message(entry.query())
+                        .mode("rag")
+                        .build()));
+    }
+
     /** Outcome of a Corrective RAG pass over the classic chat endpoints. */
     private record CragResult(
             List<RetrievalService.RetrievalResult> results,
