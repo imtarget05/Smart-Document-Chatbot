@@ -98,6 +98,7 @@ build/
 .nuxt/
 .cache/
 *.log
+*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

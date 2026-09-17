@@ -28,6 +28,7 @@ class LoadTest:
         self.errors = []
         self.token = None
         self.csrf = None
+        self.cookies = None
         self.doc_id = None
 
     async def setup(self):
@@ -40,6 +41,10 @@ class LoadTest:
                     raise RuntimeError(f"CSRF fetch failed ({resp.status}): {text}")
                 data = await resp.json()
                 self.csrf = data["token"]
+                # Keep the cookie jar (XSRF-TOKEN cookie): every user_session()
+                # below opens a NEW ClientSession, which would otherwise lose
+                # the CSRF cookie and get HTTP 403 on every POST.
+                self.cookies = session.cookie_jar.filter_cookies(BASE_URL)
 
             # 1. Attempt to register test user (if database is fresh/unseeded)
             user_payload = {
@@ -104,7 +109,8 @@ class LoadTest:
         session_start = time.time()
         session_results = []
         
-        async with aiohttp.ClientSession() as session:
+        # Reuse the setup cookies (XSRF-TOKEN) so CSRF validation passes.
+        async with aiohttp.ClientSession(cookies=self.cookies) as session:
             headers = {
                 "Authorization": f"Bearer {self.token}",
                 "X-XSRF-TOKEN": self.csrf,
@@ -200,7 +206,12 @@ class LoadTest:
         """Generate test report."""
         if not self.results:
             print("❌ No results collected")
-            return
+            from collections import Counter
+            print("Error status counts:",
+                  dict(Counter(e.get("status") for e in self.errors)))
+            for e in self.errors[:5]:
+                print(f"  sample error: status={e.get('status')} "
+                      f"error={str(e.get('error'))[:300]}")
         
         latencies = [r["latency_ms"] for r in self.results if r["status"] == 200]
         successes = len([r for r in self.results if r["status"] == 200])
@@ -229,7 +240,10 @@ class LoadTest:
         
         if total_time > 0:
             print(f"Throughput: {total_requests/total_time:.2f} req/s")
+        if total_requests > 0:
             print(f"Success Rate: {successes/total_requests*100:.1f}%")
+        else:
+            print("Success Rate: n/a (no requests completed)")
         
         # Save results
         results_file = f"load_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
