@@ -46,14 +46,34 @@ class Settings:
     # Local Ollama (opt-in): when LOCAL_OLLAMA_URL is set (e.g.
     # http://localhost:11434) and the server answers its health probe, chat
     # requests are served by the locally downloaded model (user pulled it via
-    # `ollama pull`, e.g. llama3.2 — Makefile target `local-ollama-pull`).
+    # `ollama pull`, e.g. qwen2.5:3b — Makefile target `local-ollama-pull`).
     # When unset or unreachable the router uses Cloudflare — deliberately
     # WITHOUT mid-request fallback between the two, so behaviour stays
     # predictable (Decision: local-first, no auto-fallback).
+    # M1 Pro 16GB plan (2026-09-18): KEEP qwen2.5:3b as default chat RAG model
+    # (num_ctx 4096, keep_alive 5m) + nomic-embed-text (kept so stored vectors
+    # stay valid). qwen2.5-coder:1.5b loads ONLY for task=code, and
+    # qwen3-embedding:0.6b is the optional Vietnamese embedding upgrade.
+    # OLLAMA_NUM_PARALLEL=1, OLLAMA_MAX_LOADED_MODELS=1 to fit 16GB RAM.
     local_ollama_url: str = os.getenv("LOCAL_OLLAMA_URL", "")
-    local_ollama_model: str = os.getenv("LOCAL_OLLAMA_MODEL", "llama3.2")
+    local_ollama_model: str = os.getenv("LOCAL_OLLAMA_MODEL", "qwen2.5:3b")
+    local_ollama_code_model: str = os.getenv(
+        "LOCAL_OLLAMA_CODE_MODEL", "qwen2.5-coder:1.5b"
+    )
+    local_ollama_embed_model: str = os.getenv(
+        "LOCAL_OLLAMA_EMBED_MODEL", "nomic-embed-text"
+    )
+    local_ollama_num_ctx: int = _int_env("LOCAL_OLLAMA_NUM_CTX", 4096)
+    local_ollama_keep_alive: str = os.getenv("LOCAL_OLLAMA_KEEP_ALIVE", "5m")
     local_ollama_timeout_seconds: float = _float_env(
         "LOCAL_OLLAMA_TIMEOUT_SECONDS", 120.0
+    )
+    max_local_concurrency: int = _int_env("MAX_LOCAL_CONCURRENCY", 2)
+    local_queue_timeout_seconds: float = _float_env(
+        "LOCAL_QUEUE_TIMEOUT_SECONDS", 0.5
+    )
+    local_busy_retry_after_seconds: int = _int_env(
+        "LOCAL_BUSY_RETRY_AFTER_SECONDS", 2
     )
     local_ollama_health_ttl_seconds: float = _float_env(
         "LOCAL_OLLAMA_HEALTH_TTL_SECONDS", 10.0
