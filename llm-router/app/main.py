@@ -173,6 +173,41 @@ def create_app(
             },
         }
 
+    @app.get("/health/live")
+    async def health_live() -> dict[str, Any]:
+        """Liveness: process can serve. No dependency checks."""
+        return {"status": "ok", "service": "llm-router"}
+
+    @app.get("/health/ready")
+    async def health_ready() -> dict[str, Any]:
+        """Readiness: at least one serving path (local or cloudflare) usable.
+
+        Read-only: local probe is the cached non-mutating availability check;
+        cloudflare is a config presence check. Opens no model sessions,
+        writes nothing.
+        """
+        try:
+            local_available = await service.local.is_available()
+        except Exception as exc:
+            local_available = False
+            local_detail = f"not-ready: {exc}"
+        else:
+            local_detail = "ok" if local_available else "not-ready: local unavailable"
+        cloudflare_configured = bool(
+            getattr(service.providers, "configured", False)
+        )
+        checks = {
+            "local": local_detail,
+            "cloudflare": (
+                "ok" if cloudflare_configured else "not-ready: cloudflare unconfigured"
+            ),
+        }
+        ready = bool(local_available or cloudflare_configured)
+        return {
+            "status": "ready" if ready else "not-ready",
+            "checks": checks,
+        }
+
     @app.post("/api/chat", dependencies=[Depends(verify_internal_token)])
     async def chat(request: Request, payload: ChatRequest):
         trace_id = trace_id_from_headers(dict(request.headers))
