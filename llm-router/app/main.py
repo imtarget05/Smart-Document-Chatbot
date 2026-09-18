@@ -124,7 +124,30 @@ def create_app(
         trace_id = trace_id_from_headers(dict(request.headers))
         message = body.get("message", "")
         params = body.get("params")
+        idempotency_key = str(body.get("idempotency_key") or "").strip()
+        _pg_url = ""
+        if idempotency_key:
+            # Plan 03: replayed keys return the existing job without enqueueing twice.
+            import os as _os
+
+            _pg_url = _os.environ.get("DATABASE_URL", "")
+            if _pg_url.startswith(("postgresql://", "postgres://")):
+                import psycopg
+
+                from . import db_jobs as _db_jobs
+
+                with psycopg.connect(_pg_url) as _pg_conn:
+                    existing = _db_jobs.find_job_by_idempotency_key(
+                        _pg_conn, idempotency_key
+                    )
+                if existing is not None:
+                    return {"job_id": existing, "status": "queued", "replay": True}
         job_id = await jobs.create_job("agent_invoke", {"message": message})
+        if idempotency_key and _pg_url.startswith(("postgresql://", "postgres://")):
+            with psycopg.connect(_pg_url) as _pg_conn:
+                _db_jobs.record_job_idempotency_key(
+                    _pg_conn, idempotency_key, job_id
+                )
         try:
             from agent.graph import run_agent  # type: ignore[attr-defined]
         except ImportError:
