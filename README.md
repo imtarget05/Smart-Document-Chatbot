@@ -276,7 +276,7 @@ cd llm-router && .venv/bin/python -m pytest -q
 cd frontend && npm test
 ```
 
-Tái lập 2026-09-18: `agent/tests` collect 219 tests; chạy kèm `tests/` = 221 (214 passed, 7 failed trong `test_graph_memory.py` khi Postgres local còn chạy nên fallback PG giữ state xuyên test — xem `agent/memory/graph_memory.py:_get_pool`).
+Tái lập 2026-09-18: `agent/tests` collect 219 tests; chạy kèm `tests/` = 221 — **221 passed** (fix: `agent/tests/conftest.py` force in-memory fallback, không chạm Neon staging; trước fix: 214 passed + 7 failed `test_graph_memory.py` do `.env` trỏ Neon thật).
 
 ### Local LLM Benchmark (Apple M1 Pro, 16GB)
 
