@@ -16,7 +16,7 @@ from .observability import (
     update_generation as langfuse_update_generation,
 )
 from .document_ocr import classify_document_type, extract_text
-from .providers import CloudflareProvider, ProviderError
+from .providers import CloudflareProvider, LocalProviderBusyError, ProviderError
 from .service import LLMRouter
 
 
@@ -262,6 +262,17 @@ def create_app(
                     output=None, metadata={"error": str(exc)},
                 )
                 langfuse_flush()
+            # DEPLOYMENT CHỐT Local-First: CONFIDENTIAL + local lỗi -> lỗi bảo
+            # mật 403, không lén đẩy cloud. Các lỗi provider khác giữ 503.
+            if str(exc).startswith("policy_violation"):
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
+            # WP3: local busy -> 503 + Retry-After để client backoff.
+            if isinstance(exc, LocalProviderBusyError):
+                raise HTTPException(
+                    status_code=503,
+                    detail="local busy, retry",
+                    headers={"Retry-After": "2"},
+                ) from exc
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/api/embeddings", dependencies=[Depends(verify_internal_token)])

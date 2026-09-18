@@ -17,7 +17,7 @@ from itertools import product
 
 logger = logging.getLogger(__name__)
 
-from agent.mlops.tracker import log_retrieval_experiment, MLFLOW_AVAILABLE
+from mlops.tracker import log_retrieval_experiment, MLFLOW_AVAILABLE
 
 DEFAULT_CHUNK_SIZES = [256, 512, 1024]
 DEFAULT_TOP_KS = [3, 5, 10]
@@ -259,7 +259,7 @@ class RetrievalTuner:
                 }
 
                 if MLFLOW_AVAILABLE:
-                    from agent.mlops.tracker import log_eval_run
+                    from mlops.tracker import log_eval_run
                     log_eval_run(
                         metrics={"reranker_improvement": hash_val * 0.15},
                         params={"reranker_model": model_name, "top_k": top_k},

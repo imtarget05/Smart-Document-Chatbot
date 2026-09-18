@@ -49,21 +49,44 @@ async def run_improvement(request: Request):
 
 @router.post("/agent/retrain", dependencies=[Depends(state.verify_and_rate_limit)])
 async def run_retrain(request: Request):
-    """Trigger the retrain/re-evaluation pipeline."""
+    """Evaluation gate + training-job submission.
+
+    `check_and_retrain()` remains the evaluation gate that decides whether a
+    submission is allowed. When it allows, this endpoint submits an
+    asynchronous training job instead of treating an evaluation comparison as
+    completed retraining — serving traffic does not change until promotion.
+    """
     try:
         from retrain import check_and_retrain
+        from training_jobs import TrainingJobError, TrainingJobStore, submit_training_job
 
         payload = await request.json()
         base_url = payload.get("base_url", "http://localhost:8080/api")
         token = payload.get("token", "")
         document_id = payload.get("document_id", 1)
         force = payload.get("force", False)
+        dataset_uri = str(payload.get("dataset_uri") or payload.get("dataset_path") or "").strip()
 
         if not token:
             raise HTTPException(status_code=400, detail="token is required")
 
         decision = check_and_retrain(base_url, token, document_id, force)
-        return {"status": "ok", "decision": decision.to_dict()}
+
+        submission = None
+        if decision.should_retrain:
+            try:
+                job = submit_training_job(dataset_uri, store=TrainingJobStore())
+                submission = {"job_id": job.job_id, "status": job.status}
+            except TrainingJobError as exc:
+                logger.error("Training job submission failed: %s", exc)
+                submission = {"error": str(exc)}
+
+        return {
+            "status": "ok",
+            "decision": decision.to_dict(),
+            "training_job": submission,
+            "serving_unchanged": True,
+        }
     except HTTPException:
         raise
     except Exception as exc:

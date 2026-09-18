@@ -27,6 +27,7 @@ from graph.state import AgentState
 from memory.short_term import ShortTermMemory
 from memory.long_term import LongTermMemory
 from memory.context_summarizer import ContextSummarizer
+from memory.context_trim import cap_chunks, trim_messages
 from memory.language_handler import detect_language, get_language_instruction
 from settings import settings
 from tools.qdrant_tool import QdrantHybridSearch
@@ -136,8 +137,10 @@ class RagAgent:
                 "Loaded %d long-term facts for user %s", len(long_term_facts), user_id
             )
 
-        recent_history = self._memory.get_recent(session_id, turns=10)
-        await self._summarizer.compress(session_id, recent_history)
+        recent_history = trim_messages(self._memory.get_recent(session_id, turns=10))
+        # WP2: dùng đúng return của compress (list of {role, content}) —
+        # bản compressed này là history đã sát, không phình prompt.
+        compressed_history = await self._summarizer.compress(session_id, recent_history)
         context_summary = self._summarizer.get_summary(session_id)
         state["context_summary"] = context_summary
 
@@ -155,6 +158,8 @@ class RagAgent:
 
         if chunks:
             chunks = await self._rerank(query, chunks)
+            # WP2: cap top_k=5 × 1200 chars trước khi vào prompt/state.
+            chunks = cap_chunks(chunks, top_k=cfg.get("top_k", TOP_K))
 
         if chunks and max_score >= cfg["confidence_threshold"]:
             answer = await self._generate_answer(

@@ -17,6 +17,8 @@ def infer_task_type(request: ChatRequest) -> str:
         return "summarize"
     if "extract" in text or "trích xuất" in text:
         return "extract"
+    if "code" in text or "```" in text or "viết code" in text or "lập trình" in text:
+        return "code"
     return "qa"
 
 

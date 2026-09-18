@@ -188,6 +188,45 @@ class ModelRegistry:
             logger.info(f"Model promoted: {model_name} v{version} → {stage}")
         return found
 
+    def set_stage(self, model_name: str, version: str, stage: str) -> bool:
+        """Set one version's stage without archiving others (candidate marking)."""
+        versions = self._load_versions(model_name)
+        found = False
+        for v in versions:
+            if v["version"] == version:
+                v["stage"] = stage
+                found = True
+        if found:
+            self._save_versions(model_name, versions)
+        return found
+
+    def ensure_production_baseline(self, model_name: str) -> Optional[ModelVersion]:
+        """Guarantee a serving version exists before a rollout is attempted."""
+        current = self.get_model(model_name, stage="Production")
+        if current is not None:
+            return current
+        candidates = [v for v in self.list_versions(model_name) if v.stage == "Candidate"]
+        if not candidates:
+            return None
+        # Mark the newest candidate as Baseline so rollback has a target.
+        self.set_stage(model_name, candidates[-1].version, "Baseline")
+        return self.get_model(model_name, stage="Baseline")
+
+    def rollback(self, model_name: str, to_version: str) -> bool:
+        """Reversibly return serving traffic to a previously approved version."""
+        versions = self._load_versions(model_name)
+        target = next((v for v in versions if v["version"] == to_version), None)
+        if target is None:
+            return False
+        previous_prod = self.get_model(model_name, stage="Production")
+        if previous_prod is not None and previous_prod.version != to_version:
+            target.setdefault("config", {})
+            target["config"]["rolled_back_from"] = previous_prod.version
+        ok = self.promote_model(model_name, to_version, "Production")
+        if ok:
+            logger.info(f"Rollback: {model_name} serving v{to_version}")
+        return ok
+
     def get_model(
         self, model_name: str, stage: str = "Production"
     ) -> Optional[ModelVersion]:

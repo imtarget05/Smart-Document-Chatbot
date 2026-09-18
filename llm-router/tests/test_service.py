@@ -250,3 +250,28 @@ async def test_policy_guard_rejects_confidential_to_cloud(settings):
     
     with pytest.raises(ProviderError, match="policy_violation"):
         await router._active(req)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("classification", ["confidential", "CONFIDENTIAL", "Confidential", " confidential "])
+async def test_policy_guard_blocks_confidential_case_insensitive(settings, classification):
+    """DEPLOYMENT CHỐT Local-First: mọi biến thể hoa/thường của
+    CONFIDENTIAL + local lỗi đều bị chặn, không lén đẩy cloud."""
+    from app.service import LLMRouter
+    from app.models import ChatRequest, RoutingContext, ChatMessage
+    from app.providers import ProviderError
+
+    class FakeLocal:
+        async def close(self): pass
+        async def is_available(self): return False
+
+    class FakeCloud:
+        async def close(self): pass
+
+    router = LLMRouter(settings, providers=FakeCloud(), local=FakeLocal())
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="hi")],
+        routing=RoutingContext(classification=classification)
+    )
+
+    with pytest.raises(ProviderError, match="policy_violation"):
+        await router._active(req)

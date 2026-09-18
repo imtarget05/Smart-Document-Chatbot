@@ -17,6 +17,8 @@ import pytest
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "asyncio: mark test to run with asyncio")
+    config.addinivalue_line("markers", "integration: marks tests requiring external services (Postgres/Qdrant/LLM)")
+    config.addinivalue_line("markers", "slow: marks tests taking tens of seconds; excluded from fast CI")
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_pyfunc_call(pyfuncitem):

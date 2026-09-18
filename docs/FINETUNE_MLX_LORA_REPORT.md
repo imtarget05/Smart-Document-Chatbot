@@ -1,5 +1,12 @@
 # Fine-tune QLoRA-style 4-bit trên Apple Silicon (MLX LoRA) — qwen3-vi
 
+> ⚠️ **LUỒNG NÀY ĐÃ NGỪNG (archived 2026-09-18).** Artifact MLX (`finetune/adapters/adapters.safetensors`,
+> checkpoint step 100/200, `finetune/Modelfile.qwen3-vi`) đã bị xoá khỏi repo.
+> Luồng hiện hành: **PEFT LoRA trên `Qwen/Qwen2.5-1.5B-Instruct` tại `finetune/adapters/lora-t4/`**
+> (train trên Colab T4 — xem `colab/finetune_lora_T4.ipynb`).
+> Tài liệu dưới đây được **giữ nguyên làm lịch sử** (quy trình + benchmark A/B + bài học),
+> không còn tái hiện được nguyên trạng trong repo.
+
 **Ngày:** 2026-08-26 · **Máy:** Apple M1 Pro 16GB · Toàn bộ pipeline chạy local.
 
 ## Pipeline đã chạy (tái hiện được)

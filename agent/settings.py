@@ -66,6 +66,17 @@ class Settings(BaseSettings):
     llm_embedding_model: str = "@cf/baai/bge-base-en-v1.5"
     llm_temperature: float = 0.3
 
+    # Local Ollama (M1 Pro 16GB plan 2026-09-18): when LOCAL_OLLAMA_URL is set
+    # (e.g. http://localhost:11434) the agent talks directly to the local
+    # models instead of the cloud router — qwen2.5:3b for chat/RAG
+    # (num_ctx 4096, keep_alive 5m), qwen2.5-coder:1.5b for task=code,
+    # nomic-embed-text kept so stored Qdrant vectors stay valid
+    # (qwen3-embedding:0.6b opt-in for Vietnamese, requires re-index).
+    local_ollama_url: str = ""
+    local_ollama_chat_model: str = "qwen2.5:3b"
+    local_ollama_code_model: str = "qwen2.5-coder:1.5b"
+    local_ollama_embed_model: str = "nomic-embed-text"
+
     # Qdrant — NO default api key. Must be set explicitly when Qdrant requires auth.
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333

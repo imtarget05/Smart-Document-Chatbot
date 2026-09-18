@@ -13,7 +13,7 @@ from typing import Any
 
 from app.config import Settings
 from app.models import ChatRequest, RouteDecision, RoutingContext
-from app.providers import LocalOllamaProvider, LocalProviderBusyError
+from app.providers import LocalOllamaProvider, LocalProviderBusyError, ProviderError
 from app.service import LLMRouter
 
 MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
@@ -116,8 +116,8 @@ def test_busy_timeout_raises_LocalProviderBusyError():
     asyncio.run(run())
 
 
-def test_busy_fallback_to_cloudflare_for_nonconfidential():
-    """Local busy + non-CONFIDENTIAL doc -> service falls back to cloudflare."""
+def test_busy_fallback_to_cloudflare_only_for_public():
+    """WP3 chốt lại: LOCAL busy → CHỈ classification PUBLIC được fallback cloud."""
 
     class BusyLocal:
         async def close(self) -> None:
@@ -173,8 +173,112 @@ def test_busy_fallback_to_cloudflare_for_nonconfidential():
     async def run() -> tuple[CloudFake, dict[str, Any]]:
         cloud = CloudFake()
         router = LLMRouter(_settings(), providers=cloud, local=BusyLocal())  # type: ignore[arg-type]
-        return cloud, await router.chat(_request(classification="internal"))
+        return cloud, await router.chat(_request(classification="public"))
 
     cloud, response = asyncio.run(run())
     assert cloud.calls == 1, "expected exactly one cloudflare fallback call"
     assert response["message"]["content"] == "cloud fallback"
+
+
+def test_service_confidential_busy_forbidden():
+    """Local busy + CONFIDENTIAL doc -> policy_violation, cloud NEVER called."""
+
+    class BusyLocal:
+        async def close(self) -> None:
+            pass
+
+        async def is_available(self) -> bool:
+            return True
+
+        async def chat_with_slot(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise LocalProviderBusyError("local busy")
+
+    class CloudMustNotRun:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def close(self) -> None:
+            pass
+
+        async def chat(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            self.calls += 1
+            return {"model": "cloud", "message": {"role": "assistant", "content": "cloud"}, "done": True}
+
+    async def run() -> tuple[int, ProviderError | None]:
+        cloud = CloudMustNotRun()
+        router = LLMRouter(_settings(), providers=cloud, local=BusyLocal())  # type: ignore[arg-type]
+        try:
+            await router.chat(_request(classification="confidential"))
+        except ProviderError as exc:
+            return cloud.calls, exc
+        return cloud.calls, None
+
+    calls, exc = asyncio.run(run())
+    assert calls == 0, "CONFIDENTIAL must never fall back to cloud"
+    assert exc is not None and str(exc).startswith("policy_violation")
+
+
+def test_busy_internal_no_fallback_busy_surfaces():
+    """WP3 chốt lại: LOCAL busy + INTERNAL (không phải PUBLIC) → KHÔNG fallback
+    cloud; LocalProviderBusyError lộ ra ngoài để main map 503 + Retry-After."""
+
+    class BusyLocal:
+        async def close(self) -> None:
+            pass
+
+        async def is_available(self) -> bool:
+            return True
+
+        async def chat_with_slot(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise LocalProviderBusyError("local busy")
+
+    class CloudMustNotRun:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def close(self) -> None:
+            pass
+
+        async def chat(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            self.calls += 1
+            return {"model": "cloud", "message": {"role": "assistant", "content": "cloud"}, "done": True}
+
+    async def run() -> tuple[int, LocalProviderBusyError | None]:
+        cloud = CloudMustNotRun()
+        router = LLMRouter(_settings(), providers=cloud, local=BusyLocal())  # type: ignore[arg-type]
+        try:
+            await router.chat(_request(classification="internal"))
+        except LocalProviderBusyError as exc:
+            return cloud.calls, exc
+        return cloud.calls, None
+
+    calls, exc = asyncio.run(run())
+    assert calls == 0, "INTERNAL busy must NOT fall back to cloud"
+    assert exc is not None, "busy phải lộ ra ngoài để main map 503 + Retry-After"
+
+
+def test_main_busy_maps_503_retry_after():
+    """Busy surfacing past the service (no fallback path) maps to 503 + Retry-After."""
+
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    class AlwaysBusyRouter:
+        async def close(self) -> None:
+            pass
+
+        async def chat(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise LocalProviderBusyError("local busy")
+
+        async def stream_chat(self, *args: Any, **kwargs: Any):  # pragma: no cover
+            raise NotImplementedError
+            yield b""
+
+    app = create_app(_settings(), router=AlwaysBusyRouter())  # type: ignore[arg-type]
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        assert r.status_code == 503
+        assert "retry-after" in {k.lower() for k in r.headers}
+        assert r.headers["retry-after"] == "2"
+

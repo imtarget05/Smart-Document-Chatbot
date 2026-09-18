@@ -27,6 +27,7 @@ from routers import (
     actions_router,
     memory_router,
     admin_router,
+    training_jobs_router,
 )
 
 logging.basicConfig(
@@ -235,6 +236,7 @@ v1_router.include_router(mcp_router)
 v1_router.include_router(actions_router)
 v1_router.include_router(memory_router)
 v1_router.include_router(admin_router)
+v1_router.include_router(training_jobs_router)
 
 app.include_router(v1_router)
 

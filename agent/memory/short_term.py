@@ -6,6 +6,8 @@ Limited to the last N turns to keep context within LLM token limits.
 from collections import defaultdict, deque
 from typing import Any, Dict, List
 
+from .context_trim import SHORT_TERM_ENTRY_CHARS, truncate
+
 
 class ShortTermMemory:
     MAX_TURNS = 20
@@ -16,7 +18,10 @@ class ShortTermMemory:
         )
 
     def add(self, session_id: str, role: str, content: str) -> None:
-        self._store[session_id].append({"role": role, "content": content})
+        # WP2 defensive truncate: entry dài không được phình state.
+        self._store[session_id].append(
+            {"role": role, "content": truncate(content or "", SHORT_TERM_ENTRY_CHARS)}
+        )
 
     def get_recent(self, session_id: str, turns: int = 5) -> List[Dict[str, Any]]:
         history = list(self._store[session_id])

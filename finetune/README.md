@@ -43,10 +43,10 @@ This converts existing eval questions and generates synthetic Vietnamese legal Q
 
 ```bash
 python finetune/lora_trainer.py \
-  --base-model meta-llama/Llama-3.2-1B \
+  --base-model Qwen/Qwen2.5-1.5B-Instruct \
   --train-path finetune/data/train.jsonl \
   --valid-path finetune/data/valid.jsonl \
-  --output-dir finetune/adapters/lora \
+  --output-dir finetune/adapters/lora-t4 \
   --epochs 3 \
   --batch-size 2
 ```
@@ -55,7 +55,7 @@ python finetune/lora_trainer.py \
 
 ```bash
 python finetune/lora_trainer.py \
-  --base-model meta-llama/Llama-3.2-1B \
+  --base-model Qwen/Qwen2.5-1.5B-Instruct \
   --8bit \
   --epochs 3
 ```
@@ -65,14 +65,14 @@ python finetune/lora_trainer.py \
 ```bash
 python finetune/lora_trainer.py \
   --eval-only \
-  --output-dir finetune/adapters/lora
+  --output-dir finetune/adapters/lora-t4
 ```
 
 ### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LORA_BASE_MODEL` | `meta-llama/Llama-3.2-1B` | Base model name |
+| `LORA_BASE_MODEL` | `Qwen/Qwen2.5-1.5B-Instruct` | Base model name (open, không cần duyệt gated repo như dòng Llama) |
 | `LORA_R` | `8` | LoRA rank |
 | `LORA_ALPHA` | `32` | LoRA alpha |
 | `LORA_DROPOUT` | `0.05` | LoRA dropout |
@@ -86,8 +86,8 @@ python finetune/lora_trainer.py \
 from finetune.lora_trainer import LoRATrainer
 
 model, tokenizer = LoRATrainer.load_adapter(
-    base_model="meta-llama/Llama-3.2-1B",
-    adapter_path="finetune/adapters/lora",
+    base_model="Qwen/Qwen2.5-1.5B-Instruct",
+    adapter_path="finetune/adapters/lora-t4",
 )
 
 # Generate response

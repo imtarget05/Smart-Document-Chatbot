@@ -22,7 +22,9 @@ WORKDIR /app
 
 RUN addgroup --system app && adduser --system --uid 10001 --ingroup app app
 COPY --from=builder /opt/venv /opt/venv
-COPY app ./app
+# --chown is required: host files may be 700 (owner-only), which would leave
+# the runtime user unable to read the app package.
+COPY --chown=10001:10001 app ./app
 
 USER 10001
 EXPOSE 8000

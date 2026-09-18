@@ -23,6 +23,9 @@ import datetime as dt
 import json
 import os
 import sys
+from typing import Any
+
+from rag_trace_schema import RAGTrace, TraceObservation
 
 try:
     import requests
@@ -90,6 +93,35 @@ def is_bad(trace: dict) -> tuple[bool, str]:
     return False, ""
 
 
+def export_trace(summary: dict[str, Any], full: dict[str, Any], failure_reason: str) -> dict[str, Any]:
+    """Normalize a Langfuse trace into the canonical classifier wire schema."""
+    metadata = full.get("metadata") or {}
+    query = (full.get("input") or {}).get("query") or summary.get("name") or ""
+    observations = [
+        TraceObservation(
+            name=observation.get("name") or "",
+            type=observation.get("type") or "SPAN",
+            model=observation.get("model"),
+            input=observation.get("input"),
+            output=observation.get("output"),
+            status=observation.get("status"),
+            error=observation.get("error"),
+            metadata=observation.get("metadata") or {},
+        )
+        for observation in (full.get("observations") or [])
+    ]
+    return RAGTrace(
+        trace_id=summary["id"],
+        timestamp=summary.get("timestamp"),
+        failure_reason=failure_reason,
+        strategy=metadata.get("strategy"),
+        confidence=metadata.get("confidence"),
+        document_id=metadata.get("documentId"),
+        query=query,
+        observations=observations,
+    ).to_wire()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"))
@@ -106,21 +138,7 @@ def main() -> None:
         if not ok:
             continue
         full = get_trace(args.host, t["id"])
-        meta = full.get("metadata") or {}
-        question = (full.get("input") or {}).get("query") or t.get("name") or ""
-        bad.append({
-            "trace_id": t["id"],
-            "timestamp": t.get("timestamp"),
-            "failure_reason": reason,
-            "strategy": meta.get("strategy"),
-            "confidence": meta.get("confidence"),
-            "document_id": meta.get("documentId"),
-            "query": question,
-            "observations": [
-                {"name": o.get("name"), "type": o.get("type"), "model": o.get("model")}
-                for o in (full.get("observations") or [])
-            ],
-        })
+        bad.append(export_trace(t, full, reason))
 
     out = {"exported_at": dt.datetime.now().isoformat(), "count": len(bad), "traces": bad}
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

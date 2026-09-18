@@ -21,9 +21,9 @@ fi
 
 # Pull required models if not present
 echo "📦 Checking Ollama models..."
-if ! curl -s http://localhost:11434/api/tags | grep -q "llama3.2"; then
-    echo "   Pulling llama3.2 (this may take a while)..."
-    ollama pull llama3.2
+if ! curl -s http://localhost:11434/api/tags | grep -q "qwen2.5:3b"; then
+    echo "   Pulling qwen2.5:3b (this may take a while)..."
+    ollama pull qwen2.5:3b
 fi
 if ! curl -s http://localhost:11434/api/tags | grep -q "nomic-embed-text"; then
     echo "   Pulling nomic-embed-text..."
@@ -42,7 +42,7 @@ sleep 10
 echo "🧠 Starting LLM Router..."
 cd llm-router
 pip install -r requirements.txt -q
-LOCAL_OLLAMA_URL=http://localhost:11434 LOCAL_OLLAMA_MODEL=llama3.2 \
+LOCAL_OLLAMA_URL=http://localhost:11434 LOCAL_OLLAMA_MODEL=qwen2.5:3b \
     uvicorn main:app --host 0.0.0.0 --port 8000 &
 cd ..
 

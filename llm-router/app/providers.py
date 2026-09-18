@@ -16,6 +16,10 @@ class ProviderError(RuntimeError):
     pass
 
 
+class LocalProviderBusyError(ProviderError):
+    pass
+
+
 class ProviderLike(Protocol):
     """Duck-typed client contract used by LLMRouter."""
 
@@ -247,7 +251,12 @@ class CloudflareProvider:
 class LocalOllamaProvider:
     """Opt-in local provider: talks to a user-run Ollama server (e.g.
     ``LOCAL_OLLAMA_URL=http://localhost:11434`` with a model pulled via
-    ``ollama pull llama3.2`` (LOCAL_OLLAMA_MODEL default).
+    ``ollama pull qwen2.5:3b`` (LOCAL_OLLAMA_MODEL default).
+
+    M1 Pro 16GB plan (2026-09-18): default chat/RAG model is qwen2.5:3b
+    (num_ctx 4096, keep_alive 5m); ``task=code`` requests are served by
+    qwen2.5-coder:1.5b (LOCAL_OLLAMA_CODE_MODEL, loaded on demand only,
+    OLLAMA_NUM_PARALLEL=1 / MAX_LOADED=1).
 
     Contract (Decision: local-first, NO mid-request auto-fallback):
     - when LOCAL_OLLAMA_URL is unset → ``available`` is False and the router
@@ -255,19 +264,23 @@ class LocalOllamaProvider:
     - when set, availability is a cached health probe (TTL
       ``local_ollama_health_ttl_seconds``): if Ollama is not reachable the
       request goes to Cloudflare instead — never half-served by both;
-    - embeddings stay on Cloudflare regardless (local embed models are out of
-      scope; changing the embedding model invalidates stored vectors).
+    - embeddings default to the local embed model (LOCAL_OLLAMA_EMBED_MODEL,
+      default nomic-embed-text so stored vectors stay valid; optional upgrade
+      to qwen3-embedding:0.6b for Vietnamese requires re-index).
 
     Translates the Ollama /api/chat shape to the same Ollama-compatible
     response contract CloudflareProvider emits, so Spring Boot cannot tell
     them apart apart from the reported model name.
     """
 
+    CODE_TASK_TYPES = {"code"}
+
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
         self.settings = settings
         self.client = client or httpx.AsyncClient()
         self._owns_client = client is None
         self._healthy_until = 0.0
+        self._sem = asyncio.Semaphore(settings.max_local_concurrency)
 
     @property
     def enabled(self) -> bool:
@@ -299,32 +312,69 @@ class LocalOllamaProvider:
     async def is_available(self) -> bool:
         return self.enabled and await self._probe_health()
 
-    def _chat_body(self, request: ChatRequest, stream: bool) -> dict[str, Any]:
+    def model_for_task(self, task_type: str | None) -> str:
+        """Task routing: ``code`` → coder model, everything else → chat model."""
+        if (task_type or "").lower() in self.CODE_TASK_TYPES:
+            return self.settings.local_ollama_code_model
+        return self.settings.local_ollama_model
+
+    async def _acquire_slot(self) -> None:
+        try:
+            async with asyncio.timeout(self.settings.local_queue_timeout_seconds):
+                await self._sem.acquire()
+        except TimeoutError as exc:
+            raise LocalProviderBusyError("local_busy") from exc
+
+    async def chat_with_slot(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> dict[str, Any]:
+        await self._acquire_slot()
+        try:
+            return await self.chat(request, decision, request_id)
+        finally:
+            self._sem.release()
+
+    async def stream_chat_with_slot(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> AsyncIterator[bytes]:
+        await self._acquire_slot()
+        try:
+            async for chunk in self.stream_chat(request, decision, request_id):
+                yield chunk
+        finally:
+            self._sem.release()
+
+    def _chat_body(
+        self, request: ChatRequest, stream: bool, model: str | None = None
+    ) -> dict[str, Any]:
         messages = [
             {"role": m.role, "content": m.content}
             for m in request.messages
             if isinstance(m.content, str)
         ]
         body: dict[str, Any] = {
-            "model": self.settings.local_ollama_model,
+            "model": model or self.settings.local_ollama_model,
             "messages": messages,
             "stream": stream,
             "think": False,  # qwen3-style reasoning must never leak into answers
+            "keep_alive": self.settings.local_ollama_keep_alive,
         }
         options = dict(request.options or {})
         options.setdefault("temperature", 0.3)
         options.setdefault("top_p", 0.95)
+        options.setdefault("num_ctx", self.settings.local_ollama_num_ctx)
         body["options"] = options
         return body
 
     async def chat(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> dict[str, Any]:
+        model = self.model_for_task(decision.task_type)
         try:
             async with asyncio.timeout(self.settings.local_ollama_timeout_seconds):
                 response = await self.client.post(
                     f"{self.settings.local_ollama_url.rstrip('/')}/api/chat",
-                    json=self._chat_body(request, stream=False),
+                    json=self._chat_body(request, stream=False, model=model),
                     timeout=self.settings.local_ollama_timeout_seconds,
                 )
                 response.raise_for_status()
@@ -338,17 +388,18 @@ class LocalOllamaProvider:
         if not content.strip():
             raise ProviderError("ollama_empty_response")
         response = _ollama_response(content, decision, request_id)
-        response["model"] = self.settings.local_ollama_model
+        response["model"] = model
         return response
 
     async def stream_chat(
         self, request: ChatRequest, decision: RouteDecision, request_id: str
     ) -> AsyncIterator[bytes]:
+        model = self.model_for_task(decision.task_type)
         try:
             async with self.client.stream(
                 "POST",
                 f"{self.settings.local_ollama_url.rstrip('/')}/api/chat",
-                json=self._chat_body(request, stream=True),
+                json=self._chat_body(request, stream=True, model=model),
                 timeout=self.settings.local_ollama_timeout_seconds,
             ) as response:
                 response.raise_for_status()
@@ -362,7 +413,7 @@ class LocalOllamaProvider:
                         continue
                     token = (chunk.get("message") or {}).get("content") or ""
                     payload = _ollama_response(token, decision, request_id)
-                    payload["model"] = self.settings.local_ollama_model
+                    payload["model"] = model
                     payload["done"] = bool(chunk.get("done"))
                     if payload["done"]:
                         payload["done_reason"] = "stop"
@@ -377,4 +428,52 @@ class LocalOllamaProvider:
         except TimeoutError as exc:
             raise ProviderError("ollama_timeout") from exc
         except httpx.HTTPError as exc:
+            raise ProviderError(f"ollama_error:{type(exc).__name__}") from exc
+
+    async def embeddings(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Ollama-native embeddings via POST /api/embed.
+
+        Supports both single prompt ({'prompt': '...'}) and batch
+        ({'input': [...]}) request shapes, mirroring CloudflareProvider.
+        Default model is LOCAL_OLLAMA_EMBED_MODEL (nomic-embed-text, kept so
+        stored vectors stay valid; qwen3-embedding:0.6b is opt-in for
+        Vietnamese and requires re-index).
+        """
+        if "input" in body:
+            texts: list[str] | str = [str(t) for t in body["input"]]
+        else:
+            texts = str(body.get("prompt", ""))
+        model = str(body.get("model") or self.settings.local_ollama_embed_model)
+        try:
+            async with asyncio.timeout(self.settings.local_ollama_timeout_seconds):
+                if isinstance(texts, str):
+                    response = await self.client.post(
+                        f"{self.settings.local_ollama_url.rstrip('/')}/api/embed",
+                        json={"model": model, "input": texts,
+                              "keep_alive": self.settings.local_ollama_keep_alive},
+                        timeout=self.settings.local_ollama_timeout_seconds,
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                    vecs = payload.get("embeddings") or []
+                    if not vecs:
+                        raise ProviderError("ollama_empty_embedding")
+                    return {"model": model, "embedding": list(vecs[0])}
+                response = await self.client.post(
+                    f"{self.settings.local_ollama_url.rstrip('/')}/api/embed",
+                    json={"model": model, "input": texts,
+                          "keep_alive": self.settings.local_ollama_keep_alive},
+                    timeout=self.settings.local_ollama_timeout_seconds,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                vecs = payload.get("embeddings") or []
+                if not vecs:
+                    raise ProviderError("ollama_empty_embedding")
+                return {"model": model, "embeddings": [list(v) for v in vecs]}
+        except ProviderError:
+            raise
+        except TimeoutError as exc:
+            raise ProviderError("ollama_timeout") from exc
+        except (httpx.HTTPError, ValueError) as exc:
             raise ProviderError(f"ollama_error:{type(exc).__name__}") from exc

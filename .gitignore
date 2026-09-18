@@ -127,6 +127,8 @@ docker-compose.override.yml
 # ═══════════════════════════════════════════════════════════════
 *.tmp
 *.temp
+*.pkl
+*.pkl.tmp-*
 *.bak
 *.orig
 *.log

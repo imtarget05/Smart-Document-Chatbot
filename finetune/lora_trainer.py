@@ -38,12 +38,12 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-DEFAULT_BASE_MODEL = os.getenv("LORA_BASE_MODEL", "meta-llama/Llama-3.2-1B")
+DEFAULT_BASE_MODEL = os.getenv("LORA_BASE_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 DEFAULT_LORA_R = int(os.getenv("LORA_R", "8"))
 DEFAULT_LORA_ALPHA = int(os.getenv("LORA_ALPHA", "32"))
 DEFAULT_LORA_DROPOUT = float(os.getenv("LORA_DROPOUT", "0.05"))
 DEFAULT_LORA_TARGET_MODULES = os.getenv(
-    "LORA_TARGET_MODULES", "q_proj,v_proj,k_proj,o_proj"
+    "LORA_TARGET_MODULES", "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
 ).split(",")
 EVAL_INTERVAL_STEPS = int(os.getenv("LORA_EVAL_STEPS", "50"))
 
@@ -99,10 +99,10 @@ class LoRATrainer:
     Usage::
 
         trainer = LoRATrainer(
-            base_model="meta-llama/Llama-3.2-1B",
+            base_model="Qwen/Qwen2.5-1.5B-Instruct",
             train_path="finetune/data/train.jsonl",
             valid_path="finetune/data/valid.jsonl",
-            output_dir="finetune/adapters/lora",
+            output_dir="finetune/adapters/lora-t4",
         )
         trainer.train(num_train_epochs=3, per_device_train_batch_size=2)
         trainer.save()
@@ -113,7 +113,7 @@ class LoRATrainer:
         base_model: str = DEFAULT_BASE_MODEL,
         train_path: str | Path = "finetune/data/train.jsonl",
         valid_path: str | Path = "finetune/data/valid.jsonl",
-        output_dir: str | Path = "finetune/adapters/lora",
+        output_dir: str | Path = "finetune/adapters/lora-t4",
         lora_r: int = DEFAULT_LORA_R,
         lora_alpha: int = DEFAULT_LORA_ALPHA,
         lora_dropout: float = DEFAULT_LORA_DROPOUT,
@@ -318,7 +318,7 @@ def main():
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
     parser.add_argument("--train-path", default="finetune/data/train.jsonl")
     parser.add_argument("--valid-path", default="finetune/data/valid.jsonl")
-    parser.add_argument("--output-dir", default="finetune/adapters/lora")
+    parser.add_argument("--output-dir", default="finetune/adapters/lora-t4")
     parser.add_argument("--lora-r", type=int, default=DEFAULT_LORA_R)
     parser.add_argument("--lora-alpha", type=int, default=DEFAULT_LORA_ALPHA)
     parser.add_argument("--lora-dropout", type=float, default=DEFAULT_LORA_DROPOUT)

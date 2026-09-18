@@ -4,7 +4,7 @@
 # ============================================
 
 # --- Stage 1: Build ---
-FROM maven:3.9-eclipse-temurin-17-alpine AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 
 WORKDIR /app
 
@@ -21,7 +21,9 @@ COPY backend/src ./src
 RUN mvn clean package -DskipTests -B
 
 # --- Stage 2: Runtime ---
-FROM eclipse-temurin:17-jre-alpine AS runtime
+# NOTE: eclipse-temurin alpine variants were removed from Docker Hub; use the
+# Debian-based 17-jre image and apt-get instead of apk.
+FROM eclipse-temurin:17-jre AS runtime
 
 # Add labels for container metadata
 LABEL maintainer="Smart Doc Chatbot Team"
@@ -29,12 +31,14 @@ LABEL description="Smart Document Chatbot - Spring Boot Backend"
 LABEL version="1.0.0"
 
 # Create non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 WORKDIR /app
 
 # Install curl for health checks + tesseract-ocr for PDF OCR fallback
-RUN apk add --no-cache curl tesseract-ocr tesseract-ocr-data-eng tesseract-ocr-data-vie
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl tesseract-ocr tesseract-ocr-eng tesseract-ocr-vie \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the built JAR from build stage (version-agnostic)
 COPY --from=build /app/target/*.jar app.jar

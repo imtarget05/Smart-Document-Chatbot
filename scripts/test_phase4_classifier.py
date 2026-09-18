@@ -116,13 +116,7 @@ BAD_LLM_FAILURE_TRACE = {
 
 def _classify(**kwargs) -> clf.ClassifiedTrace:
     """Build a ClassifiedTrace with defaults, override selected fields."""
-    base = clf.decode_trace(GOOD_DIRECT_TRACE)
-    base.trace_id = kwargs.pop("trace_id", base.trace_id)
-    base.query = kwargs.pop("query", base.query)
-    base.strategy = kwargs.pop("strategy", base.strategy)
-    base.confidence = kwargs.pop("confidence", base.confidence)
-    base.document_id = kwargs.pop("document_id", base.document_id)
-    base.events = kwargs.pop("events", base.events)
+    base = clf.decode_trace({**GOOD_DIRECT_TRACE, **kwargs})
     cat, reason, sugg, score = clf.classify(base.events, base.strategy, base.confidence)
     base.category = cat
     base.reason = reason
@@ -137,7 +131,7 @@ def _classify(**kwargs) -> clf.ClassifiedTrace:
 
 def test_good_direct_trace_is_classified_ok():
     """A normal direct-path trace should be classified as direct_ok."""
-    t = _classify(trace_id="ok", **GOOD_DIRECT_TRACE)
+    t = _classify(**{**GOOD_DIRECT_TRACE, "trace_id": "ok"})
     assert t.category == "direct_ok"
     assert t.score == 0.0
     assert t.reason.startswith("No failure detected")
@@ -145,7 +139,7 @@ def test_good_direct_trace_is_classified_ok():
 
 def test_no_evidence_strategy_is_retrieval_weak():
     """no_evidence strategy → retrieval_weak."""
-    t = _classify(trace_id="rw1", **BAD_RETRIEVAL_TRACE)
+    t = _classify(**{**BAD_RETRIEVAL_TRACE, "trace_id": "rw1"})
     assert t.category == "retrieval_weak"
     assert t.score >= 0.5
     assert any("no_evidence" in s.lower() or "strategy" in s.lower() for s in t.suggestions)
@@ -153,7 +147,7 @@ def test_no_evidence_strategy_is_retrieval_weak():
 
 def test_low_confidence_is_retrieval_weak():
     """confidence < 0.35 → retrieval_weak."""
-    events = GOOD_DIRECT_TRACE["observations"]
+    events = clf.decode_trace(GOOD_DIRECT_TRACE).events
     cat, reason, _, score = clf.classify(
         events, "direct", 0.22
     )
@@ -163,14 +157,14 @@ def test_low_confidence_is_retrieval_weak():
 
 def test_general_knowledge_is_hallucination():
     """general_knowledge strategy when content exists → hallucination label."""
-    t = _classify(trace_id="hl1", **BAD_HALLUCINATION_TRACE)
+    t = _classify(**{**BAD_HALLUCINATION_TRACE, "trace_id": "hl1"})
     assert t.category == "hallucination"
     assert t.score >= 0.5
 
 
 def test_llm_error_is_wrong_tool():
     """LLM failure (error metadata or status ERROR) → wrong_tool."""
-    t = _classify(trace_id="wt1", **BAD_LLM_FAILURE_TRACE)
+    t = _classify(**{**BAD_LLM_FAILURE_TRACE, "trace_id": "wt1"})
     assert t.category == "wrong_tool"
     assert t.score >= 0.7
     assert "fallback" in t.reason.lower() or "circuit" in t.reason.lower() or "llm" in t.reason.lower()
@@ -179,21 +173,20 @@ def test_llm_error_is_wrong_tool():
 def test_empty_retrieval_output_is_retrieval_weak():
     """Retrieval span with empty output → retrieval_weak."""
     events = [
-        {
-            "name": "retrieve_chunks",
-            "type": "SPAN",
-            "metadata": {"chunkCount": 0},
-            "output": "",
-        },
-        {
-            "name": "generate_answer",
-            "type": "GENERATION",
-            "metadata": {"latencyMs": 900},
-            "output": "Sorry I cannot answer.",
-        },
+        clf.TraceEvent(
+            name="retrieve_chunks",
+            kind="SPAN",
+            metadata={"chunkCount": 0},
+            output="",
+        ),
+        clf.TraceEvent(
+            name="generate_answer",
+            kind="GENERATION",
+            metadata={"latencyMs": 900},
+            output="Sorry I cannot answer.",
+        ),
     ]
-    decoded = [clf.TraceEvent(**{k: v for k, v in ev.items() if k in clf.TraceEvent.__dataclass_fields__}) for ev in events]
-    cat, _, _, score = clf.classify(decoded, "direct", 0.15)
+    cat, _, _, score = clf.classify(events, "direct", 0.15)
     assert cat == "retrieval_weak"
     assert score >= 0.5
 
@@ -315,7 +308,7 @@ def test_cli_empty_input_is_noop(tmp_path):
 
 def test_none_confidence_does_not_blow_up():
     """confidence=None should be handled gracefully."""
-    events = GOOD_DIRECT_TRACE["observations"]
+    events = clf.decode_trace(GOOD_DIRECT_TRACE).events
     cat, _, _, score = clf.classify(events, "direct", None)
     assert cat == "direct_ok"
     assert score == 0.0
@@ -323,7 +316,7 @@ def test_none_confidence_does_not_blow_up():
 
 def test_unknown_strategy_defaults_to_ok_if_confidence_high():
     """strategy='unknown' with high confidence should be direct_ok (no failure)."""
-    events = GOOD_DIRECT_TRACE["observations"]
+    events = clf.decode_trace(GOOD_DIRECT_TRACE).events
     cat, reason, _, score = clf.classify(events, "unknown", 0.85)
     assert cat == "direct_ok"
     assert score == 0.0

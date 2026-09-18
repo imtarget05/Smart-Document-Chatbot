@@ -1,0 +1,18 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Content-Type:
+      - application/json
+    method: POST
+    uri: https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast
+  response:
+    body:
+      string: '{"success": true, "result": {"response": "hello from cassette"}}'
+    headers:
+      Content-Type:
+      - application/json
+    status:
+      code: 200
+      message: OK
+recorded_with: vcrpy

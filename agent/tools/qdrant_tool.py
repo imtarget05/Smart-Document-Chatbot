@@ -19,6 +19,19 @@ Scalability note (issue #16):
 
 import hashlib
 import json
+
+from memory.context_trim import CHUNK_CHARS, truncate
+
+
+def defensive_truncate_chunk(chunk: dict, max_chars: int = CHUNK_CHARS) -> dict:
+    """WP2 defensive truncate: page/payload text cứng đầu từ Qdrant bị capped,
+    chunk gốc không bị mutate."""
+    c2 = dict(chunk)
+    if "text" in c2 and isinstance(c2["text"], str):
+        c2["text"] = truncate(c2["text"], max_chars)
+    if "page_content" in c2 and isinstance(c2["page_content"], str):
+        c2["page_content"] = truncate(c2["page_content"], max_chars)
+    return c2
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -281,15 +294,17 @@ class QdrantHybridSearch:
         for p in points:
             pl = p.get("payload", {})
             results.append(
-                {
-                    "text": pl.get("text", ""),
-                    "document_name": pl.get("document_name", collection_id),
-                    "chunk_index": pl.get("chunk_index", 0),
-                    "source_type": pl.get("source_type", "document"),
-                    "source": pl.get("source", ""),
-                    "external_id": pl.get("external_id", ""),
-                    "score": p.get("score", 0.0),
-                }
+                defensive_truncate_chunk(
+                    {
+                        "text": pl.get("text", ""),
+                        "document_name": pl.get("document_name", collection_id),
+                        "chunk_index": pl.get("chunk_index", 0),
+                        "source_type": pl.get("source_type", "document"),
+                        "source": pl.get("source", ""),
+                        "external_id": pl.get("external_id", ""),
+                        "score": p.get("score", 0.0),
+                    }
+                )
             )
         return results
 

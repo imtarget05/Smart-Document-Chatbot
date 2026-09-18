@@ -135,9 +135,17 @@ docker compose -f docker/docker-compose.yml up --build -d
 ### Option 2: Local Development
 
 ```bash
-# Terminal 1: Pull LLM models & start Ollama
+# Terminal 1: Pull LLM models & start Ollama (M1 Pro 16GB plan, 2026-09-18)
+# KEEP qwen2.5:3b (chat RAG default, num_ctx 4096, keep_alive 5m) +
+# nomic-embed-text (kept so stored vectors stay valid).
 ollama pull qwen2.5:3b
 ollama pull nomic-embed-text
+# Optional (on demand only): code tasks + Vietnamese embeddings
+# make local-ollama-pull-code      # qwen2.5-coder:1.5b (task=code only)
+# make local-ollama-pull-embed-vi  # qwen3-embedding:0.6b (~400MB, requires re-index)
+# Run Ollama with OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1 (16GB RAM).
+# Enable local-first: LOCAL_OLLAMA_URL=http://localhost:11434 (see .env.example
+# for LOCAL_OLLAMA_CODE_MODEL / LOCAL_OLLAMA_EMBED_MODEL / NUM_CTX / KEEP_ALIVE).
 
 # Terminal 2: Backend (Spring Boot)
 cd backend
@@ -245,23 +253,30 @@ npm run dev
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing — Lệnh test chuẩn (P0)
 
-The platform maintains **665 tests** across all services, runnable entirely offline.
+> venv chuẩn: `agent/.venv` tạo từ `agent/requirements.txt` (`python3.11 -m venv agent/.venv && agent/.venv/bin/python -m pip install -r agent/requirements.txt`).
+> marks đã đăng ký trong `pytest.ini` + `agent/tests/conftest.py`: `asyncio`, `integration`, `slow`.
 
 ```bash
+# Agent Service — lệnh chuẩn (tái lập agent/tests + tests/, gồm test_chaos.py)
+agent/.venv/bin/python -m pytest agent/tests tests -q
+# hoặc
+make test-agent
+# fast path (bỏ integration/slow):
+make test-agent-fast  # pytest -m "not integration and not slow"
+
 # Backend (285 tests)
 cd backend && mvn test
 
-# Agent Service (199 tests)
-cd agent && APP_ENV=test pytest tests/ -v
-
-# LLM Router (80 tests)
-cd llm-router && pytest tests/ -v
+# LLM Router (80 tests — MUST dùng llm-router/.venv)
+cd llm-router && .venv/bin/python -m pytest -q
 
 # Frontend (101 tests)
 cd frontend && npm test
 ```
+
+Tái lập 2026-09-18: `agent/tests` collect 219 tests; chạy kèm `tests/` = 221 (214 passed, 7 failed trong `test_graph_memory.py` khi Postgres local còn chạy nên fallback PG giữ state xuyên test — xem `agent/memory/graph_memory.py:_get_pool`).
 
 ### Local LLM Benchmark (Apple M1 Pro, 16GB)
 
@@ -283,6 +298,23 @@ cd frontend && npm test
 - **LLM & Embeddings**: **Cloudflare Workers AI** (10k neurons/day free)
 - **CI/CD**: **GitHub Actions** — automated testing, compliance checks, and deployment
 - **Chi phí tổng: $0/tháng** — mọi component đều trong free tier vĩnh viễn
+
+---
+
+## 🔒 DEPLOYMENT CHỐT — Local-First (Hybrid by Classification)
+
+> Chi tiết: [`docs/DEPLOYMENT_LOCAL_FIRST.md`](docs/DEPLOYMENT_LOCAL_FIRST.md)
+
+- **Training duy nhất**: Colab LLM Fine-tuning (LoRA Llama-3.2/Qwen) —
+  [`colab/finetune_lora_T4.ipynb`](colab/finetune_lora_T4.ipynb). Không train reranker.
+- **Deployment duy nhất**: **LOCAL-FIRST** — Ollama/vLLM (model LoRA đã finetune)
+  + Qdrant local là mặc định. Cloud fallback **CHỈ** cho tài liệu **PUBLIC**.
+- **Reranker**: pretrained `bge-reranker-v2-m3` inference thuần (không finetune).
+
+| Classification | Local OK | Local lỗi → | Ghi chú |
+|:---|:---:|:---|:---|
+| **PUBLIC** | ✅ serve local | ✅ fallback Cloudflare Workers AI | Dữ liệu công khai, được phép ra cloud |
+| **CONFIDENTIAL** | ✅ serve local | ⛔ **403 `policy_violation` — KHÔNG đẩy cloud** | `llm-router/app/service.py::_active` chặn; `main.py` trả 403 |
 
 ---
 

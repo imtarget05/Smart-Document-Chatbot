@@ -10,6 +10,7 @@ from .mcp import router as mcp_router
 from .actions import router as actions_router
 from .memory import router as memory_router
 from .admin import router as admin_router
+from .training_jobs import router as training_jobs_router
 
 __all__ = [
     "health_router",
@@ -20,4 +21,5 @@ __all__ = [
     "actions_router",
     "memory_router",
     "admin_router",
+    "training_jobs_router",
 ]

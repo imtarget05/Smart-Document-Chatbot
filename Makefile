@@ -4,7 +4,7 @@
 # ============================================
 
 .PHONY: help dev dev-up local-infra-up local-infra-down dev-down build up down restart logs \
-        backend-build frontend-build test test-backend test-frontend \
+        backend-build frontend-build test test-agent test-agent-fast test-backend test-frontend \
         clean monitoring db-backup db-restore lint
 
 # Default target
@@ -117,7 +117,13 @@ logs-db: ## Show dev database logs
 # Testing
 # ========================
 
-test: test-backend test-frontend ## Run all tests
+test: test-agent test-backend test-frontend ## Run all tests
+
+test-agent: ## Run Python agent tests (MUST use agent/.venv; reproduces agent/tests + tests/)
+	agent/.venv/bin/python -m pytest agent/tests tests -q
+
+test-agent-fast: ## Run agent tests excluding integration/slow
+	agent/.venv/bin/python -m pytest agent/tests tests -q -m "not integration and not slow"
 
 test-backend: ## Run backend tests
 	cd backend && mvn test -B
@@ -186,9 +192,15 @@ e2e-top-p: ## Localhost end-to-end verification of top_p (mock provider + real r
 local-start: ## Start full local stack with Ollama + Router
 	bash scripts/start_local.sh
 
-local-ollama-pull: ## Pull required Ollama models
-	ollama pull llama3.2
+local-ollama-pull: ## Pull required Ollama models (M1 Pro 16GB plan: qwen2.5:3b + nomic-embed-text)
+	ollama pull qwen2.5:3b
 	ollama pull nomic-embed-text
+
+local-ollama-pull-code: ## Pull optional coder model (loaded on demand for task=code only)
+	ollama pull qwen2.5-coder:1.5b
+
+local-ollama-pull-embed-vi: ## Pull optional Vietnamese embedding model (~400MB, requires re-index)
+	ollama pull qwen3-embedding:0.6b
 
 local-status: ## Check status of local services
 	@echo "Service Status:"

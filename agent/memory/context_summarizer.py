@@ -93,7 +93,11 @@ class ContextSummarizer:
         if summary:
             self._summaries[session_id] = summary
 
-        # Build compressed history
+        # WP2 fix: return shape contract — luôn là list of {role, content} dicts.
+        # Summary rỗng → trả recent turns nguyên vẹn, KHÔNG prepend system rỗng.
+        if not summary:
+            return list(recent_turns)
+
         compressed = [
             {"role": "system", "content": f"[Conversation Summary] {summary}"}
         ]

@@ -8,7 +8,13 @@ from typing import Any
 from .config import Settings
 from .models import ChatRequest, RouteDecision
 from .prompt_compressor import compress_messages
-from .providers import CloudflareProvider, LocalOllamaProvider, ProviderLike, ProviderError
+from .providers import (
+    CloudflareProvider,
+    LocalOllamaProvider,
+    ProviderLike,
+    ProviderError,
+    LocalProviderBusyError,
+)
 from .response_cache import ResponseCache
 from .routing import choose_route
 
@@ -49,12 +55,15 @@ class LLMRouter:
         await self.local.close()
 
     async def _active(self, request: ChatRequest) -> ProviderLike:
-        classification = request.routing.classification
+        # Hybrid-by-Classification (DEPLOYMENT CHỐT Local-First): normalize
+        # classification so "CONFIDENTIAL"/"Confidential" cannot bypass the
+        # cloud block and leak to public Cloudflare Workers AI.
+        classification = (request.routing.classification or "").strip().lower()
         local_available = await self.local.is_available()
-        
+
         if local_available:
             return self.local
-            
+
         if classification == "confidential":
             raise ProviderError("policy_violation: Cannot route CONFIDENTIAL documents to public Cloudflare Workers AI.")
             
@@ -72,9 +81,15 @@ class LLMRouter:
         request it never touched.
         """
         if active is self.local:
+            route = getattr(self.local, "model_for_task", None)
+            model = (
+                route(decision.task_type)
+                if callable(route)
+                else self.settings.local_ollama_model
+            )
             return RouteDecision(
                 provider="local_ollama",
-                model=self.settings.local_ollama_model,
+                model=model,
                 reason=decision.reason,
                 task_type=decision.task_type,
             )
@@ -149,7 +164,34 @@ class LLMRouter:
         self._log("route_decision", request_id, decision,
                   backend="local_ollama" if active is self.local else "cloudflare",
                   **meta)
-        response = await active.chat(request, decision, request_id)
+        try:
+            # Local provider holds a concurrency slot (Semaphore max 2) for the
+            # whole call; providers without slot semantics keep plain chat().
+            slot_call = getattr(active, "chat_with_slot", None)
+            if slot_call is not None:
+                response = await slot_call(request, decision, request_id)
+            else:
+                response = await active.chat(request, decision, request_id)
+        except LocalProviderBusyError as exc:
+            # WP3 chốt lại: local busy → CHỈ classification PUBLIC được fallback
+            # cloud (đúng 1 lần, không retry loop). CONFIDENTIAL → policy_violation
+            # (403). Các classification khác (internal/unknown/empty) → busy lộ ra
+            # ngoài để main map 503 + Retry-After, không lén đẩy cloud.
+            if active is self.local:
+                classification = (request.routing.classification or "").strip().lower()
+                if classification == "confidential":
+                    raise ProviderError(
+                        "policy_violation: Cannot route CONFIDENTIAL documents to public Cloudflare Workers AI."
+                    ) from exc
+                if classification == "public":
+                    active = self.providers
+                    decision = self._relabel_decision(decision, active)
+                    self._log("fallback_on_busy", request_id, decision, **meta)
+                    response = await active.chat(request, decision, request_id)
+                else:
+                    raise
+            else:
+                raise
 
         # Cache the response.
         if self.cache.enabled and not request.stream:
@@ -177,7 +219,13 @@ class LLMRouter:
         self._log("route_decision", request_id, decision,
                   backend="local_ollama" if active is self.local else "cloudflare",
                   **meta)
-        async for chunk in active.stream_chat(request, decision, request_id):
+        slot_stream = getattr(active, "stream_chat_with_slot", None)
+        if slot_stream is not None:
+            # Hold a local concurrency slot (Semaphore max 2) for the whole stream.
+            stream = slot_stream(request, decision, request_id)
+        else:
+            stream = active.stream_chat(request, decision, request_id)
+        async for chunk in stream:
             yield chunk
         self._log(
             "route_complete",

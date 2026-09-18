@@ -26,7 +26,7 @@ import os
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 try:
     import yaml  # optional: nice formatting for report
@@ -120,10 +120,11 @@ def classify(events: list[TraceEvent], strategy: str, confidence: float | None) 
         e.metadata.get("chunkCount", 1) == 0 for e in retrieval
     )
 
-    # Also tag when strategy explicitly says no_evidence / general_knowledge
-    abstain_strategies = {"no_evidence", "general_knowledge"}
+    # Only an explicit abstention belongs to the retrieval-weak category.
+    # general_knowledge is classified below as a hallucination when content was retrieved.
+    abstain_strategies = {"no_evidence"}
 
-    if low_confidence or empty_retrieval or strategy in abstain_strategies:
+    if low_confidence or empty_retrieval or zero_chunk or strategy in abstain_strategies:
         reason_parts = []
         if strategy in abstain_strategies:
             reason_parts.append(f"strategy={strategy}")
@@ -131,6 +132,8 @@ def classify(events: list[TraceEvent], strategy: str, confidence: float | None) 
             reason_parts.append(f"confidence={confidence}")
         if empty_retrieval:
             reason_parts.append("retrieval returned empty context")
+        if zero_chunk:
+            reason_parts.append("retrieval returned zero chunks")
         reason = "; ".join(reason_parts) or "retrieval did not provide grounded context"
         cat = "retrieval_weak"
         score = 0.5 if low_confidence else 0.7
@@ -166,16 +169,17 @@ def classify(events: list[TraceEvent], strategy: str, confidence: float | None) 
 # Helpers to decode Langfuse observation dicts into TraceEvent
 # ------------------------------------------------------------------
 
-def decode_trace(trace: dict[str, Any]) -> ClassifiedTrace:
+def decode_trace(trace: Mapping[str, Any]) -> ClassifiedTrace:
     tid = trace.get("trace_id") or trace.get("id") or "unknown"
     query = trace.get("query") or (trace.get("input") or {}).get("query") or ""
-    strategy = (trace.get("metadata") or {}).get("strategy") or "unknown"
-    confidence = (trace.get("metadata") or {}).get("confidence")
+    metadata = trace.get("metadata") or {}
+    strategy = trace.get("strategy") or metadata.get("strategy") or "unknown"
+    confidence = trace.get("confidence", metadata.get("confidence"))
     try:
         confidence = float(confidence) if confidence is not None else None
     except (ValueError, TypeError):
         confidence = None
-    doc_id = (trace.get("metadata") or {}).get("documentId")
+    doc_id = trace.get("document_id", metadata.get("documentId"))
     try:
         doc_id = int(doc_id) if doc_id is not None else None
     except (ValueError, TypeError):
@@ -203,8 +207,7 @@ def decode_trace(trace: dict[str, Any]) -> ClassifiedTrace:
             except (ValueError, TypeError):
                 pass
         evt.metadata = {k: v for k, v in meta.items() if k != "error"}
-        if "error" in meta:
-            evt.error = meta["error"]
+        evt.error = obs.get("error") or meta.get("error")
         evs.append(evt)
 
     return ClassifiedTrace(
@@ -245,7 +248,7 @@ def build_report(classified: list[ClassifiedTrace]) -> dict[str, Any]:
         cat_traces = [t for t in classified if t.category == cat]
         cat_stats[cat] = {
             "count": len(cat_traces),
-            "pct": round(len(cat_traces) / total * 100, 2) if total else 0,
+            "pct": round(len(cat_traces) / total * 100, 2) if total else 0.0,
             "examples": [t.query for t in cat_traces[:5]],
             "suggestions": sorted({s for t in cat_traces for s in t.suggestions}),
             "strategies": dict(Counter(t.strategy for t in cat_traces)),
@@ -255,7 +258,7 @@ def build_report(classified: list[ClassifiedTrace]) -> dict[str, Any]:
         "report_at": __import__("datetime").datetime.now().isoformat(),
         "total_traces": total,
         "by_category": {cat: by_cat.get(cat, 0) for cat in CATEGORIES},
-        "by_category_pct": {cat: round(by_cat.get(cat, 0) / total * 100, 2) if total else 0 for cat in CATEGORIES},
+        "by_category_pct": {cat: round(by_cat.get(cat, 0) / total * 100, 2) if total else 0.0 for cat in CATEGORIES},
         "reasons": dict(reasons.most_common()),
         "strategy_distribution": dict(strategies),
         "per_category": cat_stats,
@@ -309,7 +312,6 @@ def main() -> None:
 
     if not traces:
         print("No traces found in input file", file=sys.stderr)
-        sys.exit(0)
 
     classified: list[ClassifiedTrace] = []
     for trace in traces:

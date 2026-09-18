@@ -52,7 +52,9 @@ services:
       - ../.env
     environment:
       # Database — Neon Serverless PostgreSQL (free 512MB)
-      SPRING_DATASOURCE_URL: ${NEON_DATABASE_URL}
+      # pgjdbc does NOT parse user:password@ in JDBC URLs; NEON_JDBC_URL is a
+      # derived jdbc URL with credentials in query params (see eval/derive_env.py).
+      SPRING_DATASOURCE_URL: ${NEON_JDBC_URL}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-validate}
       # Qdrant Cloud (free 1GB)
       QDRANT_HOST: ${QDRANT_HOST}
@@ -281,9 +283,14 @@ services:
       SMARTDOC_INGEST_OWNER: ${AIRFLOW_INGEST_OWNER:-airflow-bot}
       SMARTDOC_INGEST_USERNAME: ${AIRFLOW_INGEST_USERNAME:-airflow-bot}
       SMARTDOC_INGEST_PASSWORD: ${AIRFLOW_INGEST_PASSWORD:-}
+      # Retrain DAG contract: project root + training runner + agent service.
+      FINETUNE_ROOT: /opt/smartdoc
+      AGENT_BASE_URL: http://agent:9000
+      TRAINING_RUNNER_URL: ${TRAINING_RUNNER_URL:-}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_inbound:/opt/airflow/inbound
+      - ..:/opt/smartdoc:ro
     ports:
       - "${AIRFLOW_PORT:-8081}:8080"
     depends_on:
@@ -313,9 +320,14 @@ services:
       SMARTDOC_INGEST_OWNER: ${AIRFLOW_INGEST_OWNER:-airflow-bot}
       SMARTDOC_INGEST_USERNAME: ${AIRFLOW_INGEST_USERNAME:-airflow-bot}
       SMARTDOC_INGEST_PASSWORD: ${AIRFLOW_INGEST_PASSWORD:-}
+      # Retrain DAG contract: project root + training runner + agent service.
+      FINETUNE_ROOT: /opt/smartdoc
+      AGENT_BASE_URL: http://agent:9000
+      TRAINING_RUNNER_URL: ${TRAINING_RUNNER_URL:-}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_inbound:/opt/airflow/inbound
+      - ..:/opt/smartdoc:ro
     depends_on:
       airflow-postgres:
         condition: service_healthy
