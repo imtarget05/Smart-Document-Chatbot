@@ -105,9 +105,10 @@ class FlywayPostgresIntegrationTest {
         assertTrue(migrationCount != null && migrationCount >= 10,
                 "expected >=10 Flyway migrations to have run, got " + migrationCount);
 
-        // Core tables from V1/V2/V4/V9/V14 that the app relies on.
+        // Core tables from V1/V2/V4/V9/V14 that the app relies on, plus the
+        // durable job queues (V16 ingestion, V19 video — ADR-004 pattern).
         for (String table : new String[]{"users", "documents", "legal_chunks",
-                "audit_logs", "entities"}) {
+                "audit_logs", "entities", "document_ingestion_jobs", "video_jobs"}) {
             Integer n = jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables "
                     + "WHERE table_schema='public' AND table_name=?", Integer.class, table);
