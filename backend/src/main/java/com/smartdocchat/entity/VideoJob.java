@@ -67,6 +67,17 @@ public class VideoJob {
     @Column(name = "lease_expires_at")
     private LocalDateTime leaseExpiresAt;
 
+    /** Identity of the worker currently holding the lease (V20). */
+    @Column(name = "worker_id")
+    private String workerId;
+
+    /**
+     * Opaque lease token minted on claim (V20). complete/fail updates are guarded
+     * by this token so a stale worker cannot overwrite a newer owner's result.
+     */
+    @Column(name = "lease_token")
+    private String leaseToken;
+
     @Column(name = "last_error")
     private String lastError;
 
