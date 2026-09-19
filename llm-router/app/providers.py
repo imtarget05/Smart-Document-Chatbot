@@ -477,3 +477,231 @@ class LocalOllamaProvider:
             raise ProviderError("ollama_timeout") from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise ProviderError(f"ollama_error:{type(exc).__name__}") from exc
+
+
+class LocalLMStudioProvider:
+    """Preferred local tier: LM Studio's OpenAI-compatible server
+    (``LOCAL_LMSTUDIO_URL``, default ``http://localhost:1234/v1`` with
+    e.g. ``qwen2.5-vl-3b-instruct`` +
+    ``text-embedding-nomic-embed-text-v1.5`` loaded in LM Studio).
+
+    Same serving contract as LocalOllamaProvider (Ollama-compatible
+    response envelopes, concurrency slot, cached health probe, NO
+    mid-request auto-fallback) — only the wire format differs:
+    health ``GET {base}/models``, chat ``POST {base}/chat/completions``
+    (OpenAI SSE when streaming), embeddings ``POST {base}/embeddings``.
+
+    A single chat model serves every task type (no separate coder model:
+    ``model_for_task`` always returns ``local_lmstudio_model``).
+    """
+
+    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
+        self.settings = settings
+        self.client = client or httpx.AsyncClient()
+        self._owns_client = client is None
+        self._healthy_until = 0.0
+        self._sem = asyncio.Semaphore(settings.max_local_concurrency)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.settings.local_lmstudio_url)
+
+    @property
+    def _base(self) -> str:
+        return self.settings.local_lmstudio_url.rstrip("/")
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.settings.local_lmstudio_api_key}",
+            "Content-Type": "application/json",
+        }
+
+    async def close(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
+
+    async def _probe_health(self) -> bool:
+        import time as _time
+
+        now = _time.monotonic()
+        if now < self._healthy_until:
+            return True
+        try:
+            async with asyncio.timeout(2.0):
+                response = await self.client.get(
+                    f"{self._base}/models",
+                    headers=self._headers(),
+                    timeout=2.0,
+                )
+                healthy = response.status_code == 200
+        except (httpx.HTTPError, TimeoutError):
+            healthy = False
+        if healthy:
+            self._healthy_until = now + self.settings.local_ollama_health_ttl_seconds
+        return healthy
+
+    async def is_available(self) -> bool:
+        return self.enabled and await self._probe_health()
+
+    def model_for_task(self, task_type: str | None) -> str:
+        """Single local model serves every task (incl. ``code``)."""
+        return self.settings.local_lmstudio_model
+
+    async def _acquire_slot(self) -> None:
+        try:
+            async with asyncio.timeout(self.settings.local_queue_timeout_seconds):
+                await self._sem.acquire()
+        except TimeoutError as exc:
+            raise LocalProviderBusyError("local_busy") from exc
+
+    async def chat_with_slot(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> dict[str, Any]:
+        await self._acquire_slot()
+        try:
+            return await self.chat(request, decision, request_id)
+        finally:
+            self._sem.release()
+
+    async def stream_chat_with_slot(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> AsyncIterator[bytes]:
+        await self._acquire_slot()
+        try:
+            async for chunk in self.stream_chat(request, decision, request_id):
+                yield chunk
+        finally:
+            self._sem.release()
+
+    def _chat_body(
+        self, request: ChatRequest, stream: bool, model: str | None = None
+    ) -> dict[str, Any]:
+        messages = [
+            {"role": m.role, "content": m.content}
+            for m in request.messages
+            if isinstance(m.content, str)
+        ]
+        options = dict(request.options or {})
+        body: dict[str, Any] = {
+            "model": model or self.settings.local_lmstudio_model,
+            "messages": messages,
+            "stream": stream,
+            "temperature": options.get("temperature", 0.3),
+            "top_p": options.get("top_p", 0.95),
+        }
+        if "max_tokens" in options and isinstance(options["max_tokens"], int):
+            body["max_tokens"] = options["max_tokens"]
+        return body
+
+    async def chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> dict[str, Any]:
+        model = self.model_for_task(decision.task_type)
+        try:
+            async with asyncio.timeout(self.settings.local_ollama_timeout_seconds):
+                response = await self.client.post(
+                    f"{self._base}/chat/completions",
+                    headers=self._headers(),
+                    json=self._chat_body(request, stream=False, model=model),
+                    timeout=self.settings.local_ollama_timeout_seconds,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except TimeoutError as exc:
+            raise ProviderError("lmstudio_timeout") from exc
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ProviderError(f"lmstudio_error:{type(exc).__name__}") from exc
+
+        choices = payload.get("choices") or []
+        content = ((choices[0].get("message") or {}).get("content")) if choices else ""
+        if not (content or "").strip():
+            raise ProviderError("lmstudio_empty_response")
+        response = _ollama_response(content, decision, request_id)
+        response["model"] = model
+        return response
+
+    async def stream_chat(
+        self, request: ChatRequest, decision: RouteDecision, request_id: str
+    ) -> AsyncIterator[bytes]:
+        model = self.model_for_task(decision.task_type)
+        try:
+            async with self.client.stream(
+                "POST",
+                f"{self._base}/chat/completions",
+                headers=self._headers(),
+                json=self._chat_body(request, stream=True, model=model),
+                timeout=self.settings.local_ollama_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                collected_end = False
+                async for raw in response.aiter_lines():
+                    if not raw.startswith("data:"):
+                        continue
+                    data = raw[len("data:"):].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except ValueError:
+                        continue
+                    choices = chunk.get("choices") or []
+                    delta = (choices[0].get("delta") or {}) if choices else {}
+                    token = delta.get("content") or ""
+                    finished = bool(choices) and bool(choices[0].get("finish_reason"))
+                    payload = _ollama_response(token, decision, request_id)
+                    payload["model"] = model
+                    payload["done"] = finished
+                    if finished:
+                        payload["done_reason"] = "stop"
+                    else:
+                        payload.pop("done_reason", None)
+                    yield (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+                    collected_end = collected_end or finished
+                if not collected_end:
+                    raise ProviderError("lmstudio_stream_empty")
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError as exc:
+            raise ProviderError("lmstudio_timeout") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"lmstudio_error:{type(exc).__name__}") from exc
+
+    async def embeddings(self, body: dict[str, Any]) -> dict[str, Any]:
+        """LM Studio embeddings via POST /embeddings (OpenAI shape).
+
+        Supports both single prompt ({'prompt': '...'}) and batch
+        ({'input': [...]}) request shapes, mirroring CloudflareProvider.
+        Default model is LOCAL_LMSTUDIO_EMBED_MODEL
+        (text-embedding-nomic-embed-text-v1.5).
+        """
+        if "input" in body:
+            texts: list[str] | str = [str(t) for t in body["input"]]
+        else:
+            texts = str(body.get("prompt", ""))
+        model = str(body.get("model") or self.settings.local_lmstudio_embed_model)
+        try:
+            async with asyncio.timeout(self.settings.local_ollama_timeout_seconds):
+                response = await self.client.post(
+                    f"{self._base}/embeddings",
+                    headers=self._headers(),
+                    json={"model": model, "input": texts},
+                    timeout=self.settings.local_ollama_timeout_seconds,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                vecs = [
+                    list(d.get("embedding"))
+                    for d in (payload.get("data") or [])
+                    if isinstance(d, dict) and d.get("embedding")
+                ]
+                if not vecs:
+                    raise ProviderError("lmstudio_empty_embedding")
+                if isinstance(texts, str):
+                    return {"model": model, "embedding": vecs[0]}
+                return {"model": model, "embeddings": vecs}
+        except ProviderError:
+            raise
+        except TimeoutError as exc:
+            raise ProviderError("lmstudio_timeout") from exc
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ProviderError(f"lmstudio_error:{type(exc).__name__}") from exc

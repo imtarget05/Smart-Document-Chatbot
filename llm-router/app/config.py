@@ -78,6 +78,23 @@ class Settings:
     local_ollama_health_ttl_seconds: float = _float_env(
         "LOCAL_OLLAMA_HEALTH_TTL_SECONDS", 10.0
     )
+    # Local LM Studio (OpenAI-compatible, DEFAULT local tier since 2026-09-19):
+    # when LOCAL_LMSTUDIO_URL is set (LM Studio → Developer tab → Start
+    # Server, default http://localhost:1234/v1) and the server answers its
+    # health probe (GET /v1/models), chat + embeddings are served by the
+    # models the user downloaded in LM Studio — default
+    # qwen2.5-vl-3b-instruct + text-embedding-nomic-embed-text-v1.5.
+    # Priority when both locals are configured: LM Studio → Ollama →
+    # Cloudflare (predictable, never mid-request fallback between tiers).
+    # When unset or unreachable the router falls back to Ollama/Cloudflare.
+    local_lmstudio_url: str = os.getenv("LOCAL_LMSTUDIO_URL", "")
+    local_lmstudio_model: str = os.getenv(
+        "LOCAL_LMSTUDIO_MODEL", "qwen2.5-vl-3b-instruct"
+    )
+    local_lmstudio_embed_model: str = os.getenv(
+        "LOCAL_LMSTUDIO_EMBED_MODEL", "text-embedding-nomic-embed-text-v1.5"
+    )
+    local_lmstudio_api_key: str = os.getenv("LOCAL_LMSTUDIO_API_KEY", "lm-studio")
     # Prompt compression: heuristic-based token reduction before LLM calls.
     prompt_compression_enabled: bool = _bool_env("PROMPT_COMPRESSION_ENABLED", True)
     prompt_compression_ratio: float = _float_env("PROMPT_COMPRESSION_RATIO", 0.5)

@@ -279,6 +279,30 @@ def create_app(
     async def embeddings(request: Request, payload: dict[str, Any]):
         trace_id = trace_id_from_headers(dict(request.headers))
         try:
+            # Local tier first (LM Studio → Ollama), Cloudflare otherwise —
+            # same no-mid-request-fallback contract as chat routing.
+            lmstudio = getattr(service, "lmstudio", None)
+            if lmstudio is not None and await lmstudio.is_available():
+                result = await lmstudio.embeddings(payload)
+                if langfuse_enabled() and trace_id is not None:
+                    langfuse_generation(
+                        trace_id, "router_embeddings",
+                        model=app_settings.local_lmstudio_embed_model,
+                        metadata={"stream": False, "backend": "local_lmstudio"},
+                    )
+                    langfuse_flush()
+                return result
+            local = getattr(service, "local", None)
+            if local is not None and await local.is_available():
+                result = await local.embeddings(payload)  # type: ignore[attr-defined]
+                if langfuse_enabled() and trace_id is not None:
+                    langfuse_generation(
+                        trace_id, "router_embeddings",
+                        model=app_settings.local_ollama_embed_model,
+                        metadata={"stream": False, "backend": "local_ollama"},
+                    )
+                    langfuse_flush()
+                return result
             result = await service.providers.embeddings(payload)  # type: ignore[attr-defined]
             if langfuse_enabled() and trace_id is not None:
                 langfuse_generation(

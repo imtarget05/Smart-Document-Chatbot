@@ -10,6 +10,7 @@ from .models import ChatRequest, RouteDecision
 from .prompt_compressor import compress_messages
 from .providers import (
     CloudflareProvider,
+    LocalLMStudioProvider,
     LocalOllamaProvider,
     ProviderLike,
     ProviderError,
@@ -25,8 +26,11 @@ logger = logging.getLogger("llm_router")
 class LLMRouter:
     """Local-first routing with NO mid-request fallback (Decision 2026-08-26).
 
-    - LocalOllamaProvider enabled AND healthy → served locally (model the user
-      pulled themselves, e.g. qwen3:8b via `ollama pull`).
+    - Local LM Studio (LOCAL_LMSTUDIO_URL) enabled AND healthy → served by
+      the models the user downloaded in LM Studio (default
+      qwen2.5-vl-3b-instruct).
+    - Else LocalOllamaProvider enabled AND healthy → served locally (model
+      the user pulled themselves, e.g. qwen3:8b via `ollama pull`).
     - Otherwise → Cloudflare. If Cloudflare then fails, the request fails —
       it is never silently retried on the other side, so latency/behaviour
       stays predictable and each provider's errors stay attributable.
@@ -41,10 +45,12 @@ class LLMRouter:
         settings: Settings,
         providers: ProviderLike | None = None,
         local: LocalOllamaProvider | None = None,
+        lmstudio: LocalLMStudioProvider | None = None,
     ):
         self.settings = settings
         self.providers = providers or CloudflareProvider(settings)
         self.local = local or LocalOllamaProvider(settings)
+        self.lmstudio = lmstudio or LocalLMStudioProvider(settings)
         self.cache = ResponseCache(
             ttl_seconds=settings.response_cache_ttl_seconds,
             enabled=settings.response_cache_enabled,
@@ -53,12 +59,28 @@ class LLMRouter:
     async def close(self) -> None:
         await self.providers.close()
         await self.local.close()
+        await self.lmstudio.close()
+
+    @staticmethod
+    def _backend_name(active: ProviderLike, local: object, lmstudio: object) -> str:
+        if active is lmstudio:
+            return "local_lmstudio"
+        if active is local:
+            return "local_ollama"
+        return "cloudflare"
+
+    def _is_local(self, active: ProviderLike) -> bool:
+        return active is self.local or active is self.lmstudio
 
     async def _active(self, request: ChatRequest) -> ProviderLike:
         # Hybrid-by-Classification (DEPLOYMENT CHỐT Local-First): normalize
         # classification so "CONFIDENTIAL"/"Confidential" cannot bypass the
         # cloud block and leak to public Cloudflare Workers AI.
         classification = (request.routing.classification or "").strip().lower()
+        # Local tier priority: LM Studio → Ollama → Cloudflare (predictable,
+        # never mid-request fallback between tiers).
+        if await self.lmstudio.is_available():
+            return self.lmstudio
         local_available = await self.local.is_available()
 
         if local_available:
@@ -80,15 +102,21 @@ class LLMRouter:
         say so — otherwise observability would claim Cloudflare handled a
         request it never touched.
         """
-        if active is self.local:
-            route = getattr(self.local, "model_for_task", None)
+        if active is self.local or active is self.lmstudio:
+            route = getattr(active, "model_for_task", None)
+            if active is self.lmstudio:
+                default_model = self.settings.local_lmstudio_model
+                provider_name = "local_lmstudio"
+            else:
+                default_model = self.settings.local_ollama_model
+                provider_name = "local_ollama"
             model = (
                 route(decision.task_type)
                 if callable(route)
-                else self.settings.local_ollama_model
+                else default_model
             )
             return RouteDecision(
-                provider="local_ollama",
+                provider=provider_name,
                 model=model,
                 reason=decision.reason,
                 task_type=decision.task_type,
@@ -158,11 +186,11 @@ class LLMRouter:
                 return cached
 
         active = await self._active(request)
-        if active is self.local:
+        if self._is_local(active):
             decision = self._relabel_decision(decision, active)
         started = time.monotonic()
         self._log("route_decision", request_id, decision,
-                  backend="local_ollama" if active is self.local else "cloudflare",
+                  backend=self._backend_name(active, self.local, self.lmstudio),
                   **meta)
         try:
             # Local provider holds a concurrency slot (Semaphore max 2) for the
@@ -177,7 +205,7 @@ class LLMRouter:
             # cloud (đúng 1 lần, không retry loop). CONFIDENTIAL → policy_violation
             # (403). Các classification khác (internal/unknown/empty) → busy lộ ra
             # ngoài để main map 503 + Retry-After, không lén đẩy cloud.
-            if active is self.local:
+            if self._is_local(active):
                 classification = (request.routing.classification or "").strip().lower()
                 if classification == "confidential":
                     raise ProviderError(
@@ -213,11 +241,11 @@ class LLMRouter:
         request, meta = self._prepare_request(request)
         decision = choose_route(request, self.settings)
         active = await self._active(request)
-        if active is self.local:
+        if self._is_local(active):
             decision = self._relabel_decision(decision, active)
         started = time.monotonic()
         self._log("route_decision", request_id, decision,
-                  backend="local_ollama" if active is self.local else "cloudflare",
+                  backend=self._backend_name(active, self.local, self.lmstudio),
                   **meta)
         slot_stream = getattr(active, "stream_chat_with_slot", None)
         if slot_stream is not None:

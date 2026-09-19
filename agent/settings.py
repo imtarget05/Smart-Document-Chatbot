@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     local_ollama_code_model: str = "qwen2.5-coder:1.5b"
     local_ollama_embed_model: str = "nomic-embed-text"
 
+    # Local LM Studio (OpenAI-compatible, DEFAULT local tier since 2026-09-19):
+    # when LOCAL_LMSTUDIO_URL is set (LM Studio → Start Server, default
+    # http://localhost:1234/v1) the agent talks directly to the models
+    # downloaded in LM Studio — default qwen2.5-vl-3b-instruct +
+    # text-embedding-nomic-embed-text-v1.5. Takes priority over Ollama.
+    local_lmstudio_url: str = ""
+    local_lmstudio_chat_model: str = "qwen2.5-vl-3b-instruct"
+    local_lmstudio_embed_model: str = "text-embedding-nomic-embed-text-v1.5"
+    local_lmstudio_api_key: str = "lm-studio"
+
     # Qdrant — NO default api key. Must be set explicitly when Qdrant requires auth.
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333

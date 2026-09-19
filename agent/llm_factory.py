@@ -2,9 +2,10 @@
 LLM factory for the Ollama-compatible LLM Router service.
 
 The router talks to Cloudflare Workers AI behind the scenes; this client speaks
-the Ollama wire format to the router endpoint. On the M1 Pro 16GB local plan
-(2026-09-18), when LOCAL_OLLAMA_URL is set the factory points directly at the
-local Ollama server — qwen2.5:3b for chat/RAG, qwen2.5-coder:1.5b for task=code.
+the Ollama wire format to the router endpoint. Local tiers (2026-09-19):
+LM Studio (OpenAI-compatible, DEFAULT when LOCAL_LMSTUDIO_URL is set —
+qwen2.5-vl-3b-instruct for every task) takes priority over direct Ollama
+(LOCAL_OLLAMA_URL — qwen2.5:3b for chat/RAG, qwen2.5-coder:1.5b for task=code).
 """
 
 try:
@@ -21,6 +22,17 @@ except ImportError:
             def invoke(self, *args, **kwargs):
                 raise RuntimeError("langchain_ollama is not installed")
 
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    class ChatOpenAI:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def invoke(self, *args, **kwargs):
+            raise RuntimeError("langchain_openai is not installed")
+
 from settings import settings
 
 
@@ -28,16 +40,20 @@ class LLMFactory:
     CODE_TASKS = {"code"}
 
     @staticmethod
+    def _lmstudio_enabled() -> bool:
+        return bool(getattr(settings, "local_lmstudio_url", ""))
+
+    @staticmethod
     def _local_enabled() -> bool:
         return bool(getattr(settings, "local_ollama_url", ""))
 
     @staticmethod
     def model_for_task(task: str = "chat") -> str:
-        """Task routing: ``code`` → coder model, else chat model.
-
-        Returns the local model when LOCAL_OLLAMA_URL is set, otherwise the
-        cloud router model.
+        """Task routing: LM Studio single model first, else Ollama code/chat
+        split, else cloud router model.
         """
+        if LLMFactory._lmstudio_enabled():
+            return settings.local_lmstudio_chat_model
         if LLMFactory._local_enabled():
             if (task or "chat").lower() in LLMFactory.CODE_TASKS:
                 return settings.local_ollama_code_model
@@ -51,8 +67,16 @@ class LLMFactory:
 
     @staticmethod
     def get_model(temperature: float = 0.3, task: str = "chat"):
-        """Return a ChatOllama client pointed at the local Ollama server when
-        LOCAL_OLLAMA_URL is set, else at the cloud-backed LLM Router."""
+        """Return a chat client: LM Studio (OpenAI-compatible) when
+        LOCAL_LMSTUDIO_URL is set, else ChatOllama at the local Ollama
+        server when LOCAL_OLLAMA_URL is set, else at the cloud LLM Router."""
+        if LLMFactory._lmstudio_enabled():
+            return ChatOpenAI(
+                base_url=settings.local_lmstudio_url.rstrip("/") + "/",
+                api_key=getattr(settings, "local_lmstudio_api_key", "lm-studio"),
+                model=LLMFactory.model_for_task(task),
+                temperature=temperature,
+            )
         if LLMFactory._local_enabled():
             return ChatOllama(
                 base_url=settings.local_ollama_url,
