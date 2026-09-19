@@ -60,6 +60,12 @@ class Settings:
     ffprobe_bin: str = os.getenv("VIDEO_FFPROBE_BIN", "ffprobe")
     ffmpeg_timeout_sec: float = _float_env("VIDEO_FFMPEG_TIMEOUT_SEC", 3600.0)
 
+    # ── whisper (speech-to-text) ────────────────────────────────────────────────
+    whisper_bin: str = os.getenv("WHISPER_BIN", "/tmp/whisper.cpp/build/bin/whisper-cli")
+    whisper_model: str = os.getenv("WHISPER_MODEL", "/tmp/whisper.cpp/models/ggml-medium.bin")
+    whisper_threads: int = _int_env("WHISPER_THREADS", 4)
+    whisper_timeout_sec: float = _float_env("WHISPER_TIMEOUT_SEC", 600.0)
+
     def r2_endpoint_url(self) -> str:
         """Resolve the S3 endpoint for Cloudflare R2."""
         if self.r2_endpoint:

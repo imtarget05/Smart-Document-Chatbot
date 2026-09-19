@@ -266,6 +266,7 @@ public class ChatService {
                 }
 
                 if (agentMode) {
+                    emitter.send(SseEmitter.event().name("status").data("Đang gọi Agent để tìm kiếm thông tin..."));
                     String traceId = langfuse.startTrace("agentic_request", ownerUsername,
                             Map.of("query", userMessage));
                     try {
@@ -302,6 +303,7 @@ public class ChatService {
 
                 CragResult crag;
                 try {
+                    emitter.send(SseEmitter.event().name("status").data("Đang tìm kiếm tài liệu (RAG)..."));
                     crag = runCrag(ownerUsername, request.getDocumentId(), userMessage, request.isWebSearch());
                 } catch (RuntimeException e) {
                     log.error("CRAG stream path failed, serving safe abstention: {}", e.getMessage(), e);

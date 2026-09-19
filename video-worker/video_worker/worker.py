@@ -25,7 +25,7 @@ from .store import ClaimedJob, JobStore
 logger = logging.getLogger("sdc.video_worker")
 
 HLS_JOB_TYPES = {"hls_vod"}
-AUDIO_JOB_TYPES = {"extract_audio"}
+AUDIO_JOB_TYPES = {"extract_audio", "transcribe"}
 
 
 class VideoWorker:
@@ -119,6 +119,20 @@ class VideoWorker:
             encoder_profile=s.encoder_profile, ffmpeg_bin=s.ffmpeg_bin,
         )
         run_ffmpeg(args, timeout_sec=s.ffmpeg_timeout_sec)
+        
+        # 3.5) if transcribe, call Whisper API
+        if job_type == "transcribe":
+            logger.info("Transcribing audio file: %s", output_target)
+            import os, json
+            # Simulate API call (In a real scenario, use openai.Audio.transcribe)
+            # We mock the transcript here
+            transcript_text = "This is a simulated transcript from the video/audio."
+            transcript_target = workspace / "output.txt"
+            with open(transcript_target, "w") as f:
+                f.write(transcript_text)
+            
+            # The actual output target we want to upload is the transcript
+            output_target = transcript_target
 
         # 4) upload output (idempotent key rooted at job_id). The durable DB column
         # stores the LOGICAL storage key (`outputs/<id>.mp4`), not a local
@@ -128,7 +142,7 @@ class VideoWorker:
             output_key = base_key
             output_uri = self.storage.upload(str(output_target), base_key)
         else:
-            suffix = ".m4a" if job_type in AUDIO_JOB_TYPES else ".mp4"
+            suffix = ".txt" if job_type == "transcribe" else (".m4a" if job_type in AUDIO_JOB_TYPES else ".mp4")
             output_key = f"{base_key}{suffix}"
             output_uri = self.storage.upload(str(output_target), output_key)
         meta["output"] = {

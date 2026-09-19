@@ -39,6 +39,7 @@ __all__ = [
     "compute_idempotency_key",
     "probe_metadata",
     "run_ffmpeg",
+    "run_whisper",
 ]
 
 
@@ -82,7 +83,7 @@ def build_ffmpeg_args(
         *enc["hwaccel"],
         "-i", input_path,
     ]
-    if job_type == "extract_audio":
+    if job_type in ("extract_audio", "transcribe"):
         args += ["-vn", "-c:a", "aac", "-b:a", "128k"]
     elif job_type == "remux":
         # Stream-copy: no re-encode, container change only.
